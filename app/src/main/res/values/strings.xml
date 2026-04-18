@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MediaPlayer</string>
+    <string name="search_hint">Search songs, artists, albums</string>
+    <string name="search_empty">No results yet. Type to search.</string>
+    <string name="search_no_matches">No songs match that query.</string>
+    <string name="search_error">Couldn\'t load songs. Is the backend running?</string>
+    <string name="content_desc_cover_art">Album cover</string>
+    <string name="content_desc_clear_query">Clear query</string>
+</resources>

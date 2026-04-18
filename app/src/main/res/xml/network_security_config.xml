@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Allow cleartext traffic only to the emulator's host loopback (10.0.2.2) and
+    to localhost. Everything else falls back to HTTPS-only defaults.
+    This keeps `http://10.0.2.2:8080` working for dev without opening the app
+    up to cleartext everywhere.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
+</network-security-config>
