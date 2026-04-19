@@ -49,12 +49,12 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     kotlin {
-        jvmToolchain(25)
+        jvmToolchain(21)
     }
 
     packaging {
@@ -101,4 +101,12 @@ dependencies {
     // Image loading
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+
+    // Playback — ExoPlayer via a bound MediaSessionService so audio keeps
+    // playing in the background with a media notification + lock-screen
+    // controls. OkHttp DataSource lets us reuse Network.okHttp.
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.okhttp)
+    implementation(libs.media3.session)
+    implementation(libs.media3.common)
 }
