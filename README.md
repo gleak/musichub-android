@@ -94,13 +94,55 @@ loopback. Cleartext to that host is permitted via
 
 ### 4. Run on a physical device
 
-Override `BASE_URL` at build time with your machine's LAN IP:
+Debug builds fall back to `http://10.0.2.2:8080` (emulator loopback), which
+won't work on a real device. Point it at your machine's LAN IP instead — two
+ways, whichever is more convenient:
+
+**Per-build override** — pass on the command line:
 
 ```
-./gradlew :app:installDebug -PBASE_URL=http://192.168.1.42:8080
+./gradlew :app:installDebug -PBASE_URL_DEBUG=http://192.168.1.42:8080
+```
+
+(`-PBASE_URL=...` without the `_DEBUG` / `_RELEASE` suffix works too and
+applies to both variants.)
+
+**Per-machine default** — add to `android/local.properties` (gitignored):
+
+```properties
+base.url.debug=http://192.168.1.42:8080
 ```
 
 Make sure the device and machine share a network and nothing firewalls :8080.
+Cleartext to `10.0.2.2` and `localhost` is whitelisted in
+`res/xml/network_security_config.xml`; other hosts require HTTPS.
+
+### 5. Release builds
+
+Release builds have **no implicit fallback** — `BASE_URL` must be provided
+explicitly, or `assembleRelease` / `bundleRelease` fails before packaging.
+The guard is wired up as a `releaseUrlCheck` Gradle task that only runs on
+release assembly, so debug builds are unaffected.
+
+Pick whichever source is appropriate:
+
+```
+./gradlew :app:assembleRelease -PBASE_URL_RELEASE=https://media.example.com
+```
+
+…or in `android/local.properties`:
+
+```properties
+base.url.release=https://media.example.com
+```
+
+Resolution order (first match wins):
+
+1. `-PBASE_URL_DEBUG=...` / `-PBASE_URL_RELEASE=...` on the Gradle CLI
+2. `-PBASE_URL=...` on the Gradle CLI (applies to both variants)
+3. `base.url.debug=...` / `base.url.release=...` in `local.properties`
+4. `base.url=...` in `local.properties` (applies to both variants)
+5. Debug: `http://10.0.2.2:8080`. Release: no fallback — build fails.
 
 ## Search UX
 
@@ -161,4 +203,4 @@ playback, just hides the media notification.
 
 ## What's next
 
-- **M7** — Polish + release-config URL + Docker packaging for the backend
+- **M7** — Top-level README + cross-repo polish pass

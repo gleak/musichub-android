@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -66,8 +67,9 @@ fun PlaylistsScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when (val s = state) {
                 PlaylistsUiState.Loading -> CenteredSpinner()
-                is PlaylistsUiState.Error -> CenteredMessage(
-                    "Couldn't load playlists.\n${s.message}"
+                is PlaylistsUiState.Error -> ErrorWithRetry(
+                    message = "Couldn't load playlists.\n${s.message}",
+                    onRetry = viewModel::refresh,
                 )
                 is PlaylistsUiState.Success -> {
                     if (s.playlists.isEmpty()) {
@@ -232,6 +234,30 @@ private fun CenteredMessage(text: String) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+private fun ErrorWithRetry(message: String, onRetry: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FilledTonalButton(onClick = onRetry) {
+                Text("Retry")
+            }
+        }
     }
 }
 
