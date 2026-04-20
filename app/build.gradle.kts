@@ -109,4 +109,7 @@ dependencies {
     implementation(libs.media3.exoplayer.okhttp)
     implementation(libs.media3.session)
     implementation(libs.media3.common)
+
+    // Navigation — top-level NavHost for Search / Playlists tabs (M6).
+    implementation(libs.androidx.navigation.compose)
 }

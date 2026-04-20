@@ -9,12 +9,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -59,6 +63,8 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel) {
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val position by viewModel.positionMs.collectAsStateWithLifecycle()
     val duration by viewModel.durationMs.collectAsStateWithLifecycle()
+    val hasNext by viewModel.hasNext.collectAsStateWithLifecycle()
+    val hasPrevious by viewModel.hasPrevious.collectAsStateWithLifecycle()
 
     val current = song ?: return
 
@@ -130,19 +136,59 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel) {
 
         Spacer(Modifier.height(16.dp))
 
-        FilledIconButton(
-            onClick = viewModel::togglePlayPause,
-            modifier = Modifier.size(72.dp),
-            colors = IconButtonDefaults.filledIconButtonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ),
+        // Transport row. Prev/next only render when the queue actually
+        // has neighbours — single-track playback keeps the play button
+        // centered and alone, matching the M5 look.
+        val showQueueControls = hasNext || hasPrevious
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = null,
-                modifier = Modifier.size(36.dp),
-            )
+            if (showQueueControls) {
+                IconButton(
+                    onClick = viewModel::skipPrevious,
+                    modifier = Modifier.size(56.dp),
+                    enabled = hasPrevious,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.SkipPrevious,
+                        contentDescription = "Previous",
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+            }
+
+            FilledIconButton(
+                onClick = viewModel::togglePlayPause,
+                modifier = Modifier.size(72.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp),
+                )
+            }
+
+            if (showQueueControls) {
+                Spacer(Modifier.width(16.dp))
+                IconButton(
+                    onClick = viewModel::skipNext,
+                    modifier = Modifier.size(56.dp),
+                    enabled = hasNext,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.SkipNext,
+                        contentDescription = "Next",
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+            }
         }
 
         Spacer(Modifier.height(8.dp))

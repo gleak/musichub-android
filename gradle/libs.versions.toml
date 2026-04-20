@@ -22,6 +22,9 @@ coil = "3.0.4"
 # Media3 / ExoPlayer
 media3 = "1.5.1"
 
+# Navigation
+navigationCompose = "2.8.5"
+
 [libraries]
 androidx-core-ktx                   = { module = "androidx.core:core-ktx",                                 version.ref = "coreKtx" }
 androidx-lifecycle-runtime-ktx      = { module = "androidx.lifecycle:lifecycle-runtime-ktx",               version.ref = "lifecycle" }
@@ -53,6 +56,8 @@ media3-exoplayer                    = { module = "androidx.media3:media3-exoplay
 media3-exoplayer-okhttp             = { module = "androidx.media3:media3-datasource-okhttp",              version.ref = "media3" }
 media3-session                      = { module = "androidx.media3:media3-session",                        version.ref = "media3" }
 media3-common                       = { module = "androidx.media3:media3-common",                         version.ref = "media3" }
+
+androidx-navigation-compose         = { module = "androidx.navigation:navigation-compose",                version.ref = "navigationCompose" }
 
 [plugins]
 android-application   = { id = "com.android.application",                     version.ref = "agp" }

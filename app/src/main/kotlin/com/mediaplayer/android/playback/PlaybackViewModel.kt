@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import com.mediaplayer.android.data.Network
@@ -19,17 +20,19 @@ import kotlinx.coroutines.launch
 /**
  * UI-facing facade over the [MediaController].
  *
- * Turns the imperative Media3 callback API into cold-ish state flows that
- * Compose can collect:
+ * Turns the imperative Media3 callback API into cold-ish state flows
+ * that Compose can collect:
  *
- *  - [currentSong]  — the full DTO we pushed in, recovered via MediaItem extras
+ *  - [currentSong]  — DTO we pushed in, recovered via MediaItem metadata
  *  - [isPlaying]    — live `Player.isPlaying`
- *  - [positionMs]   — poll-driven current position (updates every 500ms while playing)
- *  - [durationMs]   — known track duration or C.TIME_UNSET while unknown
+ *  - [positionMs]   — poll-driven current position (updates every 500ms)
+ *  - [durationMs]   — known track duration or 0 while unknown
+ *  - [hasNext]/[hasPrevious] — queue navigation affordances; hidden in
+ *    the single-track M5 world, lit up once M6 pushes a playlist in
  *
- * One instance is expected per Activity scope (the default `viewModel()`
- * owner). The VM doesn't own a player — it only subscribes to whichever
- * controller [PlayerConnection] hands it.
+ * One instance is expected per Activity scope via the default
+ * `viewModel()` owner. The VM doesn't own a player — it only
+ * subscribes to whichever controller [PlayerConnection] hands it.
  */
 @UnstableApi
 class PlaybackViewModel : ViewModel() {
@@ -46,6 +49,12 @@ class PlaybackViewModel : ViewModel() {
     private val _durationMs = MutableStateFlow(0L)
     val durationMs: StateFlow<Long> = _durationMs.asStateFlow()
 
+    private val _hasNext = MutableStateFlow(false)
+    val hasNext: StateFlow<Boolean> = _hasNext.asStateFlow()
+
+    private val _hasPrevious = MutableStateFlow(false)
+    val hasPrevious: StateFlow<Boolean> = _hasPrevious.asStateFlow()
+
     private var controller: MediaController? = null
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {
@@ -55,10 +64,17 @@ class PlaybackViewModel : ViewModel() {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             _currentSong.value = mediaItem?.toSongDto()
             pushDuration()
+            pushQueueAvailability()
         }
 
         override fun onPlaybackStateChanged(state: Int) {
             pushDuration()
+        }
+
+        override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+            // Queue shape changed (setMediaItems / clear / etc.) — re-check
+            // whether skip controls should light up.
+            pushQueueAvailability()
         }
     }
 
@@ -73,6 +89,7 @@ class PlaybackViewModel : ViewModel() {
                     _isPlaying.value = c.isPlaying
                     _currentSong.value = c.currentMediaItem?.toSongDto()
                     pushDuration()
+                    pushQueueAvailability()
                 }
             }
         }
@@ -87,10 +104,24 @@ class PlaybackViewModel : ViewModel() {
         }
     }
 
+    /** Play a single song, replacing whatever's queued. */
     fun play(song: SongDto) {
         val c = controller ?: return
-        val item = song.toMediaItem()
-        c.setMediaItem(item)
+        c.setMediaItem(song.toMediaItem())
+        c.prepare()
+        c.playWhenReady = true
+    }
+
+    /**
+     * Queue a full playlist and start at [startIndex]. Next / previous
+     * buttons light up once the queue has more than one entry.
+     */
+    fun playPlaylist(songs: List<SongDto>, startIndex: Int = 0) {
+        if (songs.isEmpty()) return
+        val c = controller ?: return
+        val items = songs.map { it.toMediaItem() }
+        val clamped = startIndex.coerceIn(0, items.lastIndex)
+        c.setMediaItems(items, clamped, /* startPositionMs = */ 0L)
         c.prepare()
         c.playWhenReady = true
     }
@@ -104,9 +135,34 @@ class PlaybackViewModel : ViewModel() {
         controller?.seekTo(positionMs)
     }
 
+    /** Skip forward in the queue (if anything's there). */
+    fun skipNext() {
+        val c = controller ?: return
+        if (c.hasNextMediaItem()) c.seekToNextMediaItem()
+    }
+
+    /**
+     * Skip back. Matches Spotify-style behaviour: within the first 3s
+     * of a track, jump to the previous item; otherwise restart the
+     * current track. Media3 already ships this as `seekToPrevious`.
+     */
+    fun skipPrevious() {
+        controller?.seekToPrevious()
+    }
+
     private fun pushDuration() {
         val c = controller ?: return
         _durationMs.value = if (c.duration > 0) c.duration else 0L
+    }
+
+    private fun pushQueueAvailability() {
+        val c = controller ?: run {
+            _hasNext.value = false
+            _hasPrevious.value = false
+            return
+        }
+        _hasNext.value = c.hasNextMediaItem()
+        _hasPrevious.value = c.hasPreviousMediaItem()
     }
 
     override fun onCleared() {

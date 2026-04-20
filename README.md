@@ -16,6 +16,7 @@ from a self-hosted Spring Boot catalog via Media3 ExoPlayer.
   `SingletonImageLoader.Factory`
 - Media3 1.5.1 (`exoplayer`, `session`, `datasource-okhttp`) — single shared
   OkHttp stack all the way down
+- Navigation Compose 2.8.5 — three-destination graph with bottom-nav
 - Version catalog in `gradle/libs.versions.toml`
 
 ## Module layout
@@ -25,24 +26,34 @@ Single `:app` module. Package `com.mediaplayer.android`:
 ```
 app/src/main/kotlin/com/mediaplayer/android/
 ├── MediaPlayerApp.kt          // Application; wires Coil + binds PlayerConnection
-├── MainActivity.kt            // AppScaffold: search + mini-player + sheet
+├── MainActivity.kt            // AppScaffold: NavHost + bottom-nav + mini-player
 ├── data/
 │   ├── Network.kt             // Retrofit + OkHttp + JSON singleton
-│   ├── MediaPlayerApi.kt      // Retrofit interface (listSongs)
-│   ├── SongRepository.kt      // thin façade over the API
+│   ├── MediaPlayerApi.kt      // Retrofit interface (songs + playlists)
+│   ├── SongRepository.kt      // thin façade over the songs API
+│   ├── PlaylistRepository.kt  // thin façade over the playlists API
 │   └── dto/
-│       ├── SongDto.kt         // @Serializable mirror of backend
-│       └── PageResponse.kt    // generic page envelope
+│       ├── SongDto.kt             // @Serializable song mirror
+│       ├── PageResponse.kt        // generic page envelope
+│       ├── PlaylistDto.kt         // list summary
+│       ├── PlaylistDetailDto.kt   // full payload (ordered songs)
+│       └── PlaylistRequests.kt    // Create/Rename/Add/Reorder request bodies
 ├── playback/
 │   ├── MediaPlaybackService.kt  // MediaSessionService owning ExoPlayer
 │   ├── PlayerConnection.kt      // async MediaController binder (singleton)
-│   └── PlaybackViewModel.kt     // Compose StateFlows + controls
+│   └── PlaybackViewModel.kt     // Compose StateFlows + controls (queue-aware)
 └── ui/
     ├── theme/Theme.kt
     ├── search/
-    │   ├── SearchScreen.kt
+    │   ├── SearchScreen.kt         // also hosts add-to-playlist sheet + snackbar
     │   ├── SearchViewModel.kt
-    │   └── SongRow.kt
+    │   └── SongRow.kt              // combinedClickable (tap + long-press)
+    ├── playlists/
+    │   ├── PlaylistsScreen.kt      // LazyColumn + FAB + create dialog
+    │   ├── PlaylistsViewModel.kt
+    │   ├── PlaylistDetailScreen.kt // header + Play + track rows
+    │   ├── PlaylistDetailViewModel.kt
+    │   └── AddToPlaylistSheet.kt   // bottom sheet: pick existing or create
     └── player/
         ├── MiniPlayer.kt        // persistent bar (with shared Cover)
         └── NowPlayingSheet.kt   // full-screen modal bottom sheet
@@ -100,6 +111,9 @@ Make sure the device and machine share a network and nothing firewalls :8080.
   cover pulled from `/api/songs/{id}/cover` (falls back to a music-note icon
   when the song has no cover).
 - Tapping a row starts playback.
+- Long-pressing a row opens an "Add to playlist" bottom sheet: pick an
+  existing playlist or create a new one in a single step. Success shows
+  a transient snackbar ("Added to &lt;playlist&gt;").
 
 ## Playback UX
 
@@ -114,8 +128,10 @@ Make sure the device and machine share a network and nothing firewalls :8080.
 - Media bytes flow through the same OkHttp client as catalog + cover-art
   traffic (via `OkHttpDataSource`), so `Range:` requests and connection
   pooling Just Work.
-- Queue is single-track — playing a new row replaces the current item.
-  Real queues land with playlists in M6.
+- Playing a song from the search list uses a single-track queue; playing
+  from a playlist loads the full ordered list as the queue. Skip
+  forward / back only appear in the Now Playing sheet when the queue
+  has neighbours — single-track playback stays minimal.
 
 ## Permissions
 
@@ -130,7 +146,19 @@ Declared in `AndroidManifest.xml`:
 Notification permission is a runtime prompt; denying it doesn't stop
 playback, just hides the media notification.
 
+## Playlists UX
+
+- Bottom-nav tabs: **Search** and **Playlists**. The mini-player sits
+  directly above the nav bar when a track is loaded.
+- Playlists tab lists every playlist with song count + trailing delete.
+  `+ New playlist` FAB opens an inline create dialog.
+- Tap a playlist → detail screen: header shows the name, song count, and
+  a big **Play** button that queues the whole playlist. Tap any row in
+  the list to start from that index instead.
+- The Playlists tab stays lit even when drilled into detail.
+- Duplicates are allowed inside a playlist (backend-enforced ordering),
+  so the UI composes row keys on `(index, songId)`.
+
 ## What's next
 
-- **M6** — Playlists (server CRUD + Android UI + real queue / next-prev)
 - **M7** — Polish + release-config URL + Docker packaging for the backend

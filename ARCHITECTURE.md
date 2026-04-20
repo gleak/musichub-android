@@ -2,7 +2,7 @@
 
 Living doc for the MediaPlayer Android app. Update alongside each milestone.
 
-## Current state (Milestone 5 complete)
+## Current state (Milestone 6 complete)
 
 ### Build
 
@@ -24,7 +24,12 @@ Single `:app` module. Package `com.mediaplayer.android`.
 - `ui/theme/` — Material 3 with Material You dynamic color on Android 12+,
   fallback dark/light otherwise.
 - `ui/search/` — debounced query → paginated catalog fetch → Compose
-  `LazyColumn` of `SongRow`s. State is a sealed `SearchUiState`.
+  `LazyColumn` of `SongRow`s. State is a sealed `SearchUiState`. Rows also
+  support a long-press that opens the shared "add to playlist" sheet.
+- `ui/playlists/` — playlists list, playlist detail, and the
+  `AddToPlaylistSheet` bottom sheet. VMs own their state
+  (`PlaylistsViewModel`, `PlaylistDetailViewModel`) and depend on a
+  `PlaylistRepository`.
 - `ui/player/` — `MiniPlayer` bar and `NowPlayingSheet` (Material 3 modal
   bottom sheet). Both bind to the same `PlaybackViewModel`.
 - `playback/` — `MediaPlaybackService`, `PlayerConnection` (singleton that
@@ -126,8 +131,16 @@ One `PlaybackViewModel` is activity-scoped via `viewModel()` in
   72dp play/pause button. Scrub is buffered locally and only pushed to
   the controller on release so dragging is fluid.
 
-**Queue model.** Single-track. Playing a new row replaces the media item.
-Next/previous are deferred until M6, when playlists give us a real queue.
+**Queue model (M6).** The VM exposes both single-track (`play(song)`)
+and multi-track (`playPlaylist(songs, startIndex)`) paths. Behind the
+scenes the multi-track path goes to `MediaController.setMediaItems(items,
+startIndex, 0L)`, which swaps the whole timeline atomically.
+`PlaybackViewModel` watches `Player.Listener.onTimelineChanged` alongside
+`onMediaItemTransition` to keep `hasNext` / `hasPrevious` StateFlows fresh
+— those drive the visibility of skip buttons in the Now Playing sheet.
+Skip-previous delegates to `Player.seekToPrevious`, which ships Media3's
+Spotify-style behaviour: within 3s of track start, jump back; otherwise,
+restart the current track.
 
 **Stream URL.** Plain `GET /api/songs/{id}/stream` — no signing, no
 tokens. The backend is LAN-only in development and auth is a non-goal
@@ -137,6 +150,54 @@ for now.
 `POST_NOTIFICATIONS` (API 33+), and `WAKE_LOCK`. All declared up-front;
 runtime permission for notifications is left to the user — if they deny
 it the media notification just doesn't render, playback still works.
+
+### Navigation + playlists (M6)
+
+**Navigation.** `androidx-navigation-compose` 2.8.5 with a tiny
+hand-rolled route table (`Routes.SEARCH`, `Routes.PLAYLISTS`,
+`Routes.PLAYLIST_DETAIL`). Plain string constants — a sealed hierarchy
+would be ceremony for a three-destination graph.
+
+`MainActivity.AppScaffold` is now a Material 3 `Scaffold` with a
+`bottomBar` slot containing an optional `MiniPlayer` stacked above a
+`NavigationBar`. The bar has two tabs (Search, Playlists). Drilling
+into a playlist (`Routes.PLAYLIST_DETAIL`) keeps the Playlists tab lit
+— the selector treats the detail route as "still inside Playlists".
+Tab clicks use the standard `popUpTo(startDestinationId) { saveState }`
++ `launchSingleTop` + `restoreState` combo so switching tabs preserves
+list scroll state.
+
+**Playlists list (`PlaylistsScreen`).** `LazyColumn` of
+`PlaylistRow`s, each row showing a generic queue icon (playlists don't
+have cover art in the data model yet), the name, and a song count.
+Trailing delete icon opens a confirm dialog; delete is optimistic —
+the row vanishes immediately and we refetch on failure. An
+`ExtendedFloatingActionButton` (`+ New playlist`) opens an
+`AlertDialog` with a name field, enabled only when the trimmed input
+is non-empty.
+
+**Playlist detail (`PlaylistDetailScreen`).** Loaded via a
+`viewModel(key = "playlist-$id", factory = ...)` so each playlist id
+gets its own VM scoped to the back-stack entry. A top bar carries the
+name + back button. The body is a `LazyColumn` with one header item
+(96dp icon tile, name, song count, a filled `Play` button) followed by
+the track rows. Tapping any track calls `onPlayFromIndex(songs, idx)`
+which the Activity wires to `PlaybackViewModel.playPlaylist`. Duplicate
+songs are allowed server-side, so row keys are composed as
+`"$index-$songId"` rather than the song id alone.
+
+**Add-to-playlist (`AddToPlaylistSheet`).** Long-pressing a `SongRow`
+opens a `ModalBottomSheet`. The sheet pins a "+ New playlist" row at
+the top for discoverability, then lists existing playlists fetched
+once when the sheet opens. Tapping an existing playlist adds the song
+and closes; the inline "New playlist" path creates and then adds in
+one shot. Search screen shows a `SnackbarHost` with a brief
+confirmation toast ("Added to Chill Vibes") on success. Errors surface
+as in-sheet text rather than kicking the user out.
+
+`SongRow` switched from `clickable` to `combinedClickable` and now
+takes an optional `onLongPress`. Long-press stays a no-op in contexts
+that don't pass the callback (e.g. future uses).
 
 ### Testing (deferred)
 
@@ -155,7 +216,7 @@ too.
 | M3 | ✅     | HTTP range streaming                                         |
 | M4 | ✅     | Android app scaffold (Compose) with search                   |
 | M5 | ✅     | Media3 ExoPlayer playback + media notification               |
-| M6 |        | Playlists (server CRUD + Android UI)                         |
+| M6 | ✅     | Playlists (server CRUD + Android UI + real queue)            |
 | M7 |        | Polish, Docker packaging                                     |
 
 ## Non-goals (for now)
@@ -169,4 +230,10 @@ too.
   surface via the `Error` state.
 - Download / offline playback. Streaming only.
 - Audio effects (EQ, replay-gain). ExoPlayer defaults are fine for a v1.
-- Multi-track queueing + gapless. Deferred to M6 alongside playlists.
+- Drag-to-reorder inside playlist detail. Backend supports it via
+  `PUT /api/playlists/{id}/songs`, but the Compose UI is read-only for
+  now — ordering is set at creation time.
+- Playlist cover art. The `PlaylistDto` has no cover field; list rows
+  and the detail header use a generic queue icon tile instead.
+- Removing songs from within the detail screen. The VM exposes
+  `removeSong`, but no affordance is wired in yet.

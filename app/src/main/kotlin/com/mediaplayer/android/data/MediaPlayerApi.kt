@@ -1,18 +1,31 @@
 package com.mediaplayer.android.data
 
+import com.mediaplayer.android.data.dto.AddSongRequest
+import com.mediaplayer.android.data.dto.CreatePlaylistRequest
 import com.mediaplayer.android.data.dto.PageResponse
+import com.mediaplayer.android.data.dto.PlaylistDetailDto
+import com.mediaplayer.android.data.dto.PlaylistDto
+import com.mediaplayer.android.data.dto.RenamePlaylistRequest
+import com.mediaplayer.android.data.dto.ReorderSongsRequest
 import com.mediaplayer.android.data.dto.SongDto
+import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.PATCH
+import retrofit2.http.POST
+import retrofit2.http.PUT
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
  * Retrofit facade over the MediaPlayer backend.
  *
- * Milestone 4 only needs the catalog endpoint. `/cover` and `/stream` are
- * hit by URL (Coil for cover, ExoPlayer for stream) rather than through a
- * Retrofit call, so they don't live here.
+ * `/cover` and `/stream` are hit by URL (Coil for cover, ExoPlayer for
+ * stream) rather than through a Retrofit call, so they don't live here.
  */
 interface MediaPlayerApi {
+
+    // ---------- Songs (M1/M4) ----------
 
     @GET("api/songs")
     suspend fun listSongs(
@@ -20,4 +33,42 @@ interface MediaPlayerApi {
         @Query("page") page: Int = 0,
         @Query("size") size: Int = 20,
     ): PageResponse<SongDto>
+
+    // ---------- Playlists (M6) ----------
+
+    @GET("api/playlists")
+    suspend fun listPlaylists(): List<PlaylistDto>
+
+    @POST("api/playlists")
+    suspend fun createPlaylist(@Body body: CreatePlaylistRequest): PlaylistDto
+
+    @GET("api/playlists/{id}")
+    suspend fun getPlaylist(@Path("id") id: Long): PlaylistDetailDto
+
+    @PATCH("api/playlists/{id}")
+    suspend fun renamePlaylist(
+        @Path("id") id: Long,
+        @Body body: RenamePlaylistRequest,
+    ): PlaylistDto
+
+    @DELETE("api/playlists/{id}")
+    suspend fun deletePlaylist(@Path("id") id: Long)
+
+    @POST("api/playlists/{id}/songs")
+    suspend fun addSongToPlaylist(
+        @Path("id") id: Long,
+        @Body body: AddSongRequest,
+    ): PlaylistDetailDto
+
+    @DELETE("api/playlists/{id}/songs/{songId}")
+    suspend fun removeSongFromPlaylist(
+        @Path("id") id: Long,
+        @Path("songId") songId: Long,
+    ): PlaylistDetailDto
+
+    @PUT("api/playlists/{id}/songs")
+    suspend fun reorderPlaylistSongs(
+        @Path("id") id: Long,
+        @Body body: ReorderSongsRequest,
+    ): PlaylistDetailDto
 }

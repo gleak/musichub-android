@@ -17,9 +17,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -28,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mediaplayer.android.R
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
 
 @Composable
 fun SearchScreen(
@@ -37,6 +44,20 @@ fun SearchScreen(
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // Long-press → add-to-playlist sheet. Single slot rather than per-row
+    // so only one sheet is ever live at a time.
+    var sheetSong by remember { mutableStateOf<SongDto?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    var lastAdded by remember { mutableStateOf<String?>(null) }
+
+    // Fire a confirmation snack when an add completes. Using a string-keyed
+    // LaunchedEffect so the same message fires per add, not per recomposition.
+    LaunchedEffect(lastAdded) {
+        val msg = lastAdded ?: return@LaunchedEffect
+        snackbar.showSnackbar(msg)
+        lastAdded = null
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         SearchBar(
@@ -56,7 +77,11 @@ fun SearchScreen(
                     } else {
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
                             items(items = s.songs, key = { it.id }) { song ->
-                                SongRow(song = song, onClick = { onSongClick(song) })
+                                SongRow(
+                                    song = song,
+                                    onClick = { onSongClick(song) },
+                                    onLongPress = { sheetSong = song },
+                                )
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             }
                         }
@@ -66,7 +91,23 @@ fun SearchScreen(
                     stringResource(R.string.search_error) + "\n" + s.message
                 )
             }
+
+            SnackbarHost(
+                hostState = snackbar,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
+    }
+
+    sheetSong?.let { song ->
+        AddToPlaylistSheet(
+            songTitle = song.title,
+            songId = song.id,
+            onDismiss = { sheetSong = null },
+            onAdded = { playlistName ->
+                lastAdded = "Added to $playlistName"
+            },
+        )
     }
 }
 
