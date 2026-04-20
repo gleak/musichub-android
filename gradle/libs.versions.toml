@@ -24,6 +24,7 @@ media3 = "1.5.1"
 
 # Navigation
 navigationCompose = "2.8.5"
+media3CommonKtx = "1.10.0"
 
 [libraries]
 androidx-core-ktx                   = { module = "androidx.core:core-ktx",                                 version.ref = "coreKtx" }
@@ -58,6 +59,7 @@ media3-session                      = { module = "androidx.media3:media3-session
 media3-common                       = { module = "androidx.media3:media3-common",                         version.ref = "media3" }
 
 androidx-navigation-compose         = { module = "androidx.navigation:navigation-compose",                version.ref = "navigationCompose" }
+androidx-media3-common-ktx = { group = "androidx.media3", name = "media3-common-ktx", version.ref = "media3CommonKtx" }
 
 [plugins]
 android-application   = { id = "com.android.application",                     version.ref = "agp" }
