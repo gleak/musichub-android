@@ -201,6 +201,7 @@ playback, just hides the media notification.
 - Duplicates are allowed inside a playlist (backend-enforced ordering),
   so the UI composes row keys on `(index, songId)`.
 
-## What's next
+## Status
 
-- **M7** — Top-level README + cross-repo polish pass
+All planned milestones shipped. See [../README.md](../README.md) for the
+full cross-repo roadmap.

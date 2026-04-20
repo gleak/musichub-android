@@ -2,7 +2,7 @@
 
 Living doc for the MediaPlayer Android app. Update alongside each milestone.
 
-## Current state (Milestone 6 complete)
+## Current state (Milestone 7 complete)
 
 ### Build
 
@@ -217,7 +217,9 @@ too.
 | M4 | ✅     | Android app scaffold (Compose) with search                   |
 | M5 | ✅     | Media3 ExoPlayer playback + media notification               |
 | M6 | ✅     | Playlists (server CRUD + Android UI + real queue)            |
-| M7 |        | Polish, Docker packaging                                     |
+| M7a| ✅     | Backend Docker packaging                                     |
+| M7b| ✅     | Android release URL hardening + UX polish                    |
+| M7c| ✅     | Top-level README + cross-repo polish                         |
 
 ## Non-goals (for now)
 
