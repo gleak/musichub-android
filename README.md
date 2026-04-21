@@ -201,6 +201,66 @@ playback, just hides the media notification.
 - Duplicates are allowed inside a playlist (backend-enforced ordering),
   so the UI composes row keys on `(index, songId)`.
 
+## Android Auto
+
+The app is an Android Auto media client. `MediaPlaybackService` extends
+`MediaLibraryService` and its `MediaLibrarySession.Callback` exposes a
+browse tree the car head unit can walk.
+
+Tree shape:
+
+```
+root
+├── all-songs                     first page of the catalog (50 items)
+└── playlists
+    └── playlist:{id}             ordered songs (duplicates allowed)
+```
+
+Tapping a song under `/all-songs` plays that one track; tapping inside a
+playlist expands into the full playlist queue at the right start index —
+same semantics as `PlaybackViewModel.playPlaylist` on phone. Voice
+(`"Hey Google, play Queen on MediaPlayer"`) hits `onSearch` and proxies
+straight through to `/api/songs?q=`. Cover art URIs resolve against
+`/api/songs/{id}/cover`.
+
+Cold car connect shows a "resume where you left off" chip via
+`onPlaybackResumption`. The last queue + index + position are
+checkpointed by `PlaybackResumption` (SharedPreferences-backed
+`Player.Listener`) and rebuilt into playable `MediaItem`s on demand.
+
+### Testing with the Desktop Head Unit (DHU)
+
+DHU is Google's AA simulator — much faster than plugging into a real
+car for every iteration.
+
+1. In Android Studio's SDK Manager → SDK Tools, install **Android Auto
+   Desktop Head Unit Emulator**. The DHU binaries land at
+   `%ANDROID_HOME%\extras\google\auto\desktop-head-unit.exe`.
+2. On the phone: enable developer mode in the *Android Auto* app
+   (tap the version number in About 10 times), then toggle **Head Unit
+   Server**. Plug the phone in via USB.
+3. On the host PC, forward the AA port:
+
+   ```bat
+   adb forward tcp:5277 tcp:5277
+   ```
+
+4. Launch DHU:
+
+   ```bat
+   %ANDROID_HOME%\extras\google\auto\desktop-head-unit.exe
+   ```
+
+5. MediaPlayer should appear in the car launcher. If not, verify the
+   `com.google.android.gms.car.application` meta-data is present in the
+   installed APK (`aapt dump xmltree`) and that the APK you installed is
+   actually a debug build that matches the phone.
+
+The app doesn't need HTTPS to talk to the backend from DHU, but a real
+head unit won't reach `10.0.2.2` — it'll hit the production `BASE_URL`
+baked into a release build. The existing `releaseUrlCheck` Gradle guard
+already forces that URL to be set.
+
 ## Status
 
 All planned milestones shipped. See [../README.md](../README.md) for the

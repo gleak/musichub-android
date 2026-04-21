@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -43,6 +44,8 @@ import kotlinx.coroutines.guava.future
 class MediaPlaybackService : MediaLibraryService() {
 
     private var mediaSession: MediaLibrarySession? = null
+    private var resumption: PlaybackResumption? = null
+    private var resumptionListener: Player.Listener? = null
 
     /**
      * Off-main scope for `MediaLibrarySession.Callback` work (browse tree
@@ -74,6 +77,12 @@ class MediaPlaybackService : MediaLibraryService() {
             .build()
 
         mediaSession = MediaLibrarySession.Builder(this, player, LibraryCallback()).build()
+
+        // Checkpoint the queue + position so Android Auto can show a
+        // "resume" chip on cold car connect. See onPlaybackResumption.
+        resumption = PlaybackResumption(this).also {
+            resumptionListener = it.install(player)
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
@@ -94,10 +103,13 @@ class MediaPlaybackService : MediaLibraryService() {
     override fun onDestroy() {
         serviceScope.cancel()
         mediaSession?.run {
+            resumptionListener?.let { player.removeListener(it) }
             player.release()
             release()
             mediaSession = null
         }
+        resumption = null
+        resumptionListener = null
         super.onDestroy()
     }
 
@@ -187,6 +199,30 @@ class MediaPlaybackService : MediaLibraryService() {
          *    but no URI (they're not meant to be played as-is); we resolve
          *    each id into a playable MediaItem via [LibraryTree].
          */
+        /**
+         * Called by Android Auto on cold car connect to populate the
+         * "resume where you left off" chip. We hand back the last queue
+         * persisted by [PlaybackResumption]; when nothing has been saved
+         * yet, returning an immediate-failed future makes AA simply
+         * omit the chip rather than show an empty placeholder.
+         */
+        override fun onPlaybackResumption(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val snapshot = resumption?.load()
+                ?: return Futures.immediateFailedFuture(
+                    UnsupportedOperationException("No saved playback state")
+                )
+            return Futures.immediateFuture(
+                MediaSession.MediaItemsWithStartPosition(
+                    snapshot.items,
+                    snapshot.startIndex,
+                    snapshot.startPositionMs,
+                )
+            )
+        }
+
         override fun onSetMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,

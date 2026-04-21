@@ -222,7 +222,7 @@ too.
 | M7c| ✅     | Top-level README + cross-repo polish                         |
 | M8a| ✅     | Android Auto discovery (MediaLibraryService + car metadata)  |
 | M8b| ✅     | Android Auto browse tree + voice search                      |
-| M8c| ⏳     | AA polish: resumption, DHU testing, docs                     |
+| M8c| ✅     | AA polish: onPlaybackResumption + DHU testing docs           |
 
 ## Non-goals (for now)
 
