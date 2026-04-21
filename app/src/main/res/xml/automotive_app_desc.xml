@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Declares this APK as an Android Auto media app. The <meta-data> tag in
+    AndroidManifest.xml (name=com.google.android.gms.car.application) points
+    at this file; without it AA won't list the app in the car launcher.
+
+    Only the `media` capability is claimed — no messaging, no template UI.
+-->
+<automotiveApp>
+    <uses name="media" />
+</automotiveApp>

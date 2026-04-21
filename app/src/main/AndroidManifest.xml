@@ -23,6 +23,12 @@
         android:theme="@style/Theme.MediaPlayer"
         tools:targetApi="34">
 
+        <!-- Android Auto discovery. Points at res/xml/automotive_app_desc.xml
+             which declares the `media` capability. Inert on non-AA devices. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
