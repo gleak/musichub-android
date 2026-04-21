@@ -37,7 +37,7 @@ fun resolveBaseUrl(variantKey: String, fallback: String): String {
 
 android {
     namespace = "com.mediaplayer.android"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.mediaplayer.android"
@@ -114,8 +114,10 @@ dependencies {
     implementation(libs.androidx.media3.common.ktx)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
-    // Coroutines
+    // Coroutines. `-guava` bridges Media3's ListenableFuture-based
+    // MediaLibrarySession.Callback to `suspend fun` via `future { ... }`.
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.guava)
 
     // Networking + JSON
     implementation(libs.retrofit)
@@ -165,4 +167,3 @@ afterEvaluate {
     tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }
         .configureEach { dependsOn(releaseUrlCheck) }
 }
-

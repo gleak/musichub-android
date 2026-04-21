@@ -4,7 +4,6 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -13,9 +12,15 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
+import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.mediaplayer.android.data.Network
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.guava.future
 
 /**
  * Bound foreground service that owns the ExoPlayer instance.
@@ -25,10 +30,10 @@ import com.mediaplayer.android.data.Network
  * media controls out of the box. The UI layer talks to this via a
  * [androidx.media3.session.MediaController] built in [PlayerConnection].
  *
- * Subclasses [MediaLibraryService] (which itself extends [MediaSessionService])
- * so Android Auto can discover the app and request a browse tree via
- * [MediaLibrarySession.Callback]. Phone-side behaviour is unchanged — a
- * `MediaController` handshake still lands on the same session.
+ * Subclasses [MediaLibraryService] so Android Auto can discover the app
+ * and request a browse tree via [MediaLibrarySession.Callback]. Phone-side
+ * behaviour is unchanged — a `MediaController` handshake still lands on
+ * the same session.
  *
  * The player is configured to pipe audio through [Network.okHttp] so every
  * byte (song stream, cover art, catalog calls) shares one connection pool
@@ -38,6 +43,13 @@ import com.mediaplayer.android.data.Network
 class MediaPlaybackService : MediaLibraryService() {
 
     private var mediaSession: MediaLibrarySession? = null
+
+    /**
+     * Off-main scope for `MediaLibrarySession.Callback` work (browse tree
+     * fetches, search). Bridged to Media3's `ListenableFuture` API via
+     * `kotlinx-coroutines-guava`'s `future { ... }` builder.
+     */
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
@@ -80,6 +92,7 @@ class MediaPlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         mediaSession?.run {
             player.release()
             release()
@@ -89,13 +102,12 @@ class MediaPlaybackService : MediaLibraryService() {
     }
 
     /**
-     * Minimal browse-tree hook for Android Auto discovery (M8a).
+     * Android Auto browse tree + playback entrypoints.
      *
-     * Returns a single browsable root with no children yet; M8b will
-     * populate the real tree (all-songs, playlists, per-playlist detail).
-     * Without *some* valid root AA won't even show the launcher icon in
-     * the car UI, so this placeholder is the bare minimum to prove the
-     * wiring works end-to-end.
+     * All heavy lifting (HTTP calls, mediaId parsing) lives in
+     * [LibraryTree]; this inner class only bridges the suspend API to
+     * Media3's `ListenableFuture` contract and handles queue expansion
+     * for playlist taps.
      */
     private inner class LibraryCallback : MediaLibrarySession.Callback {
 
@@ -103,20 +115,20 @@ class MediaPlaybackService : MediaLibraryService() {
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
             params: LibraryParams?,
-        ): ListenableFuture<LibraryResult<MediaItem>> {
-            val root = MediaItem.Builder()
-                .setMediaId(ROOT_ID)
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setIsBrowsable(true)
-                        .setIsPlayable(false)
-                        .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
-                        .setTitle("MediaPlayer")
-                        .build()
-                )
-                .build()
-            return Futures.immediateFuture(LibraryResult.ofItem(root, params))
-        }
+        ): ListenableFuture<LibraryResult<MediaItem>> =
+            serviceScope.future {
+                LibraryResult.ofItem(LibraryTree.root(), params)
+            }
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String,
+        ): ListenableFuture<LibraryResult<MediaItem>> =
+            serviceScope.future {
+                LibraryTree.item(mediaId)?.let { LibraryResult.ofItem(it, /* params = */ null) }
+                    ?: LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+            }
 
         override fun onGetChildren(
             session: MediaLibrarySession,
@@ -125,15 +137,95 @@ class MediaPlaybackService : MediaLibraryService() {
             page: Int,
             pageSize: Int,
             params: LibraryParams?,
-        ): ListenableFuture<LibraryResult<com.google.common.collect.ImmutableList<MediaItem>>> {
-            // M8a stub: no children yet. M8b plugs the real tree in here.
-            return Futures.immediateFuture(
-                LibraryResult.ofItemList(com.google.common.collect.ImmutableList.of(), params)
-            )
-        }
-    }
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
+            serviceScope.future {
+                val items = LibraryTree.children(parentId)
+                if (items == null) {
+                    LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+                } else {
+                    LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
+                }
+            }
 
-    companion object {
-        private const val ROOT_ID = "root"
+        override fun onSearch(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<Void>> =
+            serviceScope.future {
+                // Spec: we signal readiness here; the controller then calls
+                // onGetSearchResult to pull the actual hits. We notify first
+                // so paging hints line up with what we'll return.
+                val hits = LibraryTree.search(query)
+                session.notifySearchResultChanged(browser, query, hits.size, params)
+                LibraryResult.ofVoid()
+            }
+
+        override fun onGetSearchResult(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
+            serviceScope.future {
+                LibraryResult.ofItemList(ImmutableList.copyOf(LibraryTree.search(query)), params)
+            }
+
+        /**
+         * Called when the controller sets the queue (e.g. AA tap on a leaf).
+         * Two things happen here:
+         *
+         * 1. Queue expansion. A tap on a `pl:{pid}:{pos}:{sid}` leaf inside
+         *    a playlist should enqueue the whole playlist starting at that
+         *    position — matches [PlaybackViewModel.playPlaylist] on phone.
+         *    A tap on a `song:{id}` leaf (under all-songs or search) stays
+         *    a single-item queue.
+         * 2. Stream URI attachment. Browse-side MediaItems carry metadata
+         *    but no URI (they're not meant to be played as-is); we resolve
+         *    each id into a playable MediaItem via [LibraryTree].
+         */
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> =
+            serviceScope.future {
+                if (mediaItems.size == 1) {
+                    val id = mediaItems[0].mediaId
+                    val plLeaf = LibraryTree.parsePlaylistLeaf(id)
+                    if (plLeaf != null) {
+                        val (playlistId, position, _) = plLeaf
+                        val queue = LibraryTree.playlistQueue(playlistId)
+                        return@future MediaSession.MediaItemsWithStartPosition(
+                            queue,
+                            position,
+                            startPositionMs,
+                        )
+                    }
+                    if (id.startsWith("song:")) {
+                        val sid = id.removePrefix("song:").toLongOrNull()
+                        if (sid != null) {
+                            return@future MediaSession.MediaItemsWithStartPosition(
+                                listOf(LibraryTree.playableForSong(sid)),
+                                /* startIndex = */ 0,
+                                startPositionMs,
+                            )
+                        }
+                    }
+                }
+                // Multi-item or unknown scheme — return as-is. The player
+                // will still try, but unresolved items without URIs will
+                // fail fast rather than silently no-op.
+                MediaSession.MediaItemsWithStartPosition(
+                    mediaItems,
+                    startIndex,
+                    startPositionMs,
+                )
+            }
     }
 }
