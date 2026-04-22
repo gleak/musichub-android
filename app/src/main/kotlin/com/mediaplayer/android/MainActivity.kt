@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -33,6 +34,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mediaplayer.android.playback.PlaybackViewModel
+import com.mediaplayer.android.ui.find.FindScreen
 import com.mediaplayer.android.ui.player.MiniPlayer
 import com.mediaplayer.android.ui.player.NowPlayingSheet
 import com.mediaplayer.android.ui.playlists.PlaylistDetailScreen
@@ -61,6 +63,7 @@ class MainActivity : ComponentActivity() {
  */
 private object Routes {
     const val SEARCH = "search"
+    const val FIND = "find"
     const val PLAYLISTS = "playlists"
     const val PLAYLIST_DETAIL = "playlists/{playlistId}"
     fun playlistDetail(id: Long) = "playlists/$id"
@@ -105,6 +108,9 @@ private fun AppScaffold() {
                 SearchScreen(
                     onSongClick = playbackVm::play,
                 )
+            }
+            composable(Routes.FIND) {
+                FindScreen()
             }
             composable(Routes.PLAYLISTS) {
                 PlaylistsScreen(
@@ -168,6 +174,11 @@ private fun BottomNav(navController: NavHostController) {
             route = Routes.SEARCH,
             label = "Search",
             icon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        ),
+        BottomDestination(
+            route = Routes.FIND,
+            label = "Find",
+            icon = { Icon(Icons.Filled.LibraryAdd, contentDescription = null) },
         ),
         BottomDestination(
             route = Routes.PLAYLISTS,

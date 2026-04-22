@@ -2,11 +2,15 @@ package com.mediaplayer.android.data
 
 import com.mediaplayer.android.data.dto.AddSongRequest
 import com.mediaplayer.android.data.dto.CreatePlaylistRequest
+import com.mediaplayer.android.data.dto.CreateRequestBody
 import com.mediaplayer.android.data.dto.PageResponse
 import com.mediaplayer.android.data.dto.PlaylistDetailDto
 import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.data.dto.RenamePlaylistRequest
+import com.mediaplayer.android.data.dto.RequestDto
+import com.mediaplayer.android.data.dto.RequestSummaryDto
 import com.mediaplayer.android.data.dto.ReorderSongsRequest
+import com.mediaplayer.android.data.dto.SelectCandidateBody
 import com.mediaplayer.android.data.dto.SongDto
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -71,4 +75,26 @@ interface MediaPlayerApi {
         @Path("id") id: Long,
         @Body body: ReorderSongsRequest,
     ): PlaylistDetailDto
+
+    // ---------- Find new music (M9) ----------
+
+    /** Kicks off a Prowlarr search; server blocks briefly while the indexer answers. */
+    @POST("api/requests")
+    suspend fun createRequest(@Body body: CreateRequestBody): RequestDto
+
+    @GET("api/requests")
+    suspend fun listRequests(): List<RequestSummaryDto>
+
+    @GET("api/requests/{id}")
+    suspend fun getRequest(@Path("id") id: Long): RequestDto
+
+    /** Hands off to the orchestrator — response is the request in UNLOCKING state. */
+    @POST("api/requests/{id}/select")
+    suspend fun selectCandidate(
+        @Path("id") id: Long,
+        @Body body: SelectCandidateBody,
+    ): RequestDto
+
+    @DELETE("api/requests/{id}")
+    suspend fun deleteRequest(@Path("id") id: Long)
 }

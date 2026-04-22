@@ -16,7 +16,8 @@ from a self-hosted Spring Boot catalog via Media3 ExoPlayer.
   `SingletonImageLoader.Factory`
 - Media3 1.5.1 (`exoplayer`, `session`, `datasource-okhttp`) — single shared
   OkHttp stack all the way down
-- Navigation Compose 2.8.5 — three-destination graph with bottom-nav
+- Navigation Compose 2.8.5 — four-destination graph with bottom-nav
+  (Search, Find, Playlists, Playlist detail)
 - Version catalog in `gradle/libs.versions.toml`
 
 ## Module layout
@@ -29,15 +30,17 @@ app/src/main/kotlin/com/mediaplayer/android/
 ├── MainActivity.kt            // AppScaffold: NavHost + bottom-nav + mini-player
 ├── data/
 │   ├── Network.kt             // Retrofit + OkHttp + JSON singleton
-│   ├── MediaPlayerApi.kt      // Retrofit interface (songs + playlists)
+│   ├── MediaPlayerApi.kt      // Retrofit interface (songs + playlists + requests)
 │   ├── SongRepository.kt      // thin façade over the songs API
 │   ├── PlaylistRepository.kt  // thin façade over the playlists API
+│   ├── FindRepository.kt      // thin façade over /api/requests (M9c)
 │   └── dto/
 │       ├── SongDto.kt             // @Serializable song mirror
 │       ├── PageResponse.kt        // generic page envelope
 │       ├── PlaylistDto.kt         // list summary
 │       ├── PlaylistDetailDto.kt   // full payload (ordered songs)
-│       └── PlaylistRequests.kt    // Create/Rename/Add/Reorder request bodies
+│       ├── PlaylistRequests.kt    // Create/Rename/Add/Reorder request bodies
+│       └── RequestDto.kt          // RequestStatus, CandidateDto, RequestDto (M9c)
 ├── playback/
 │   ├── MediaPlaybackService.kt  // MediaSessionService owning ExoPlayer
 │   ├── PlayerConnection.kt      // async MediaController binder (singleton)
@@ -54,6 +57,9 @@ app/src/main/kotlin/com/mediaplayer/android/
     │   ├── PlaylistDetailScreen.kt // header + Play + track rows
     │   ├── PlaylistDetailViewModel.kt
     │   └── AddToPlaylistSheet.kt   // bottom sheet: pick existing or create
+    ├── find/
+    │   ├── FindScreen.kt           // query → Albums/Singles picker → status header
+    │   └── FindViewModel.kt        // polls /api/requests/{id} until terminal
     └── player/
         ├── MiniPlayer.kt        // persistent bar (with shared Cover)
         └── NowPlayingSheet.kt   // full-screen modal bottom sheet
@@ -190,8 +196,8 @@ playback, just hides the media notification.
 
 ## Playlists UX
 
-- Bottom-nav tabs: **Search** and **Playlists**. The mini-player sits
-  directly above the nav bar when a track is loaded.
+- Bottom-nav tabs: **Search**, **Find**, and **Playlists**. The mini-player
+  sits directly above the nav bar when a track is loaded.
 - Playlists tab lists every playlist with song count + trailing delete.
   `+ New playlist` FAB opens an inline create dialog.
 - Tap a playlist → detail screen: header shows the name, song count, and
@@ -200,6 +206,33 @@ playback, just hides the media notification.
 - The Playlists tab stays lit even when drilled into detail.
 - Duplicates are allowed inside a playlist (backend-enforced ordering),
   so the UI composes row keys on `(index, songId)`.
+
+## Find new music (M9c)
+
+The **Find** tab lets the user fill catalog gaps through the backend's
+torrent-indexer → AllDebrid pipeline:
+
+1. Type a query (artist / album / track) and hit Search. The backend
+   synchronously queries Prowlarr and returns a `RequestDto` in the
+   `AWAITING_SELECTION` state with a list of candidates.
+2. Candidates are grouped into **Albums** and **Singles** tabs. The
+   backend's heuristic `UNKNOWN` bucket falls into Albums — music
+   torrents are overwhelmingly releases, and biasing toward Albums
+   matches user expectation.
+3. Each row shows title, seeder count, human-readable size, indexer,
+   and (when known) track count.
+4. Tapping a row calls `POST /api/requests/{id}/select`; the request
+   flips to `UNLOCKING` and the backend's scheduled orchestrator takes
+   over. The view model polls `GET /api/requests/{id}` every 2 seconds
+   and re-renders the status header (`UNLOCKING` → `DOWNLOADING` →
+   `IMPORTED` / `IMPORTED_PARTIAL`) until a terminal state is reached.
+5. A back arrow clears the request from the UI and returns to the query
+   field — the backend row is kept (for audit / troubleshooting) and
+   can be discarded separately via `DELETE /api/requests/{id}`.
+
+The whole feature is gated on backend configuration: when
+`PROWLARR_API_KEY` or `ALLDEBRID_API_KEY` are unset, `POST /api/requests`
+fails with a clear error that surfaces as the `Error` state.
 
 ## Android Auto
 

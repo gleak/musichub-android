@@ -2,7 +2,7 @@
 
 Living doc for the MediaPlayer Android app. Update alongside each milestone.
 
-## Current state (Milestone 7 complete)
+## Current state (Milestone 9 complete)
 
 ### Build
 
@@ -32,6 +32,8 @@ Single `:app` module. Package `com.mediaplayer.android`.
   `PlaylistRepository`.
 - `ui/player/` — `MiniPlayer` bar and `NowPlayingSheet` (Material 3 modal
   bottom sheet). Both bind to the same `PlaybackViewModel`.
+- `ui/find/` — `FindScreen` + `FindViewModel` for the "Find new music"
+  tab (M9c). Polls the backend request state machine until terminal.
 - `playback/` — `MediaPlaybackService`, `PlayerConnection` (singleton that
   binds a `MediaController`), and `PlaybackViewModel` (Compose-facing facade).
 
@@ -154,15 +156,16 @@ it the media notification just doesn't render, playback still works.
 ### Navigation + playlists (M6)
 
 **Navigation.** `androidx-navigation-compose` 2.8.5 with a tiny
-hand-rolled route table (`Routes.SEARCH`, `Routes.PLAYLISTS`,
-`Routes.PLAYLIST_DETAIL`). Plain string constants — a sealed hierarchy
-would be ceremony for a three-destination graph.
+hand-rolled route table (`Routes.SEARCH`, `Routes.FIND`,
+`Routes.PLAYLISTS`, `Routes.PLAYLIST_DETAIL`). Plain string constants —
+a sealed hierarchy would be ceremony for a four-destination graph.
 
 `MainActivity.AppScaffold` is now a Material 3 `Scaffold` with a
 `bottomBar` slot containing an optional `MiniPlayer` stacked above a
-`NavigationBar`. The bar has two tabs (Search, Playlists). Drilling
-into a playlist (`Routes.PLAYLIST_DETAIL`) keeps the Playlists tab lit
-— the selector treats the detail route as "still inside Playlists".
+`NavigationBar`. The bar has three tabs (Search, Find, Playlists).
+Drilling into a playlist (`Routes.PLAYLIST_DETAIL`) keeps the Playlists
+tab lit — the selector treats the detail route as "still inside
+Playlists".
 Tab clicks use the standard `popUpTo(startDestinationId) { saveState }`
 + `launchSingleTop` + `restoreState` combo so switching tabs preserves
 list scroll state.
@@ -199,6 +202,50 @@ as in-sheet text rather than kicking the user out.
 takes an optional `onLongPress`. Long-press stays a no-op in contexts
 that don't pass the callback (e.g. future uses).
 
+### Find new music (M9c)
+
+A third bottom-nav tab — "Find" — lets the user request missing tracks
+from the backend's torrent-indexer → AllDebrid pipeline (see
+`../backend/README.md` for the server side).
+
+**Data layer.** `FindRepository` wraps five `MediaPlayerApi` endpoints
+(`POST /api/requests`, `GET /api/requests`, `GET /{id}`,
+`POST /{id}/select`, `DELETE /{id}`). DTOs live in
+`data/dto/RequestDto.kt`: a `RequestStatus` enum with an `isTerminal`
+extension, plus `CandidateKind`, `CandidateDto`, `RequestDto`,
+`RequestSummaryDto`, and the two request-body records. Magnet URIs are
+never exposed to the client — the server picks by candidate id and
+hands the magnet off to AllDebrid itself.
+
+**ViewModel.** `FindViewModel` exposes a `MutableStateFlow<String>` for
+the query and a `StateFlow<FindUiState>` for the screen state
+(`Idle`, `Searching`, `Error`, `Tracking(request)`). After `submit()`,
+the VM creates the request synchronously and transitions to
+`Tracking`. After `select(candidate)`, the VM polls
+`GET /api/requests/{id}` every 2 seconds until
+`RequestStatus.isTerminal` — the poll job is cancelled on `reset()` and
+in `onCleared()` to avoid leaking coroutines.
+
+**Screen.** `FindScreen` is a single composable hosting both phases:
+
+- `QueryBar`: outlined text field + Search button, disabled during
+  `Searching`.
+- `StatusHeader`: back arrow, quoted query, and a human-readable label
+  per `RequestStatus`. The `FAILED` label appends the backend's
+  `errorMessage` when provided.
+- `CandidateTabs`: Material 3 `TabRow` splitting the candidates into
+  Albums vs Singles. The backend's `UNKNOWN` kind falls into the
+  Albums bucket — music torrents are overwhelmingly releases.
+- `CandidateRow`: title (semibold) + meta row with seeders,
+  IEC-formatted size, track count, and indexer. Rows become inert
+  once the backend is past `AWAITING_SELECTION`; the selected row
+  keeps a tinted background.
+
+**Why a single screen.** The flow is short (query → pick → wait) and
+users expect Back to drop them on an empty query field, not into a
+stale picker. A sub-nav graph would also create a second destination
+that `popUpTo(startDestination)` would need to special-case.
+
 ### Testing (deferred)
 
 No JVM / instrumentation tests in M4 or M5. The backend has the catalog
@@ -223,6 +270,9 @@ too.
 | M8a| ✅     | Android Auto discovery (MediaLibraryService + car metadata)  |
 | M8b| ✅     | Android Auto browse tree + voice search                      |
 | M8c| ✅     | AA polish: onPlaybackResumption + DHU testing docs           |
+| M9a| ✅     | Backend: Prowlarr + song_request state machine               |
+| M9b| ✅     | Backend: AllDebrid unlock + archive extraction + auto-import |
+| M9c| ✅     | Android "Find new music" tab                                 |
 
 ## Non-goals (for now)
 
