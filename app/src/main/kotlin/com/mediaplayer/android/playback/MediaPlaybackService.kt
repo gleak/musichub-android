@@ -7,6 +7,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -46,6 +47,7 @@ class MediaPlaybackService : MediaLibraryService() {
     private var mediaSession: MediaLibrarySession? = null
     private var resumption: PlaybackResumption? = null
     private var resumptionListener: Player.Listener? = null
+    private var prefetch: PrefetchOrchestrator? = null
 
     /**
      * Off-main scope for `MediaLibrarySession.Callback` work (browse tree
@@ -58,7 +60,17 @@ class MediaPlaybackService : MediaLibraryService() {
         super.onCreate()
 
         val httpFactory = OkHttpDataSource.Factory(Network.okHttp)
-        val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
+        // M10: wrap the HTTP data source in a disk-backed CacheDataSource so
+        // repeat plays / seeks within cached windows avoid the network. The
+        // cache singleton is process-scoped — see [PlayerCache] for why we
+        // never release it. FLAG_IGNORE_CACHE_ON_ERROR means a corrupt cache
+        // entry falls through to upstream instead of hard-failing playback.
+        val cache = PlayerCache.get(this)
+        val cacheFactory = CacheDataSource.Factory()
+            .setCache(cache)
+            .setUpstreamDataSourceFactory(httpFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        val dataSourceFactory = DefaultDataSource.Factory(this, cacheFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(dataSourceFactory)
 
@@ -83,6 +95,12 @@ class MediaPlaybackService : MediaLibraryService() {
         resumption = PlaybackResumption(this).also {
             resumptionListener = it.install(player)
         }
+
+        // M10: warm the disk cache with the prev/next tracks around
+        // whatever is currently playing, gated on unmetered network.
+        prefetch = PrefetchOrchestrator(this, cache, httpFactory).also {
+            it.install(player)
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
@@ -102,6 +120,11 @@ class MediaPlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         serviceScope.cancel()
+        // Release the prefetch orchestrator *before* tearing down the
+        // player — it holds a Player.Listener and a NetworkCallback and
+        // needs the player alive to unhook cleanly.
+        prefetch?.release()
+        prefetch = null
         mediaSession?.run {
             resumptionListener?.let { player.removeListener(it) }
             player.release()

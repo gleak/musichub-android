@@ -44,6 +44,8 @@ app/src/main/kotlin/com/mediaplayer/android/
 ├── playback/
 │   ├── MediaPlaybackService.kt  // MediaSessionService owning ExoPlayer
 │   ├── PlayerConnection.kt      // async MediaController binder (singleton)
+│   ├── PlayerCache.kt           // process-singleton SimpleCache (1 GiB LRU) (M10)
+│   ├── PrefetchOrchestrator.kt  // warms prev/next neighbours on Wi-Fi (M10)
 │   └── PlaybackViewModel.kt     // Compose StateFlows + controls (queue-aware)
 └── ui/
     ├── theme/Theme.kt
@@ -233,6 +235,37 @@ torrent-indexer → AllDebrid pipeline:
 The whole feature is gated on backend configuration: when
 `PROWLARR_API_KEY` or `ALLDEBRID_API_KEY` are unset, `POST /api/requests`
 fails with a clear error that surfaces as the `Error` state.
+
+## Offline cache + prefetch (M10)
+
+Audio bytes flow through a disk-backed `CacheDataSource` so seeks, re-plays,
+and queue-backward skips avoid re-hitting the backend.
+
+- **`PlayerCache`** — process-singleton `SimpleCache` under
+  `Context.cacheDir/audio-cache`, capped at **1 GiB** with an LRU evictor
+  (~25 FLAC albums or ~250 lossy tracks). SimpleCache takes a file lock on
+  its database at open time, so we instantiate it exactly once per process
+  and never call `release()` — Android reclaims the file descriptors on
+  process kill. `Context.cacheDir` means Android will reclaim the space
+  itself when the device is tight on storage.
+- **`CacheDataSource`** wraps `OkHttpDataSource` inside
+  `MediaPlaybackService.onCreate`. `FLAG_IGNORE_CACHE_ON_ERROR` falls
+  through to upstream on a corrupt cache entry instead of hard-failing
+  playback.
+- **`PrefetchOrchestrator`** — a `Player.Listener` that watches
+  `onTimelineChanged` / `onMediaItemTransition` and keeps the prev + next
+  queue neighbours warm via a background `CacheWriter` on
+  `Dispatchers.IO`. Out-of-window jobs are cancelled as the user skips
+  around; already-cached ranges are a no-op.
+- **Unmetered-only gate** — prefetch is opportunistic bandwidth, so a
+  `ConnectivityManager.NetworkCallback` watches
+  `NET_CAPABILITY_NOT_METERED`. Wi-Fi / Ethernet → prefetch runs;
+  mobile data / metered hotspot → in-flight jobs are cancelled.
+  Actual playback (the track the user explicitly started) is unaffected.
+
+The cache survives service teardown and process death; it's keyed off
+the stream URL so the same track re-played across sessions is served
+from disk.
 
 ## Android Auto
 

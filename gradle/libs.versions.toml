@@ -58,6 +58,10 @@ media3-exoplayer-okhttp             = { module = "androidx.media3:media3-datasou
 media3-session                      = { module = "androidx.media3:media3-session",                        version.ref = "media3" }
 media3-common                       = { module = "androidx.media3:media3-common",                         version.ref = "media3" }
 androidx-media3-common-ktx          = { module = "androidx.media3:media3-common-ktx",                     version.ref = "media3" }
+# M10: disk cache + prefetch (SimpleCache + CacheDataSource + CacheWriter live in
+# media3-datasource, which already comes in transitively via media3-exoplayer;
+# media3-database hosts StandaloneDatabaseProvider for SimpleCache's index.
+media3-database                     = { module = "androidx.media3:media3-database",                       version.ref = "media3" }
 
 androidx-navigation-compose         = { module = "androidx.navigation:navigation-compose",                version.ref = "navigationCompose" }
 

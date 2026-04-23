@@ -2,7 +2,7 @@
 
 Living doc for the MediaPlayer Android app. Update alongside each milestone.
 
-## Current state (Milestone 9 complete)
+## Current state (Milestone 10 complete)
 
 ### Build
 
@@ -35,7 +35,9 @@ Single `:app` module. Package `com.mediaplayer.android`.
 - `ui/find/` — `FindScreen` + `FindViewModel` for the "Find new music"
   tab (M9c). Polls the backend request state machine until terminal.
 - `playback/` — `MediaPlaybackService`, `PlayerConnection` (singleton that
-  binds a `MediaController`), and `PlaybackViewModel` (Compose-facing facade).
+  binds a `MediaController`), `PlaybackViewModel` (Compose-facing facade),
+  plus the M10 cache pair: `PlayerCache` (process-singleton `SimpleCache`)
+  and `PrefetchOrchestrator` (warms prev/next on Wi-Fi).
 
 No DI framework yet — `Network` is an object, `PlayerConnection` is an
 object, and ViewModels construct their own collaborators. Introduce Hilt
@@ -246,6 +248,72 @@ users expect Back to drop them on an empty query field, not into a
 stale picker. A sub-nav graph would also create a second destination
 that `popUpTo(startDestination)` would need to special-case.
 
+### Offline cache + prefetch (M10)
+
+M10 adds a disk-backed cache to the ExoPlayer pipeline and an optional
+prefetch that warms the next and previous tracks in the queue on
+unmetered networks.
+
+**Why not just a RAM buffer.** ExoPlayer already buffers a few
+seconds ahead in memory, but that evaporates on skip-back, app
+restart, or even a big seek within the current track. Persisting
+bytes under `Context.cacheDir` turns re-plays and seeks into local
+disk reads and keeps a "last N tracks" working set warm across service
+restarts.
+
+**`PlayerCache`** — process-singleton `SimpleCache` backed by a
+`StandaloneDatabaseProvider` (from the `media3-database` artifact) and
+a `LeastRecentlyUsedCacheEvictor`. Capped at **1 GiB**, which is ~25
+FLAC albums or ~250 lossy tracks. We singleton it because
+`SimpleCache` takes a file lock on its database directory at
+construction time — a second instance blows up with
+`Cache folder already locked`. We deliberately never call `release()`:
+the cache is process-scoped and Android's process kill reclaims the
+fds cleanly, but mid-process release would break any subsequent
+service instantiation (pause → swipe-away → replay cycle).
+
+**`CacheDataSource` wiring.** `MediaPlaybackService.onCreate`
+wraps `OkHttpDataSource` in a
+`CacheDataSource.Factory(cache, okHttpFactory, FLAG_IGNORE_CACHE_ON_ERROR)`
+before handing it to `DefaultDataSource.Factory`. The ignore-on-error
+flag means a corrupted cache entry falls through to upstream and
+playback continues; it never hard-fails on a bad cache entry.
+
+**`PrefetchOrchestrator`** — a `Player.Listener` + lightweight network
+supervisor that keeps the prev + next queue neighbours warm.
+
+- On `onTimelineChanged` / `onMediaItemTransition` it recomputes the
+  desired window (`listOfNotNull(prev?.uri, next?.uri)`) and diffs
+  it against a `ConcurrentHashMap<String, Job>` of in-flight
+  prefetches — out-of-window jobs are cancelled, new ones are
+  launched via `CacheWriter(cacheSource, dataSpec, null, null).cache()`
+  on `Dispatchers.IO`. Already-cached ranges inside
+  `CacheWriter` are a no-op, so the system self-heals: restart →
+  queue loads → prev/next are already on disk → prefetch completes
+  instantly.
+- Network gating via `ConnectivityManager.isActiveNetworkMetered()`
+  plus a long-lived `NetworkCallback` watching
+  `NET_CAPABILITY_NOT_METERED`. When the user drops off Wi-Fi the
+  callback fires on a system thread, we bounce to
+  `player.applicationLooper` via a `Handler`, flip the `allowed` gate,
+  and cancel every in-flight job.
+- Prefetch is strictly **best-effort**: 404s, IO errors, and stale ids
+  are swallowed (cancellation is still propagated). The user's
+  explicit playback is unaffected — that request path doesn't go
+  through the orchestrator.
+
+**Why `CacheWriter` over `PreloadMediaSource`.** `PreloadMediaSource`
+is still marked experimental and pulls in the full renderer pipeline
+to pre-extract a few seconds of audio. For a "warm the whole file so a
+seek is instant" goal, `CacheWriter` is a straight byte-copy: cheaper,
+simpler, and fully cancellable.
+
+**Storage shape.** The cache lives under
+`Context.cacheDir/audio-cache`. `cacheDir` is the right choice —
+Android will reclaim space there when storage gets tight, no app-side
+code needed. No upgrade migration either: if we ever change the
+cache format, bumping the directory name is enough.
+
 ### Testing (deferred)
 
 No JVM / instrumentation tests in M4 or M5. The backend has the catalog
@@ -273,6 +341,7 @@ too.
 | M9a| ✅     | Backend: Prowlarr + song_request state machine               |
 | M9b| ✅     | Backend: AllDebrid unlock + archive extraction + auto-import |
 | M9c| ✅     | Android "Find new music" tab                                 |
+| M10| ✅     | Disk cache (1 GiB) + unmetered-only prev/next prefetch       |
 
 ## Non-goals (for now)
 
@@ -283,7 +352,9 @@ too.
   few hundred tracks.
 - Offline cache of the catalog. We have the network; loading failures
   surface via the `Error` state.
-- Download / offline playback. Streaming only.
+- Explicit download / "keep this song offline" UX. M10 caches
+  opportunistically (on-play + prev/next prefetch on Wi-Fi) but
+  doesn't pin tracks — the LRU evictor can reclaim anything.
 - Audio effects (EQ, replay-gain). ExoPlayer defaults are fine for a v1.
 - Drag-to-reorder inside playlist detail. Backend supports it via
   `PUT /api/playlists/{id}/songs`, but the Compose UI is read-only for

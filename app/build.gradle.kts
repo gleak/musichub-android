@@ -137,6 +137,10 @@ dependencies {
     implementation(libs.media3.exoplayer.okhttp)
     implementation(libs.media3.session)
     implementation(libs.media3.common)
+    // M10: disk cache for the last N tracks + background prefetch of
+    // queue neighbours. Needs StandaloneDatabaseProvider for SimpleCache's
+    // on-disk index.
+    implementation(libs.media3.database)
 
     // Navigation — top-level NavHost for Search / Playlists tabs (M6).
     implementation(libs.androidx.navigation.compose)
