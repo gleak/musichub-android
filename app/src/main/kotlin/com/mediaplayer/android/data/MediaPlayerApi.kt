@@ -97,4 +97,21 @@ interface MediaPlayerApi {
 
     @DELETE("api/requests/{id}")
     suspend fun deleteRequest(@Path("id") id: Long)
+
+    // ---------- Liked Songs (M11a) ----------
+
+    @GET("api/liked")
+    suspend fun getLikedSongs(
+        @Query("page") page: Int = 0,
+        @Query("size") size: Int = 20,
+    ): PageResponse<SongDto>
+
+    @POST("api/liked/{songId}")
+    suspend fun likeSong(@Path("songId") songId: Long)
+
+    @DELETE("api/liked/{songId}")
+    suspend fun unlikeSong(@Path("songId") songId: Long)
+
+    @GET("api/liked/status")
+    suspend fun getLikedStatus(@Query("ids") ids: List<Long>): List<Long>
 }

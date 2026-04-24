@@ -35,6 +35,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mediaplayer.android.playback.PlaybackViewModel
 import com.mediaplayer.android.ui.find.FindScreen
+import com.mediaplayer.android.ui.liked.LikedScreen
 import com.mediaplayer.android.ui.player.MiniPlayer
 import com.mediaplayer.android.ui.player.NowPlayingSheet
 import com.mediaplayer.android.ui.playlists.PlaylistDetailScreen
@@ -66,6 +67,7 @@ private object Routes {
     const val FIND = "find"
     const val PLAYLISTS = "playlists"
     const val PLAYLIST_DETAIL = "playlists/{playlistId}"
+    const val LIKED = "liked"
     fun playlistDetail(id: Long) = "playlists/$id"
 }
 
@@ -116,6 +118,15 @@ private fun AppScaffold() {
                 PlaylistsScreen(
                     onPlaylistClick = { p ->
                         navController.navigate(Routes.playlistDetail(p.id))
+                    },
+                    onLikedSongsClick = { navController.navigate(Routes.LIKED) },
+                )
+            }
+            composable(Routes.LIKED) {
+                LikedScreen(
+                    onBack = { navController.popBackStack() },
+                    onPlayFromIndex = { songs, index ->
+                        playbackVm.playPlaylist(songs, index)
                     },
                 )
             }
@@ -195,9 +206,8 @@ private fun BottomNav(navController: NavHostController) {
     NavigationBar {
         destinations.forEach { dest ->
             val selected = currentRoute == dest.route ||
-                // Treat the detail route as "still inside Playlists" so the
-                // tab stays lit while drilling in.
-                (dest.route == Routes.PLAYLISTS && currentRoute == Routes.PLAYLIST_DETAIL)
+                (dest.route == Routes.PLAYLISTS && currentRoute == Routes.PLAYLIST_DETAIL) ||
+                (dest.route == Routes.PLAYLISTS && currentRoute == Routes.LIKED)
 
             NavigationBarItem(
                 selected = selected,

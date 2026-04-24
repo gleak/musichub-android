@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -50,6 +51,7 @@ fun PlaylistsScreen(
     modifier: Modifier = Modifier,
     viewModel: PlaylistsViewModel = viewModel(),
     onPlaylistClick: (PlaylistDto) -> Unit = {},
+    onLikedSongsClick: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var createOpen by remember { mutableStateOf(false) }
@@ -72,12 +74,25 @@ fun PlaylistsScreen(
                     onRetry = viewModel::refresh,
                 )
                 is PlaylistsUiState.Success -> {
-                    if (s.playlists.isEmpty()) {
-                        CenteredMessage(
-                            "No playlists yet. Tap the + button to create one."
-                        )
-                    } else {
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item(key = "liked") {
+                            LikedSongsRow(onClick = onLikedSongsClick)
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
+                        if (s.playlists.isEmpty()) {
+                            item(key = "empty") {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        "No playlists yet. Tap the + button to create one.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        } else {
                             items(items = s.playlists, key = { it.id }) { p ->
                                 PlaylistRow(
                                     playlist = p,
@@ -102,6 +117,39 @@ fun PlaylistsScreen(
                 createOpen = false
             },
             onDismiss = { createOpen = false },
+        )
+    }
+}
+
+@Composable
+private fun LikedSongsRow(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Favorite,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+
+        Spacer(Modifier.width(12.dp))
+
+        Text(
+            text = "Liked Songs",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }

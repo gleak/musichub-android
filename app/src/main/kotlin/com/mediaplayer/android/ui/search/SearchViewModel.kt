@@ -2,6 +2,7 @@ package com.mediaplayer.android.ui.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mediaplayer.android.data.LikedRepository
 import com.mediaplayer.android.data.SongRepository
 import com.mediaplayer.android.data.dto.SongDto
 import kotlinx.coroutines.FlowPreview
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 sealed interface SearchUiState {
     data object Idle : SearchUiState
@@ -35,10 +37,14 @@ sealed interface SearchUiState {
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class SearchViewModel(
     private val repository: SongRepository = SongRepository(),
+    private val likedRepository: LikedRepository = LikedRepository(),
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
+
+    private val _likedIds = MutableStateFlow<Set<Long>>(emptySet())
+    val likedIds: StateFlow<Set<Long>> = _likedIds.asStateFlow()
 
     val state: StateFlow<SearchUiState> = _query
         .debounce(DEBOUNCE_MS)
@@ -63,8 +69,22 @@ class SearchViewModel(
         _query.value = ""
     }
 
+    fun toggleLike(songId: Long) {
+        val isLiked = songId in _likedIds.value
+        _likedIds.value = if (isLiked) _likedIds.value - songId else _likedIds.value + songId
+        viewModelScope.launch {
+            try {
+                if (isLiked) likedRepository.unlike(songId) else likedRepository.like(songId)
+            } catch (_: Throwable) {
+                _likedIds.value = if (isLiked) _likedIds.value + songId else _likedIds.value - songId
+            }
+        }
+    }
+
     private suspend fun fetch(query: String): SearchUiState = try {
         val page = repository.listSongs(query = query)
+        val ids = page.items.map { it.id }
+        _likedIds.value = if (ids.isEmpty()) emptySet() else likedRepository.status(ids)
         SearchUiState.Success(page.items)
     } catch (t: Throwable) {
         SearchUiState.Error(t.message ?: "Unknown error")

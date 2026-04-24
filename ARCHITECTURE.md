@@ -2,7 +2,7 @@
 
 Living doc for the MediaPlayer Android app. Update alongside each milestone.
 
-## Current state (Milestone 10 complete)
+## Current state (Milestone 11a complete)
 
 ### Build
 
@@ -34,6 +34,10 @@ Single `:app` module. Package `com.mediaplayer.android`.
   bottom sheet). Both bind to the same `PlaybackViewModel`.
 - `ui/find/` — `FindScreen` + `FindViewModel` for the "Find new music"
   tab (M9c). Polls the backend request state machine until terminal.
+- `ui/liked/` — `LikedScreen` + `LikedViewModel`. Displays the liked
+  songs list (newest-liked-first), with a header Play button and a heart
+  toggle on each row that calls unlike optimistically. Entered from the
+  pinned "Liked Songs" tile at the top of the Playlists tab.
 - `playback/` — `MediaPlaybackService`, `PlayerConnection` (singleton that
   binds a `MediaController`), `PlaybackViewModel` (Compose-facing facade),
   plus the M10 cache pair: `PlayerCache` (process-singleton `SimpleCache`)
@@ -76,6 +80,14 @@ if M6/M7 make the graph non-trivial.
 - `SongRow` uses Coil's `AsyncImage`; when `hasCoverArt = false` it falls
   back to a `MusicNote` icon so the row layout is stable. Rows are
   clickable and forward the `SongDto` up to the Activity for playback.
+- `SearchViewModel` now also carries `likedIds: StateFlow<Set<Long>>`.
+  After each catalog fetch it bulk-fetches the liked subset of the result
+  page in a single `GET /api/liked/status` call. Heart taps toggle via
+  `toggleLike(songId)`, which updates `_likedIds` optimistically and
+  rolls back on API failure. `SongRow` gained optional `isLiked` +
+  `onToggleLike` params; the heart icon is only rendered when the callback
+  is supplied, so playlist-detail and liked-screen usages that don't need
+  toggling stay lean.
 
 ### Playback (M5)
 
@@ -342,6 +354,7 @@ too.
 | M9b| ✅     | Backend: AllDebrid unlock + archive extraction + auto-import |
 | M9c| ✅     | Android "Find new music" tab                                 |
 | M10| ✅     | Disk cache (1 GiB) + unmetered-only prev/next prefetch       |
+| M11a| ✅    | Liked Songs — heart toggle on search, Liked Songs screen     |
 
 ## Non-goals (for now)
 

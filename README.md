@@ -30,9 +30,10 @@ app/src/main/kotlin/com/mediaplayer/android/
 ├── MainActivity.kt            // AppScaffold: NavHost + bottom-nav + mini-player
 ├── data/
 │   ├── Network.kt             // Retrofit + OkHttp + JSON singleton
-│   ├── MediaPlayerApi.kt      // Retrofit interface (songs + playlists + requests)
+│   ├── MediaPlayerApi.kt      // Retrofit interface (songs + playlists + liked + requests)
 │   ├── SongRepository.kt      // thin façade over the songs API
 │   ├── PlaylistRepository.kt  // thin façade over the playlists API
+│   ├── LikedRepository.kt     // thin façade over /api/liked (M11a)
 │   ├── FindRepository.kt      // thin façade over /api/requests (M9c)
 │   └── dto/
 │       ├── SongDto.kt             // @Serializable song mirror
@@ -59,6 +60,9 @@ app/src/main/kotlin/com/mediaplayer/android/
     │   ├── PlaylistDetailScreen.kt // header + Play + track rows
     │   ├── PlaylistDetailViewModel.kt
     │   └── AddToPlaylistSheet.kt   // bottom sheet: pick existing or create
+    ├── liked/
+    │   ├── LikedScreen.kt          // header + Play + heart-toggled song rows
+    │   └── LikedViewModel.kt       // optimistic unlike, newest-first list
     ├── find/
     │   ├── FindScreen.kt           // query → Albums/Singles picker → status header
     │   └── FindViewModel.kt        // polls /api/requests/{id} until terminal
@@ -164,6 +168,10 @@ Resolution order (first match wins):
 - Long-pressing a row opens an "Add to playlist" bottom sheet: pick an
   existing playlist or create a new one in a single step. Success shows
   a transient snackbar ("Added to &lt;playlist&gt;").
+- Each row shows a heart icon. Tapping it likes/unlikes the track with
+  an optimistic UI update (instant visual feedback, rolls back on error).
+  Liked state is loaded in bulk via `GET /api/liked/status` after each
+  search fetch — one extra round-trip per search, not one per row.
 
 ## Playback UX
 
@@ -208,6 +216,18 @@ playback, just hides the media notification.
 - The Playlists tab stays lit even when drilled into detail.
 - Duplicates are allowed inside a playlist (backend-enforced ordering),
   so the UI composes row keys on `(index, songId)`.
+
+## Liked Songs (M11a)
+
+- The **Playlists** tab pins a "Liked Songs" tile at the top (heart icon
+  with primary colour background). Tapping it opens the **Liked Songs
+  screen**: a header with a Play button and a `LazyColumn` of songs
+  ordered newest-liked-first.
+- Each song row in the Liked Songs screen shows a filled heart; tapping
+  it unlikes the track and removes it from the list optimistically.
+- Heart icons also appear on every `SongRow` in the Search tab. The liked
+  state is loaded in bulk after each search result arrives, so it's always
+  in sync with no per-row round-trips.
 
 ## Find new music (M9c)
 
@@ -329,5 +349,5 @@ already forces that URL to be set.
 
 ## Status
 
-All planned milestones shipped. See [../README.md](../README.md) for the
-full cross-repo roadmap.
+All planned milestones shipped through M11a. See [../README.md](../README.md)
+for the full cross-repo roadmap.

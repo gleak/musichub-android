@@ -44,6 +44,7 @@ fun SearchScreen(
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val likedIds by viewModel.likedIds.collectAsStateWithLifecycle()
 
     // Long-press → add-to-playlist sheet. Single slot rather than per-row
     // so only one sheet is ever live at a time.
@@ -81,6 +82,8 @@ fun SearchScreen(
                                     song = song,
                                     onClick = { onSongClick(song) },
                                     onLongPress = { sheetSong = song },
+                                    isLiked = song.id in likedIds,
+                                    onToggleLike = { viewModel.toggleLike(song.id) },
                                 )
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             }
