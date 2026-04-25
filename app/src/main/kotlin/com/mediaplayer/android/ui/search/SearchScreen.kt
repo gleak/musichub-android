@@ -70,6 +70,7 @@ fun SearchScreen(
     val query by viewModel.query.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val likedIds by viewModel.likedIds.collectAsStateWithLifecycle()
+    val downloadedIds by viewModel.downloadedIds.collectAsStateWithLifecycle()
     val recentSongs by viewModel.recentSongs.collectAsStateWithLifecycle()
 
     var sheetSong by remember { mutableStateOf<SongDto?>(null) }
@@ -118,6 +119,7 @@ fun SearchScreen(
                                     onLongPress = { sheetSong = song },
                                     isLiked = song.id in likedIds,
                                     onToggleLike = { viewModel.toggleLike(song.id) },
+                                    isDownloaded = song.id in downloadedIds,
                                     onArtistClick = onArtistClick,
                                     onAlbumClick = onAlbumClick,
                                 )
@@ -144,6 +146,7 @@ fun SearchScreen(
             songId = song.id,
             onPlayNext = onPlayNext?.let { cb -> { cb(song); sheetSong = null } },
             onAddToQueue = onAddToQueue?.let { cb -> { cb(song); sheetSong = null } },
+            onDownload = { viewModel.toggleDownload(song.id) },
             onDismiss = { sheetSong = null },
             onAdded = { playlistName ->
                 lastAdded = "Added to $playlistName"

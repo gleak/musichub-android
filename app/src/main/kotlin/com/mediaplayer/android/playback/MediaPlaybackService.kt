@@ -65,10 +65,20 @@ class MediaPlaybackService : MediaLibraryService() {
         // cache singleton is process-scoped — see [PlayerCache] for why we
         // never release it. FLAG_IGNORE_CACHE_ON_ERROR means a corrupt cache
         // entry falls through to upstream instead of hard-failing playback.
-        val cache = PlayerCache.get(this)
-        val cacheFactory = CacheDataSource.Factory()
-            .setCache(cache)
+        val streamCache = PlayerCache.get(this)
+        val streamCacheFactory = CacheDataSource.Factory()
+            .setCache(streamCache)
             .setUpstreamDataSourceFactory(httpFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        // M13: check the persistent download cache first, then fall back to
+        // the streaming cache, then network. setCacheWriteDataSinkFactory(null)
+        // ensures playback never writes into the download cache — only
+        // MediaDownloadService may do that.
+        val downloadCache = DownloadRoot.getDownloadCache(this)
+        val cacheFactory = CacheDataSource.Factory()
+            .setCache(downloadCache)
+            .setUpstreamDataSourceFactory(streamCacheFactory)
+            .setCacheWriteDataSinkFactory(null)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         val dataSourceFactory = DefaultDataSource.Factory(this, cacheFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
@@ -89,6 +99,10 @@ class MediaPlaybackService : MediaLibraryService() {
             .build()
 
         mediaSession = MediaLibrarySession.Builder(this, player, LibraryCallback()).build()
+
+        // M13: bind the hardware Equalizer to this player's audio session.
+        // audioSessionId is allocated at build time; 0 means unsupported.
+        EqualizerController.init(this, player.audioSessionId)
 
         // Checkpoint the queue + position so Android Auto can show a
         // "resume" chip on cold car connect. See onPlaybackResumption.
@@ -119,6 +133,7 @@ class MediaPlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        EqualizerController.release()
         serviceScope.cancel()
         // Release the prefetch orchestrator *before* tearing down the
         // player — it holds a Player.Listener and a NetworkCallback and

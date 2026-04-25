@@ -2,6 +2,8 @@ package com.mediaplayer.android.ui.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.util.UnstableApi
+import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.HistoryRepository
 import com.mediaplayer.android.data.LikedRepository
 import com.mediaplayer.android.data.SongRepository
@@ -35,6 +37,7 @@ sealed interface SearchUiState {
  * - Empty query returns the full catalog (same as the web `curl` flow), so
  *   the landing screen shows something useful.
  */
+@UnstableApi
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class SearchViewModel(
     private val repository: SongRepository = SongRepository(),
@@ -47,6 +50,8 @@ class SearchViewModel(
 
     private val _likedIds = MutableStateFlow<Set<Long>>(emptySet())
     val likedIds: StateFlow<Set<Long>> = _likedIds.asStateFlow()
+
+    val downloadedIds: StateFlow<Set<Long>> = DownloadRepository.downloadedIds
 
     private val _recentSongs = MutableStateFlow<List<SongDto>>(emptyList())
     val recentSongs: StateFlow<List<SongDto>> = _recentSongs.asStateFlow()
@@ -90,6 +95,11 @@ class SearchViewModel(
                 _likedIds.value = if (isLiked) _likedIds.value + songId else _likedIds.value - songId
             }
         }
+    }
+
+    fun toggleDownload(songId: Long) {
+        if (DownloadRepository.isDownloaded(songId)) DownloadRepository.remove(songId)
+        else DownloadRepository.download(songId)
     }
 
     private suspend fun fetch(query: String): SearchUiState = try {

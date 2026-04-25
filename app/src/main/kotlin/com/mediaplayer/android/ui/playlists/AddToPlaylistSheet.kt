@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddToPhotos
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -69,6 +70,7 @@ fun AddToPlaylistSheet(
     repository: PlaylistRepository = remember { PlaylistRepository() },
     onPlayNext: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
+    onDownload: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onAdded: (playlistName: String) -> Unit = {},
 ) {
@@ -142,6 +144,14 @@ fun AddToPlaylistSheet(
                     label = "Add to queue",
                     icon = { Icon(Icons.Filled.AddToPhotos, contentDescription = null) },
                     onClick = { onAddToQueue(); onDismiss() },
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            if (onDownload != null) {
+                QueueActionRow(
+                    label = "Download",
+                    icon = { Icon(Icons.Filled.FileDownload, contentDescription = null) },
+                    onClick = { onDownload(); onDismiss() },
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }

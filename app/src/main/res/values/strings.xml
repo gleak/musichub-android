@@ -29,4 +29,9 @@
     <string name="find_status_canceled">Canceled.</string>
     <string name="find_back">Back to Find</string>
     <string name="content_desc_find">Find new music</string>
+
+    <!-- Downloads (M13) -->
+    <string name="download_channel_name">Downloads</string>
+    <string name="download_finishing">Finishing up…</string>
+    <string name="download_in_progress">Downloading…</string>
 </resources>

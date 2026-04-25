@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FileDownloadDone
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
@@ -46,6 +47,7 @@ fun SongRow(
     onLongPress: (() -> Unit)? = null,
     isLiked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
+    isDownloaded: Boolean = false,
     onArtistClick: ((String) -> Unit)? = null,
     onAlbumClick: ((String, String) -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -96,6 +98,14 @@ fun SongRow(
                     modifier = Modifier.size(20.dp),
                 )
             }
+        }
+        if (isDownloaded) {
+            Icon(
+                imageVector = Icons.Filled.FileDownloadDone,
+                contentDescription = "Downloaded",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }
