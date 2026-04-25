@@ -1,7 +1,7 @@
 package com.mediaplayer.android.playback
 
-import android.content.Context
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -9,7 +9,6 @@ import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
-import com.mediaplayer.android.MediaPlayerApp
 import com.mediaplayer.android.data.HistoryRepository
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.SongDto
@@ -21,9 +20,9 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @UnstableApi
-class PlaybackViewModel(
-    private val historyRepository: HistoryRepository = HistoryRepository(),
-) : ViewModel() {
+class PlaybackViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val historyRepository = HistoryRepository()
 
     private val _currentSong = MutableStateFlow<SongDto?>(null)
     val currentSong: StateFlow<SongDto?> = _currentSong.asStateFlow()
@@ -63,9 +62,7 @@ class PlaybackViewModel(
 
     private var controller: MediaController? = null
 
-    private val prefs by lazy {
-        MediaPlayerApp.instance.getSharedPreferences("playback", Context.MODE_PRIVATE)
-    }
+    private val prefs = application.getSharedPreferences("playback", android.content.Context.MODE_PRIVATE)
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {

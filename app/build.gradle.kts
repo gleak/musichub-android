@@ -15,17 +15,15 @@ plugins {
  *     `local.properties` (gitignored — safe place for per-machine
  *     overrides like a LAN IP or a private dev backend).
  *  3. Debug: falls back to `http://10.0.2.2:8080` (the emulator's
- *     loopback to the host). Release: no implicit fallback — the
- *     sentinel `https://mediaplayer.invalid` is baked in and the
- *     `releaseUrlCheck` task below fails `assembleRelease` if nothing
- *     has overridden it.
+ *     loopback to the host). Release: defaults to the production IP.
  */
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
-val RELEASE_URL_PLACEHOLDER = "https://mediaplayer.invalid"
+val RELEASE_URL_DEFAULT = "http://194.116.60.68:8090"
+val SENTINEL_URL = "https://mediaplayer.invalid"
 
 fun resolveBaseUrl(variantKey: String, fallback: String): String {
     val cliSpecific = project.findProperty("BASE_URL_${variantKey.uppercase()}") as String?
@@ -56,9 +54,7 @@ android {
             isMinifyEnabled = false
         }
         release {
-            // Configure always succeeds — the guard runs when
-            // `assembleRelease` is actually requested (see below).
-            val baseUrl = resolveBaseUrl("release", fallback = RELEASE_URL_PLACEHOLDER)
+            val baseUrl = resolveBaseUrl("release", fallback = RELEASE_URL_DEFAULT)
             buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
             isMinifyEnabled = true
             proguardFiles(
@@ -148,26 +144,26 @@ dependencies {
 
 /**
  * Guard: block any release-variant assembly when the configured URL is
- * still the placeholder. Hooks into every `assembleRelease`-ish task via
- * `afterEvaluate` so it runs before Android's APK packaging — catches
- * CI mis-configurations before they ship.
+ * explicitly set to the sentinel invalid value.
  */
 val releaseUrlCheck = tasks.register("releaseUrlCheck") {
     group = "verification"
-    description = "Fails if the release BASE_URL is still the placeholder."
+    description = "Fails if the release BASE_URL is explicitly invalid."
+
+    val resolved = resolveBaseUrl("release", fallback = RELEASE_URL_DEFAULT)
+    val sentinel = SENTINEL_URL
+
     doLast {
-        val resolved = resolveBaseUrl("release", fallback = RELEASE_URL_PLACEHOLDER)
-        if (resolved == RELEASE_URL_PLACEHOLDER) {
+        if (resolved == sentinel) {
             throw GradleException(
-                "Release build has no BASE_URL. Set `base.url.release=https://your.host` " +
-                    "in local.properties, or pass `-PBASE_URL_RELEASE=…` on the command " +
-                    "line. Debug builds are unaffected."
+                "Release build has an invalid BASE_URL ($sentinel). " +
+                "Please configure a valid URL in local.properties or via command line."
             )
         }
     }
 }
 
-afterEvaluate {
-    tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }
-        .configureEach { dependsOn(releaseUrlCheck) }
-}
+tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }
+    .configureEach {
+        dependsOn(releaseUrlCheck)
+    }

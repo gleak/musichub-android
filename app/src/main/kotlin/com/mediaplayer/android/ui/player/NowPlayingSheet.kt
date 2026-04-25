@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
@@ -34,6 +35,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,13 +63,13 @@ fun NowPlayingSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
     ) {
-        NowPlayingContent(viewModel)
+        NowPlayingContent(viewModel = viewModel, onDismiss = onDismiss)
     }
 }
 
 @UnstableApi
 @Composable
-private fun NowPlayingContent(viewModel: PlaybackViewModel) {
+private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Unit) {
     val song by viewModel.currentSong.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val position by viewModel.positionMs.collectAsStateWithLifecycle()
@@ -78,11 +80,15 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel) {
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
     val sleepActive by viewModel.sleepTimerActive.collectAsStateWithLifecycle()
 
-    val current = song ?: return
+    val current = song ?: run {
+        LaunchedEffect(Unit) { onDismiss() }
+        return
+    }
 
     var scrubValue by remember { mutableStateOf<Float?>(null) }
     var showQueue by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
+    var showEqualizer by remember { mutableStateOf(false) }
     var showSleepMenu by remember { mutableStateOf(false) }
 
     Column(
@@ -109,6 +115,13 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.QueueMusic,
                         contentDescription = "Queue",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = { showEqualizer = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.Equalizer,
+                        contentDescription = "Equalizer",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -287,6 +300,10 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel) {
             positionMs = position,
             onDismiss = { showLyrics = false },
         )
+    }
+
+    if (showEqualizer) {
+        EqualizerSheet(onDismiss = { showEqualizer = false })
     }
 }
 
