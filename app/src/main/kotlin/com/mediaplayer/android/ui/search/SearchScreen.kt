@@ -60,6 +60,8 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
     viewModel: SearchViewModel = viewModel(),
     onSongClick: (SongDto) -> Unit = {},
+    onPlayNext: ((SongDto) -> Unit)? = null,
+    onAddToQueue: ((SongDto) -> Unit)? = null,
     onAlbumClick: (name: String, artist: String) -> Unit = { _, _ -> },
     onAlbumListClick: () -> Unit = {},
     onArtistClick: (name: String) -> Unit = {},
@@ -140,6 +142,8 @@ fun SearchScreen(
         AddToPlaylistSheet(
             songTitle = song.title,
             songId = song.id,
+            onPlayNext = onPlayNext?.let { cb -> { cb(song); sheetSong = null } },
+            onAddToQueue = onAddToQueue?.let { cb -> { cb(song); sheetSong = null } },
             onDismiss = { sheetSong = null },
             onAdded = { playlistName ->
                 lastAdded = "Added to $playlistName"

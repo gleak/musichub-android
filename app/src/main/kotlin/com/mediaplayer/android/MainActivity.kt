@@ -116,6 +116,8 @@ private fun AppScaffold() {
             composable(Routes.SEARCH) {
                 SearchScreen(
                     onSongClick = playbackVm::play,
+                    onPlayNext = playbackVm::playNext,
+                    onAddToQueue = playbackVm::addToQueue,
                     onAlbumClick = { name, artist ->
                         navController.navigate(Routes.albumDetail(name, artist))
                     },

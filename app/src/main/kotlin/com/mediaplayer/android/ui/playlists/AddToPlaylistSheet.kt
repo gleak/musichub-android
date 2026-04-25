@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddToPhotos
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,6 +67,8 @@ fun AddToPlaylistSheet(
     songTitle: String,
     songId: Long,
     repository: PlaylistRepository = remember { PlaylistRepository() },
+    onPlayNext: (() -> Unit)? = null,
+    onAddToQueue: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onAdded: (playlistName: String) -> Unit = {},
 ) {
@@ -125,6 +129,22 @@ fun AddToPlaylistSheet(
             Spacer(Modifier.size(16.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
+            if (onPlayNext != null) {
+                QueueActionRow(
+                    label = "Play next",
+                    icon = { Icon(Icons.Filled.SkipNext, contentDescription = null) },
+                    onClick = { onPlayNext(); onDismiss() },
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            if (onAddToQueue != null) {
+                QueueActionRow(
+                    label = "Add to queue",
+                    icon = { Icon(Icons.Filled.AddToPhotos, contentDescription = null) },
+                    onClick = { onAddToQueue(); onDismiss() },
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
             // New-playlist row always pinned at the top for discoverability.
             NewPlaylistRow(onClick = { createOpen = true })
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -251,6 +271,37 @@ private fun PlaylistPickerRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+@Composable
+private fun QueueActionRow(
+    label: String,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.secondaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            icon()
+        }
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 

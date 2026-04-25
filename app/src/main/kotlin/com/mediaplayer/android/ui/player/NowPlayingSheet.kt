@@ -11,10 +11,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.TextSnippet
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -36,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.playback.PlaybackViewModel
 import java.util.Locale
@@ -65,12 +74,16 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel) {
     val duration by viewModel.durationMs.collectAsStateWithLifecycle()
     val hasNext by viewModel.hasNext.collectAsStateWithLifecycle()
     val hasPrevious by viewModel.hasPrevious.collectAsStateWithLifecycle()
+    val shuffleEnabled by viewModel.shuffleEnabled.collectAsStateWithLifecycle()
+    val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
+    val sleepActive by viewModel.sleepTimerActive.collectAsStateWithLifecycle()
 
     val current = song ?: return
 
-    // Local drag buffer so the slider is fluid while the user is scrubbing —
-    // we only push the seek to the controller on release.
     var scrubValue by remember { mutableStateOf<Float?>(null) }
+    var showQueue by remember { mutableStateOf(false) }
+    var showLyrics by remember { mutableStateOf(false) }
+    var showSleepMenu by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -78,6 +91,50 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel) {
             .padding(horizontal = 24.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // Top icon row: lyrics | spacer | queue | sleep timer
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = { showLyrics = true }) {
+                Icon(
+                    imageVector = Icons.Filled.TextSnippet,
+                    contentDescription = "Lyrics",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row {
+                IconButton(onClick = { showQueue = true }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                        contentDescription = "Queue",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Box {
+                    IconButton(onClick = { showSleepMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.Bedtime,
+                            contentDescription = "Sleep timer",
+                            tint = if (sleepActive) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    SleepTimerMenu(
+                        expanded = showSleepMenu,
+                        sleepActive = sleepActive,
+                        onDismiss = { showSleepMenu = false },
+                        onSelect = { minutes ->
+                            showSleepMenu = false
+                            if (minutes == 0) viewModel.cancelSleepTimer()
+                            else viewModel.setSleepTimer(minutes)
+                        },
+                    )
+                }
+            }
+        }
+
         Box(
             modifier = Modifier.size(260.dp),
             contentAlignment = Alignment.Center,
@@ -136,9 +193,7 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel) {
 
         Spacer(Modifier.height(16.dp))
 
-        // Transport row. Prev/next only render when the queue actually
-        // has neighbours — single-track playback keeps the play button
-        // centered and alone, matching the M5 look.
+        // Transport row
         val showQueueControls = hasNext || hasPrevious
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -192,6 +247,69 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel) {
         }
 
         Spacer(Modifier.height(8.dp))
+
+        // Shuffle + repeat row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = viewModel::toggleShuffle) {
+                Icon(
+                    imageVector = Icons.Filled.Shuffle,
+                    contentDescription = "Shuffle",
+                    tint = if (shuffleEnabled) MaterialTheme.colorScheme.primary
+                           else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = viewModel::cycleRepeat) {
+                Icon(
+                    imageVector = if (repeatMode == Player.REPEAT_MODE_ONE)
+                        Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                    contentDescription = "Repeat",
+                    tint = if (repeatMode != Player.REPEAT_MODE_OFF)
+                        MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+    }
+
+    if (showQueue) {
+        QueueSheet(viewModel = viewModel, onDismiss = { showQueue = false })
+    }
+
+    if (showLyrics) {
+        LyricsSheet(
+            songId = current.id,
+            positionMs = position,
+            onDismiss = { showLyrics = false },
+        )
+    }
+}
+
+@Composable
+private fun SleepTimerMenu(
+    expanded: Boolean,
+    sleepActive: Boolean,
+    onDismiss: () -> Unit,
+    onSelect: (minutes: Int) -> Unit,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        if (sleepActive) {
+            DropdownMenuItem(
+                text = { Text("Cancel timer") },
+                onClick = { onSelect(0) },
+            )
+        }
+        listOf(15, 30, 60).forEach { min ->
+            DropdownMenuItem(
+                text = { Text("$min minutes") },
+                onClick = { onSelect(min) },
+            )
+        }
     }
 }
 

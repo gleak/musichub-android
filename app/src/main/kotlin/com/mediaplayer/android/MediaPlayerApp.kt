@@ -19,8 +19,14 @@ import com.mediaplayer.android.playback.PlayerConnection
 @UnstableApi
 class MediaPlayerApp : Application(), SingletonImageLoader.Factory {
 
+    companion object {
+        lateinit var instance: MediaPlayerApp
+            private set
+    }
+
     override fun onCreate() {
         super.onCreate()
+        instance = this
         PlayerConnection.connect(this)
     }
 

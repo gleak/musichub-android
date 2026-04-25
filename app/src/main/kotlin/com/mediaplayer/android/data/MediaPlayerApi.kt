@@ -1,6 +1,7 @@
 package com.mediaplayer.android.data
 
 import com.mediaplayer.android.data.dto.AddSongRequest
+import com.mediaplayer.android.data.dto.LyricLineDto
 import com.mediaplayer.android.data.dto.RecordPlayRequest
 import com.mediaplayer.android.data.dto.AlbumDetailDto
 import com.mediaplayer.android.data.dto.AlbumDto
@@ -152,4 +153,9 @@ interface MediaPlayerApi {
 
     @GET("api/history")
     suspend fun recentSongs(@Query("limit") limit: Int = 20): List<SongDto>
+
+    // ---------- Lyrics (M12) ----------
+
+    @GET("api/songs/{id}/lyrics")
+    suspend fun getLyrics(@Path("id") id: Long): List<LyricLineDto>
 }
