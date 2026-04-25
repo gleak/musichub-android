@@ -1,6 +1,7 @@
 package com.mediaplayer.android.data
 
 import com.mediaplayer.android.data.dto.AddSongRequest
+import com.mediaplayer.android.data.dto.RecordPlayRequest
 import com.mediaplayer.android.data.dto.AlbumDetailDto
 import com.mediaplayer.android.data.dto.AlbumDto
 import com.mediaplayer.android.data.dto.ArtistDetailDto
@@ -143,4 +144,12 @@ interface MediaPlayerApi {
 
     @GET("api/artists/{name}")
     suspend fun getArtist(@Path("name") name: String): ArtistDetailDto
+
+    // ---------- History (M11c) ----------
+
+    @POST("api/history")
+    suspend fun recordPlay(@Body body: RecordPlayRequest)
+
+    @GET("api/history")
+    suspend fun recentSongs(@Query("limit") limit: Int = 20): List<SongDto>
 }

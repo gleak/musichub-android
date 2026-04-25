@@ -1,19 +1,25 @@
 package com.mediaplayer.android.ui.search
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,11 +40,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.mediaplayer.android.R
+import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
 
@@ -55,6 +68,7 @@ fun SearchScreen(
     val query by viewModel.query.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val likedIds by viewModel.likedIds.collectAsStateWithLifecycle()
+    val recentSongs by viewModel.recentSongs.collectAsStateWithLifecycle()
 
     var sheetSong by remember { mutableStateOf<SongDto?>(null) }
     val snackbar = remember { SnackbarHostState() }
@@ -86,6 +100,15 @@ fun SearchScreen(
                         CenteredMessage(stringResource(R.string.search_no_matches))
                     } else {
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            if (query.isEmpty() && recentSongs.isNotEmpty()) {
+                                item {
+                                    RecentlyPlayedCarousel(
+                                        songs = recentSongs,
+                                        onSongClick = onSongClick,
+                                    )
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                }
+                            }
                             items(items = s.songs, key = { it.id }) { song ->
                                 SongRow(
                                     song = song,
@@ -121,6 +144,74 @@ fun SearchScreen(
             onAdded = { playlistName ->
                 lastAdded = "Added to $playlistName"
             },
+        )
+    }
+}
+
+@Composable
+private fun RecentlyPlayedCarousel(
+    songs: List<SongDto>,
+    onSongClick: (SongDto) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp)) {
+        Text(
+            text = "Recently played",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(items = songs, key = { it.id }) { song ->
+                RecentSongCard(song = song, onClick = { onSongClick(song) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentSongCard(song: SongDto, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
+    Column(
+        modifier = Modifier
+            .width(96.dp)
+            .clickable(onClick = onClick)
+            .padding(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (song.hasCoverArt) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(Network.coverUrl(song.id))
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp),
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.MusicNote,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Text(
+            text = song.title,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

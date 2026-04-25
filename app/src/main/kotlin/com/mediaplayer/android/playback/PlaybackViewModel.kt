@@ -8,6 +8,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
+import com.mediaplayer.android.data.HistoryRepository
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.SongDto
 import kotlinx.coroutines.delay
@@ -35,7 +36,9 @@ import kotlinx.coroutines.launch
  * subscribes to whichever controller [PlayerConnection] hands it.
  */
 @UnstableApi
-class PlaybackViewModel : ViewModel() {
+class PlaybackViewModel(
+    private val historyRepository: HistoryRepository = HistoryRepository(),
+) : ViewModel() {
 
     private val _currentSong = MutableStateFlow<SongDto?>(null)
     val currentSong: StateFlow<SongDto?> = _currentSong.asStateFlow()
@@ -55,13 +58,34 @@ class PlaybackViewModel : ViewModel() {
     private val _hasPrevious = MutableStateFlow(false)
     val hasPrevious: StateFlow<Boolean> = _hasPrevious.asStateFlow()
 
+    // Play-time tracking for history reporting
+    private var trackedSongId: Long? = null
+    private var trackedDurationMs: Long = 0L
+    private var listenedMs: Long = 0L
+    private var playingStartWall: Long = -1L
+
     private var controller: MediaController? = null
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {
             _isPlaying.value = playing
+            if (playing && playingStartWall == -1L) {
+                playingStartWall = System.currentTimeMillis()
+            } else if (!playing && playingStartWall != -1L) {
+                listenedMs += System.currentTimeMillis() - playingStartWall
+                playingStartWall = -1L
+            }
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            // Flush wall-clock accumulator for the item we're leaving
+            if (playingStartWall != -1L) {
+                listenedMs += System.currentTimeMillis() - playingStartWall
+                playingStartWall = if (controller?.isPlaying == true) System.currentTimeMillis() else -1L
+            }
+            maybeRecordPlay()
+            trackedSongId = mediaItem?.mediaId?.toLongOrNull()
+            trackedDurationMs = 0L
+            listenedMs = 0L
             _currentSong.value = mediaItem?.toSongDto()
             pushDuration()
             pushQueueAvailability()
@@ -98,7 +122,10 @@ class PlaybackViewModel : ViewModel() {
         // 2 Hz, which is plenty for a seek bar and cheap.
         viewModelScope.launch {
             while (true) {
-                controller?.let { _positionMs.value = it.currentPosition.coerceAtLeast(0) }
+                controller?.let { c ->
+                    _positionMs.value = c.currentPosition.coerceAtLeast(0)
+                    if (trackedDurationMs == 0L && c.duration > 0) trackedDurationMs = c.duration
+                }
                 delay(POSITION_POLL_MS)
             }
         }
@@ -165,13 +192,30 @@ class PlaybackViewModel : ViewModel() {
         _hasPrevious.value = c.hasPreviousMediaItem()
     }
 
+    private fun maybeRecordPlay() {
+        val id = trackedSongId ?: return
+        val listened = listenedMs
+        val duration = trackedDurationMs
+        if (listened >= LISTEN_THRESHOLD_MS || (duration > 0 && listened * 2 >= duration)) {
+            viewModelScope.launch {
+                try { historyRepository.record(id, listened) } catch (_: Throwable) {}
+            }
+        }
+    }
+
     override fun onCleared() {
+        if (playingStartWall != -1L) {
+            listenedMs += System.currentTimeMillis() - playingStartWall
+            playingStartWall = -1L
+        }
+        maybeRecordPlay()
         controller?.removeListener(listener)
         super.onCleared()
     }
 
     private companion object {
         const val POSITION_POLL_MS = 500L
+        const val LISTEN_THRESHOLD_MS = 30_000L
     }
 }
 

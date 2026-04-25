@@ -2,6 +2,7 @@ package com.mediaplayer.android.ui.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mediaplayer.android.data.HistoryRepository
 import com.mediaplayer.android.data.LikedRepository
 import com.mediaplayer.android.data.SongRepository
 import com.mediaplayer.android.data.dto.SongDto
@@ -38,6 +39,7 @@ sealed interface SearchUiState {
 class SearchViewModel(
     private val repository: SongRepository = SongRepository(),
     private val likedRepository: LikedRepository = LikedRepository(),
+    private val historyRepository: HistoryRepository = HistoryRepository(),
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -45,6 +47,9 @@ class SearchViewModel(
 
     private val _likedIds = MutableStateFlow<Set<Long>>(emptySet())
     val likedIds: StateFlow<Set<Long>> = _likedIds.asStateFlow()
+
+    private val _recentSongs = MutableStateFlow<List<SongDto>>(emptyList())
+    val recentSongs: StateFlow<List<SongDto>> = _recentSongs.asStateFlow()
 
     val state: StateFlow<SearchUiState> = _query
         .debounce(DEBOUNCE_MS)
@@ -60,6 +65,12 @@ class SearchViewModel(
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
             initialValue = SearchUiState.Idle,
         )
+
+    init {
+        viewModelScope.launch {
+            try { _recentSongs.value = historyRepository.recent(20) } catch (_: Throwable) {}
+        }
+    }
 
     fun onQueryChange(newQuery: String) {
         _query.value = newQuery
