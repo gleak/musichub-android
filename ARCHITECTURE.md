@@ -2,7 +2,7 @@
 
 Living doc for the MediaPlayer Android app. Update alongside each milestone.
 
-## Current state (Milestone 11b complete)
+## Current state (Milestone 12 complete)
 
 ### Build
 
@@ -48,7 +48,9 @@ Single `:app` module. Package `com.mediaplayer.android`.
 - `playback/` — `MediaPlaybackService`, `PlayerConnection` (singleton that
   binds a `MediaController`), `PlaybackViewModel` (Compose-facing facade),
   plus the M10 cache pair: `PlayerCache` (process-singleton `SimpleCache`)
-  and `PrefetchOrchestrator` (warms prev/next on Wi-Fi).
+  and `PrefetchOrchestrator` (warms prev/next on Wi-Fi), `SleepTimer`
+  (coroutine-based pause-after-N-minutes), and M12 shuffle/repeat
+  persistence via `SharedPreferences`.
 
 No DI framework yet — `Network` is an object, `PlayerConnection` is an
 object, and ViewModels construct their own collaborators. Introduce Hilt

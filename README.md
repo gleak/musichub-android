@@ -36,6 +36,8 @@ app/src/main/kotlin/com/mediaplayer/android/
 │   ├── LikedRepository.kt     // thin façade over /api/liked (M11a)
 │   ├── CatalogRepository.kt   // thin façade over /api/albums + /api/artists (M11b)
 │   ├── FindRepository.kt      // thin façade over /api/requests (M9c)
+│   ├── HistoryRepository.kt   // thin façade over /api/history (M11c)
+│   ├── LyricsRepository.kt    // thin façade over /api/songs/{id}/lyrics (M12)
 │   └── dto/
 │       ├── SongDto.kt             // @Serializable song mirror
 │       ├── PageResponse.kt        // generic page envelope
@@ -44,13 +46,15 @@ app/src/main/kotlin/com/mediaplayer/android/
 │       ├── PlaylistRequests.kt    // Create/Rename/Add/Reorder request bodies
 │       ├── RequestDto.kt          // RequestStatus, CandidateDto, RequestDto (M9c)
 │       ├── AlbumDto.kt            // AlbumDto + AlbumDetailDto (M11b)
-│       └── ArtistDto.kt           // ArtistDto + ArtistDetailDto (M11b)
+│       ├── ArtistDto.kt           // ArtistDto + ArtistDetailDto (M11b)
+│       └── LyricLineDto.kt        // positionMs + text (M12)
 ├── playback/
 │   ├── MediaPlaybackService.kt  // MediaSessionService owning ExoPlayer
 │   ├── PlayerConnection.kt      // async MediaController binder (singleton)
 │   ├── PlayerCache.kt           // process-singleton SimpleCache (1 GiB LRU) (M10)
 │   ├── PrefetchOrchestrator.kt  // warms prev/next neighbours on Wi-Fi (M10)
-│   └── PlaybackViewModel.kt     // Compose StateFlows + controls (queue-aware)
+│   ├── PlaybackViewModel.kt     // Compose StateFlows + controls (queue, shuffle, repeat)
+│   └── SleepTimer.kt            // coroutine-based pause timer (M12)
 └── ui/
     ├── theme/Theme.kt
     ├── search/
@@ -77,7 +81,9 @@ app/src/main/kotlin/com/mediaplayer/android/
     │   └── FindViewModel.kt        // polls /api/requests/{id} until terminal
     └── player/
         ├── MiniPlayer.kt        // persistent bar (with shared Cover)
-        └── NowPlayingSheet.kt   // full-screen modal bottom sheet
+        ├── NowPlayingSheet.kt   // full-screen sheet: transport + shuffle/repeat + controls
+        ├── QueueSheet.kt        // current queue list, tap to skip (M12)
+        └── LyricsSheet.kt       // synced lyrics, auto-scroll to active line (M12)
 ```
 
 Split into `:app + :core` later if M6/M7 start pulling pure code (DTOs, API
