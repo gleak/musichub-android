@@ -30,10 +30,11 @@ app/src/main/kotlin/com/mediaplayer/android/
 ├── MainActivity.kt            // AppScaffold: NavHost + bottom-nav + mini-player
 ├── data/
 │   ├── Network.kt             // Retrofit + OkHttp + JSON singleton
-│   ├── MediaPlayerApi.kt      // Retrofit interface (songs + playlists + liked + requests)
+│   ├── MediaPlayerApi.kt      // Retrofit interface (songs + playlists + liked + requests + catalog)
 │   ├── SongRepository.kt      // thin façade over the songs API
 │   ├── PlaylistRepository.kt  // thin façade over the playlists API
 │   ├── LikedRepository.kt     // thin façade over /api/liked (M11a)
+│   ├── CatalogRepository.kt   // thin façade over /api/albums + /api/artists (M11b)
 │   ├── FindRepository.kt      // thin façade over /api/requests (M9c)
 │   └── dto/
 │       ├── SongDto.kt             // @Serializable song mirror
@@ -41,7 +42,9 @@ app/src/main/kotlin/com/mediaplayer/android/
 │       ├── PlaylistDto.kt         // list summary
 │       ├── PlaylistDetailDto.kt   // full payload (ordered songs)
 │       ├── PlaylistRequests.kt    // Create/Rename/Add/Reorder request bodies
-│       └── RequestDto.kt          // RequestStatus, CandidateDto, RequestDto (M9c)
+│       ├── RequestDto.kt          // RequestStatus, CandidateDto, RequestDto (M9c)
+│       ├── AlbumDto.kt            // AlbumDto + AlbumDetailDto (M11b)
+│       └── ArtistDto.kt           // ArtistDto + ArtistDetailDto (M11b)
 ├── playback/
 │   ├── MediaPlaybackService.kt  // MediaSessionService owning ExoPlayer
 │   ├── PlayerConnection.kt      // async MediaController binder (singleton)
@@ -63,6 +66,12 @@ app/src/main/kotlin/com/mediaplayer/android/
     ├── liked/
     │   ├── LikedScreen.kt          // header + Play + heart-toggled song rows
     │   └── LikedViewModel.kt       // optimistic unlike, newest-first list
+    ├── albums/
+    │   ├── AlbumListScreen.kt      // paginated album list + VM (M11b)
+    │   └── AlbumScreen.kt          // album detail + VM: header + track rows (M11b)
+    ├── artists/
+    │   ├── ArtistListScreen.kt     // paginated artist list + VM (M11b)
+    │   └── ArtistScreen.kt         // artist detail + VM: albums + songs (M11b)
     ├── find/
     │   ├── FindScreen.kt           // query → Albums/Singles picker → status header
     │   └── FindViewModel.kt        // polls /api/requests/{id} until terminal
@@ -172,6 +181,10 @@ Resolution order (first match wins):
   an optimistic UI update (instant visual feedback, rolls back on error).
   Liked state is loaded in bulk via `GET /api/liked/status` after each
   search fetch — one extra round-trip per search, not one per row.
+- Artist and album text in each row are individually tappable (tinted
+  primary colour): artist → artist detail page, album → album detail page.
+- When the search field is empty, the screen shows **Albums** and **Artists**
+  browse tiles with "See all" buttons instead of a plain placeholder message.
 
 ## Playback UX
 
@@ -228,6 +241,21 @@ playback, just hides the media notification.
 - Heart icons also appear on every `SongRow` in the Search tab. The liked
   state is loaded in bulk after each search result arrives, so it's always
   in sync with no per-row round-trips.
+
+## Album + Artist pages (M11b)
+
+- When the search field is **empty**, the Search tab shows two browse rows —
+  **Albums** and **Artists** — each with a "See all" button.
+- **Albums list** (`GET /api/albums`) — paginated, filterable. Each row shows
+  album name, artist, and song count. Tapping opens the album detail screen.
+- **Album detail** — header tile (name, artist as a tappable link to the artist
+  page, song count, Play button), followed by the ordered track list.
+- **Artists list** (`GET /api/artists`) — same pattern with a person icon and
+  album + song count subtitle.
+- **Artist detail** — circular avatar header (Play all button), Albums
+  sub-section (tappable tiles), Songs sub-section.
+- Artist/album text in every `SongRow` is individually clickable (primary
+  tint) and navigates directly to the respective detail page.
 
 ## Find new music (M9c)
 
@@ -349,5 +377,5 @@ already forces that URL to be set.
 
 ## Status
 
-All planned milestones shipped through M11a. See [../README.md](../README.md)
+All planned milestones shipped through M11b. See [../README.md](../README.md)
 for the full cross-repo roadmap.

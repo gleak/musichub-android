@@ -1,7 +1,10 @@
 package com.mediaplayer.android.ui.search
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -9,7 +12,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -20,6 +25,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,19 +47,19 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
     viewModel: SearchViewModel = viewModel(),
     onSongClick: (SongDto) -> Unit = {},
+    onAlbumClick: (name: String, artist: String) -> Unit = { _, _ -> },
+    onAlbumListClick: () -> Unit = {},
+    onArtistClick: (name: String) -> Unit = {},
+    onArtistListClick: () -> Unit = {},
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val likedIds by viewModel.likedIds.collectAsStateWithLifecycle()
 
-    // Long-press → add-to-playlist sheet. Single slot rather than per-row
-    // so only one sheet is ever live at a time.
     var sheetSong by remember { mutableStateOf<SongDto?>(null) }
     val snackbar = remember { SnackbarHostState() }
     var lastAdded by remember { mutableStateOf<String?>(null) }
 
-    // Fire a confirmation snack when an add completes. Using a string-keyed
-    // LaunchedEffect so the same message fires per add, not per recomposition.
     LaunchedEffect(lastAdded) {
         val msg = lastAdded ?: return@LaunchedEffect
         snackbar.showSnackbar(msg)
@@ -70,7 +76,10 @@ fun SearchScreen(
 
         Box(modifier = Modifier.fillMaxSize()) {
             when (val s = state) {
-                SearchUiState.Idle -> CenteredMessage(stringResource(R.string.search_empty))
+                SearchUiState.Idle -> BrowseSections(
+                    onAlbumListClick = onAlbumListClick,
+                    onArtistListClick = onArtistListClick,
+                )
                 SearchUiState.Loading -> CenteredSpinner()
                 is SearchUiState.Success -> {
                     if (s.songs.isEmpty()) {
@@ -84,6 +93,8 @@ fun SearchScreen(
                                     onLongPress = { sheetSong = song },
                                     isLiked = song.id in likedIds,
                                     onToggleLike = { viewModel.toggleLike(song.id) },
+                                    onArtistClick = onArtistClick,
+                                    onAlbumClick = onAlbumClick,
                                 )
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             }
@@ -111,6 +122,54 @@ fun SearchScreen(
                 lastAdded = "Added to $playlistName"
             },
         )
+    }
+}
+
+@Composable
+private fun BrowseSections(
+    onAlbumListClick: () -> Unit,
+    onArtistListClick: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize().padding(top = 8.dp)) {
+        BrowseRow(
+            label = "Albums",
+            icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+            onSeeAll = onAlbumListClick,
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        BrowseRow(
+            label = "Artists",
+            icon = { Icon(Icons.Filled.Person, contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+            onSeeAll = onArtistListClick,
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+@Composable
+private fun BrowseRow(
+    label: String,
+    icon: @Composable () -> Unit,
+    onSeeAll: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSeeAll)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        icon()
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onSeeAll) { Text("See all") }
     }
 }
 

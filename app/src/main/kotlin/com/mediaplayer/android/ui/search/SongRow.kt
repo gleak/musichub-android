@@ -2,6 +2,7 @@ package com.mediaplayer.android.ui.search
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +46,8 @@ fun SongRow(
     onLongPress: (() -> Unit)? = null,
     isLiked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
+    onArtistClick: ((String) -> Unit)? = null,
+    onAlbumClick: ((String, String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -72,13 +75,7 @@ fun SongRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = buildSubtitle(song),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            SubtitleRow(song = song, onArtistClick = onArtistClick, onAlbumClick = onAlbumClick)
         }
 
         Spacer(Modifier.width(12.dp))
@@ -133,9 +130,44 @@ private fun CoverArt(song: SongDto) {
     }
 }
 
-private fun buildSubtitle(song: SongDto): String =
-    if (song.album.isNullOrBlank()) song.artist
-    else "${song.artist} · ${song.album}"
+@Composable
+private fun SubtitleRow(
+    song: SongDto,
+    onArtistClick: ((String) -> Unit)?,
+    onAlbumClick: ((String, String) -> Unit)?,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = song.artist,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (onArtistClick != null) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = if (onArtistClick != null)
+                Modifier.clickable { onArtistClick(song.artist) }
+            else Modifier,
+        )
+        if (!song.album.isNullOrBlank()) {
+            Text(
+                text = " · ",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = song.album,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (onAlbumClick != null) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = if (onAlbumClick != null)
+                    Modifier.clickable { onAlbumClick(song.album, song.artist) }
+                else Modifier,
+            )
+        }
+    }
+}
 
 private fun formatDuration(ms: Long): String {
     val totalSeconds = ms / 1000

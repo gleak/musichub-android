@@ -1,5 +1,6 @@
 package com.mediaplayer.android
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -34,6 +35,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mediaplayer.android.playback.PlaybackViewModel
+import com.mediaplayer.android.ui.albums.AlbumListScreen
+import com.mediaplayer.android.ui.albums.AlbumScreen
+import com.mediaplayer.android.ui.artists.ArtistListScreen
+import com.mediaplayer.android.ui.artists.ArtistScreen
 import com.mediaplayer.android.ui.find.FindScreen
 import com.mediaplayer.android.ui.liked.LikedScreen
 import com.mediaplayer.android.ui.player.MiniPlayer
@@ -58,17 +63,21 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/**
- * Nav destinations. Kept as plain constants because the graph is small
- * enough that a sealed hierarchy would be ceremony for ceremony's sake.
- */
 private object Routes {
     const val SEARCH = "search"
     const val FIND = "find"
     const val PLAYLISTS = "playlists"
     const val PLAYLIST_DETAIL = "playlists/{playlistId}"
     const val LIKED = "liked"
+    const val ALBUM_LIST = "albums"
+    const val ALBUM_DETAIL = "albums/{albumName}?artist={albumArtist}"
+    const val ARTIST_LIST = "artists"
+    const val ARTIST_DETAIL = "artists/{artistName}"
+
     fun playlistDetail(id: Long) = "playlists/$id"
+    fun albumDetail(name: String, artist: String) =
+        "albums/${Uri.encode(name)}?artist=${Uri.encode(artist)}"
+    fun artistDetail(name: String) = "artists/${Uri.encode(name)}"
 }
 
 private data class BottomDestination(
@@ -80,8 +89,6 @@ private data class BottomDestination(
 @UnstableApi
 @Composable
 private fun AppScaffold() {
-    // Single activity-scoped PlaybackViewModel so search, playlists,
-    // the mini-player, and Now Playing sheet all observe one source of truth.
     val playbackVm: PlaybackViewModel = viewModel()
     val currentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
     var sheetOpen by remember { mutableStateOf(false) }
@@ -109,6 +116,14 @@ private fun AppScaffold() {
             composable(Routes.SEARCH) {
                 SearchScreen(
                     onSongClick = playbackVm::play,
+                    onAlbumClick = { name, artist ->
+                        navController.navigate(Routes.albumDetail(name, artist))
+                    },
+                    onAlbumListClick = { navController.navigate(Routes.ALBUM_LIST) },
+                    onArtistClick = { name ->
+                        navController.navigate(Routes.artistDetail(name))
+                    },
+                    onArtistListClick = { navController.navigate(Routes.ARTIST_LIST) },
                 )
             }
             composable(Routes.FIND) {
@@ -143,6 +158,60 @@ private fun AppScaffold() {
                     },
                 )
             }
+            composable(Routes.ALBUM_LIST) {
+                AlbumListScreen(
+                    onBack = { navController.popBackStack() },
+                    onAlbumClick = { name, artist ->
+                        navController.navigate(Routes.albumDetail(name, artist))
+                    },
+                )
+            }
+            composable(
+                route = Routes.ALBUM_DETAIL,
+                arguments = listOf(
+                    navArgument("albumName") { type = NavType.StringType },
+                    navArgument("albumArtist") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                ),
+            ) { backStackEntry ->
+                val name = backStackEntry.arguments?.getString("albumName") ?: return@composable
+                val artist = backStackEntry.arguments?.getString("albumArtist") ?: ""
+                AlbumScreen(
+                    albumName = name,
+                    albumArtist = artist,
+                    onBack = { navController.popBackStack() },
+                    onPlayFromIndex = { songs, index -> playbackVm.playPlaylist(songs, index) },
+                    onArtistClick = { artistName ->
+                        navController.navigate(Routes.artistDetail(artistName))
+                    },
+                )
+            }
+            composable(Routes.ARTIST_LIST) {
+                ArtistListScreen(
+                    onBack = { navController.popBackStack() },
+                    onArtistClick = { name ->
+                        navController.navigate(Routes.artistDetail(name))
+                    },
+                )
+            }
+            composable(
+                route = Routes.ARTIST_DETAIL,
+                arguments = listOf(
+                    navArgument("artistName") { type = NavType.StringType },
+                ),
+            ) { backStackEntry ->
+                val name = backStackEntry.arguments?.getString("artistName") ?: return@composable
+                ArtistScreen(
+                    artistName = name,
+                    onBack = { navController.popBackStack() },
+                    onPlayFromIndex = { songs, index -> playbackVm.playPlaylist(songs, index) },
+                    onAlbumClick = { albumName, albumArtist ->
+                        navController.navigate(Routes.albumDetail(albumName, albumArtist))
+                    },
+                )
+            }
         }
     }
 
@@ -154,11 +223,6 @@ private fun AppScaffold() {
     }
 }
 
-/**
- * Bottom region: mini-player (if a track is loaded) stacked above the
- * NavigationBar. Rendered as the Scaffold's `bottomBar` slot so content
- * is padded above it automatically.
- */
 @UnstableApi
 @Composable
 private fun BottomRegion(

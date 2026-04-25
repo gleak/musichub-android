@@ -2,7 +2,7 @@
 
 Living doc for the MediaPlayer Android app. Update alongside each milestone.
 
-## Current state (Milestone 11a complete)
+## Current state (Milestone 11b complete)
 
 ### Build
 
@@ -38,6 +38,13 @@ Single `:app` module. Package `com.mediaplayer.android`.
   songs list (newest-liked-first), with a header Play button and a heart
   toggle on each row that calls unlike optimistically. Entered from the
   pinned "Liked Songs" tile at the top of the Playlists tab.
+- `ui/albums/` — `AlbumListScreen` + `AlbumListViewModel` (paginated list
+  of all albums); `AlbumScreen` + `AlbumViewModel` (detail: header tile,
+  Play button, ordered track list). Artist name in album header is a
+  clickable link to the artist page.
+- `ui/artists/` — `ArtistListScreen` + `ArtistListViewModel`; `ArtistScreen`
+  + `ArtistViewModel` (detail: header, Albums sub-section, Songs sub-section).
+  Album tiles in artist detail link to the album page.
 - `playback/` — `MediaPlaybackService`, `PlayerConnection` (singleton that
   binds a `MediaController`), `PlaybackViewModel` (Compose-facing facade),
   plus the M10 cache pair: `PlayerCache` (process-singleton `SimpleCache`)
@@ -216,6 +223,30 @@ as in-sheet text rather than kicking the user out.
 takes an optional `onLongPress`. Long-press stays a no-op in contexts
 that don't pass the callback (e.g. future uses).
 
+`SongRow` gained optional `onArtistClick: ((String) -> Unit)?` and
+`onAlbumClick: ((String, String) -> Unit)?` (M11b). When supplied, artist
+and album text become individually clickable (primary tint). The subtitle
+is a private `SubtitleRow` composable so each segment carries its own
+`Modifier.clickable`.
+
+### Album + Artist pages (M11b)
+
+Group-by views over the existing `songs` table — no schema changes.
+
+**Data layer.** `CatalogRepository` wraps four new `MediaPlayerApi` endpoints.
+DTOs: `AlbumDto`, `AlbumDetailDto`, `ArtistDto`, `ArtistDetailDto` in
+`data/dto/`.
+
+**Navigation.** Four new routes: `albums`, `albums/{albumName}?artist=`,
+`artists`, `artists/{artistName}`. Names are `Uri.encode`-d at callsite.
+No bottom-nav tab — reached via Search idle browse tiles or artist/album
+links in `SongRow`.
+
+**Search idle state.** When the query is empty, shows two clickable browse
+rows ("Albums", "Artists") each with a "See all" button. `SearchScreen`
+gained `onAlbumClick`, `onAlbumListClick`, `onArtistClick`,
+`onArtistListClick` callbacks.
+
 ### Find new music (M9c)
 
 A third bottom-nav tab — "Find" — lets the user request missing tracks
@@ -355,6 +386,7 @@ too.
 | M9c| ✅     | Android "Find new music" tab                                 |
 | M10| ✅     | Disk cache (1 GiB) + unmetered-only prev/next prefetch       |
 | M11a| ✅    | Liked Songs — heart toggle on search, Liked Songs screen     |
+| M11b| ✅    | Album + Artist pages — group-by projections, browse from search |
 
 ## Non-goals (for now)
 

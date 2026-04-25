@@ -1,6 +1,10 @@
 package com.mediaplayer.android.data
 
 import com.mediaplayer.android.data.dto.AddSongRequest
+import com.mediaplayer.android.data.dto.AlbumDetailDto
+import com.mediaplayer.android.data.dto.AlbumDto
+import com.mediaplayer.android.data.dto.ArtistDetailDto
+import com.mediaplayer.android.data.dto.ArtistDto
 import com.mediaplayer.android.data.dto.CreatePlaylistRequest
 import com.mediaplayer.android.data.dto.CreateRequestBody
 import com.mediaplayer.android.data.dto.PageResponse
@@ -114,4 +118,29 @@ interface MediaPlayerApi {
 
     @GET("api/liked/status")
     suspend fun getLikedStatus(@Query("ids") ids: List<Long>): List<Long>
+
+    // ---------- Albums + Artists (M11b) ----------
+
+    @GET("api/albums")
+    suspend fun listAlbums(
+        @Query("q") query: String? = null,
+        @Query("page") page: Int = 0,
+        @Query("size") size: Int = 20,
+    ): PageResponse<AlbumDto>
+
+    @GET("api/albums/{name}")
+    suspend fun getAlbum(
+        @Path("name") name: String,
+        @Query("artist") artist: String? = null,
+    ): AlbumDetailDto
+
+    @GET("api/artists")
+    suspend fun listArtists(
+        @Query("q") query: String? = null,
+        @Query("page") page: Int = 0,
+        @Query("size") size: Int = 20,
+    ): PageResponse<ArtistDto>
+
+    @GET("api/artists/{name}")
+    suspend fun getArtist(@Path("name") name: String): ArtistDetailDto
 }
