@@ -25,7 +25,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -86,8 +85,8 @@ fun SpotifyImportScreen(
                     onCancel = viewModel::reset,
                 )
 
-            is SpotifyImportUiState.Importing ->
-                ImportingContent(state = s)
+            SpotifyImportUiState.Importing ->
+                CenteredSpinnerWithLabel("Importing playlist…")
 
             is SpotifyImportUiState.Done ->
                 DoneContent(
@@ -240,64 +239,6 @@ private fun TrackPreviewRow(track: SpotifyImportTrack) {
 }
 
 @Composable
-private fun ImportingContent(state: SpotifyImportUiState.Importing) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.weight(1f))
-        Text(
-            text = "Importing ${state.completed + 1} of ${state.total}",
-            style = MaterialTheme.typography.titleMedium,
-        )
-        LinearProgressIndicator(
-            progress = { state.completed.toFloat() / state.total.coerceAtLeast(1) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = state.currentTrack,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
-            StatChip(
-                label = "Imported",
-                count = state.imported,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            StatChip(
-                label = "Failed",
-                count = state.failed,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-        Spacer(Modifier.weight(1f))
-        Text(
-            text = "You can leave this screen — the import will continue.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun StatChip(label: String, count: Int, color: androidx.compose.ui.graphics.Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = count.toString(), style = MaterialTheme.typography.titleLarge, color = color)
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
 private fun DoneContent(
     state: SpotifyImportUiState.Done,
     onViewPlaylist: () -> Unit,
@@ -311,11 +252,12 @@ private fun DoneContent(
     ) {
         Spacer(Modifier.weight(1f))
         Text(text = "Import complete", style = MaterialTheme.typography.headlineSmall)
-        val s = if (state.imported == 1) "" else "s"
         Text(
             text = buildString {
-                append("${state.imported} song$s added to “${state.playlistName}”")
-                if (state.failed > 0) append("\n${state.failed} couldn’t be found")
+                val s = if (state.matched == 1) "" else "s"
+                append("${state.matched} song$s added to \"${state.playlistName}\"")
+                if (state.queued > 0) append("\n${state.queued} downloading — will be added when ready")
+                if (state.failed > 0) append("\n${state.failed} couldn't be found")
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

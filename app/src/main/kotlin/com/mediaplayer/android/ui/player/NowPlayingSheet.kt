@@ -207,26 +207,23 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
         Spacer(Modifier.height(16.dp))
 
         // Transport row
-        val showQueueControls = hasNext || hasPrevious
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (showQueueControls) {
-                IconButton(
-                    onClick = viewModel::skipPrevious,
-                    modifier = Modifier.size(56.dp),
-                    enabled = hasPrevious,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.SkipPrevious,
-                        contentDescription = "Previous",
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
-                Spacer(Modifier.width(16.dp))
+            IconButton(
+                onClick = viewModel::skipPrevious,
+                modifier = Modifier.size(56.dp),
+                enabled = hasPrevious,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.SkipPrevious,
+                    contentDescription = "Previous",
+                    modifier = Modifier.size(32.dp),
+                )
             }
+            Spacer(Modifier.width(16.dp))
 
             FilledIconButton(
                 onClick = viewModel::togglePlayPause,
@@ -243,19 +240,17 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
                 )
             }
 
-            if (showQueueControls) {
-                Spacer(Modifier.width(16.dp))
-                IconButton(
-                    onClick = viewModel::skipNext,
-                    modifier = Modifier.size(56.dp),
-                    enabled = hasNext,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.SkipNext,
-                        contentDescription = "Next",
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
+            Spacer(Modifier.width(16.dp))
+            IconButton(
+                onClick = viewModel::skipNext,
+                modifier = Modifier.size(56.dp),
+                enabled = hasNext,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.SkipNext,
+                    contentDescription = "Next",
+                    modifier = Modifier.size(32.dp),
+                )
             }
         }
 

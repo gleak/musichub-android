@@ -18,12 +18,17 @@ import com.mediaplayer.android.data.dto.RequestSummaryDto
 import com.mediaplayer.android.data.dto.ReorderSongsRequest
 import com.mediaplayer.android.data.dto.SelectCandidateBody
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.data.dto.SpotifyImportResultDto
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -43,6 +48,15 @@ interface MediaPlayerApi {
         @Query("page") page: Int = 0,
         @Query("size") size: Int = 20,
     ): PageResponse<SongDto>
+
+    // ---------- Spotify import ----------
+
+    @Multipart
+    @POST("api/playlists/import/spotify")
+    suspend fun importSpotifyPlaylist(
+        @Part file: MultipartBody.Part,
+        @Part("playlistName") playlistName: RequestBody,
+    ): SpotifyImportResultDto
 
     // ---------- Playlists (M6) ----------
 

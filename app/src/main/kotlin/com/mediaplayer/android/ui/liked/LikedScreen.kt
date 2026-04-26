@@ -18,7 +18,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -44,6 +46,7 @@ import com.mediaplayer.android.ui.search.SongRow
 fun LikedScreen(
     onBack: () -> Unit,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
+    onShufflePlay: (List<SongDto>) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: LikedViewModel = viewModel(),
 ) {
@@ -69,6 +72,7 @@ fun LikedScreen(
                 is LikedUiState.Success -> LikedBody(
                     songs = s.songs,
                     onPlayFromIndex = onPlayFromIndex,
+                    onShufflePlay = onShufflePlay,
                     onUnlike = viewModel::unlike,
                 )
             }
@@ -80,6 +84,7 @@ fun LikedScreen(
 private fun LikedBody(
     songs: List<SongDto>,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
+    onShufflePlay: (List<SongDto>) -> Unit,
     onUnlike: (Long) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -87,6 +92,7 @@ private fun LikedBody(
             LikedHeader(
                 songCount = songs.size,
                 onPlayAll = { if (songs.isNotEmpty()) onPlayFromIndex(songs, 0) },
+                onShufflePlay = { onShufflePlay(songs) },
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
@@ -119,7 +125,7 @@ private fun LikedBody(
 }
 
 @Composable
-private fun LikedHeader(songCount: Int, onPlayAll: () -> Unit) {
+private fun LikedHeader(songCount: Int, onPlayAll: () -> Unit, onShufflePlay: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -158,10 +164,17 @@ private fun LikedHeader(songCount: Int, onPlayAll: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.size(4.dp))
-            Button(onClick = onPlayAll, enabled = songCount > 0) {
-                Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Play")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onPlayAll, enabled = songCount > 0) {
+                    Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Play")
+                }
+                OutlinedButton(onClick = onShufflePlay, enabled = songCount > 0) {
+                    Icon(imageVector = Icons.Filled.Shuffle, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Shuffle")
+                }
             }
         }
     }

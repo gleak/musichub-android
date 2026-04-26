@@ -159,6 +159,16 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         c.playWhenReady = true
     }
 
+    fun playPlaylistShuffled(songs: List<SongDto>) {
+        if (songs.isEmpty()) return
+        val c = controller ?: return
+        val items = songs.map { it.toMediaItem() }
+        c.setMediaItems(items, 0, 0L)
+        c.shuffleModeEnabled = true
+        c.prepare()
+        c.playWhenReady = true
+    }
+
     fun togglePlayPause() {
         val c = controller ?: return
         if (c.isPlaying) c.pause() else c.play()

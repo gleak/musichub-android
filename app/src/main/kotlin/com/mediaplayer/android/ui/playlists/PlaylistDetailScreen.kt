@@ -18,7 +18,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -54,6 +56,7 @@ fun PlaylistDetailScreen(
     playlistId: Long,
     onBack: () -> Unit,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
+    onShufflePlay: (List<SongDto>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val viewModel: PlaylistDetailViewModel = viewModel(
@@ -93,6 +96,7 @@ fun PlaylistDetailScreen(
                 is PlaylistDetailUiState.Success -> PlaylistDetailBody(
                     playlist = s.playlist,
                     onPlayFromIndex = onPlayFromIndex,
+                    onShufflePlay = onShufflePlay,
                     onRemoveSong = viewModel::removeSong,
                 )
             }
@@ -104,6 +108,7 @@ fun PlaylistDetailScreen(
 private fun PlaylistDetailBody(
     playlist: PlaylistDetailDto,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
+    onShufflePlay: (List<SongDto>) -> Unit,
     onRemoveSong: (Long) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -115,6 +120,7 @@ private fun PlaylistDetailBody(
                         onPlayFromIndex(playlist.songs, 0)
                     }
                 },
+                onShufflePlay = { onShufflePlay(playlist.songs) },
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
@@ -154,6 +160,7 @@ private fun PlaylistDetailBody(
 private fun Header(
     playlist: PlaylistDetailDto,
     onPlayAll: () -> Unit,
+    onShufflePlay: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -195,16 +202,23 @@ private fun Header(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.size(4.dp))
-            Button(
-                onClick = onPlayAll,
-                enabled = playlist.songs.isNotEmpty(),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("Play")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onPlayAll,
+                    enabled = playlist.songs.isNotEmpty(),
+                ) {
+                    Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Play")
+                }
+                OutlinedButton(
+                    onClick = onShufflePlay,
+                    enabled = playlist.songs.isNotEmpty(),
+                ) {
+                    Icon(imageVector = Icons.Filled.Shuffle, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Shuffle")
+                }
             }
         }
     }

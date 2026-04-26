@@ -158,6 +158,7 @@ private fun AppScaffold() {
                     onPlayFromIndex = { songs, index ->
                         playbackVm.playPlaylist(songs, index)
                     },
+                    onShufflePlay = playbackVm::playPlaylistShuffled,
                 )
             }
             composable(
@@ -171,6 +172,7 @@ private fun AppScaffold() {
                     onPlayFromIndex = { songs, index ->
                         playbackVm.playPlaylist(songs, index)
                     },
+                    onShufflePlay = playbackVm::playPlaylistShuffled,
                 )
             }
             composable(Routes.ALBUM_LIST) {
