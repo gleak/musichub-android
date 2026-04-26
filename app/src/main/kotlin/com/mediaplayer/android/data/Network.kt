@@ -25,9 +25,18 @@ object Network {
         coerceInputValues = true
     }
 
+    private const val API_KEY = "cf3ea1ea-f12a-4557-b926-1ac32a5ac4e2"
+
     val okHttp: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            chain.proceed(
+                chain.request().newBuilder()
+                    .header("X-Api-Key", API_KEY)
+                    .build()
+            )
+        }
         .addInterceptor(HttpLoggingInterceptor().apply {
             // Debug builds: dump request/response bodies; release: silent.
             level = if (BuildConfig.DEBUG) {

@@ -28,23 +28,16 @@ enum class RequestStatus {
             this == CANCELED
 }
 
-/** Mirrors `CandidateKind`. UNKNOWN is the default bucket in the UI. */
-@Serializable
-enum class CandidateKind { ALBUM, SINGLE, UNKNOWN }
-
-/**
- * Mirrors `CandidateDto`. Magnet URI is deliberately server-side-only.
- */
+/** Mirrors `CandidateDto` — one YouTube video search result. */
 @Serializable
 data class CandidateDto(
     val id: Long,
+    val videoId: String,
     val title: String,
-    val kind: CandidateKind,
-    val seeders: Int? = null,
-    val sizeBytes: Long? = null,
-    val indexer: String? = null,
-    val infoHash: String? = null,
-    val trackCount: Int? = null,
+    val channelName: String? = null,
+    val thumbnailUrl: String? = null,
+    val durationSeconds: Int? = null,
+    val viewCount: Long? = null,
 )
 
 /**

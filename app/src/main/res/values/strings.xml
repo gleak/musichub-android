@@ -8,25 +8,21 @@
     <string name="content_desc_cover_art">Album cover</string>
     <string name="content_desc_clear_query">Clear query</string>
 
-    <!-- Find new music (M9c) -->
+    <!-- Find new music -->
     <string name="find_title">Find new music</string>
     <string name="find_hint">Artist, album, or track</string>
     <string name="find_button_search">Search</string>
-    <string name="find_empty">Search to propose candidates from the backend indexer.</string>
-    <string name="find_no_candidates">No candidates came back. Try a broader query.</string>
+    <string name="find_empty">Search YouTube for a music video to download.</string>
+    <string name="find_no_candidates">No results. Try a broader query.</string>
     <string name="find_error_prefix">Couldn\'t search:</string>
-    <string name="find_tab_albums">Albums</string>
-    <string name="find_tab_singles">Singles</string>
-    <string name="find_candidate_seeders">%1$d seeders</string>
-    <string name="find_candidate_tracks">%1$d tracks</string>
-    <string name="find_status_searching">Searching the indexer…</string>
-    <string name="find_status_awaiting">Pick a candidate below.</string>
-    <string name="find_status_unlocking">Unlocking with AllDebrid…</string>
+    <string name="find_status_searching">Searching YouTube…</string>
+    <string name="find_status_awaiting">Pick a video below.</string>
     <string name="find_status_downloading">Downloading &amp; importing…</string>
     <string name="find_status_imported">Imported. Happy listening.</string>
     <string name="find_status_imported_partial">Partially imported — check server logs.</string>
     <string name="find_status_failed">Failed.</string>
     <string name="find_status_canceled">Canceled.</string>
+    <string name="find_active_downloads">In Progress</string>
     <string name="find_back">Back to Find</string>
     <string name="content_desc_find">Find new music</string>
 

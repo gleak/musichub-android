@@ -13,7 +13,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionError
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -112,7 +114,7 @@ class MediaPlaybackService : MediaLibraryService() {
 
         // M10: warm the disk cache with the prev/next tracks around
         // whatever is currently playing, gated on unmetered network.
-        prefetch = PrefetchOrchestrator(this, cache, httpFactory).also {
+        prefetch = PrefetchOrchestrator(this, streamCache, httpFactory).also {
             it.install(player)
         }
     }
@@ -177,7 +179,7 @@ class MediaPlaybackService : MediaLibraryService() {
         ): ListenableFuture<LibraryResult<MediaItem>> =
             serviceScope.future {
                 LibraryTree.item(mediaId)?.let { LibraryResult.ofItem(it, /* params = */ null) }
-                    ?: LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+                    ?: LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
             }
 
         override fun onGetChildren(
@@ -191,7 +193,7 @@ class MediaPlaybackService : MediaLibraryService() {
             serviceScope.future {
                 val items = LibraryTree.children(parentId)
                 if (items == null) {
-                    LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+                    LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
                 } else {
                     LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
                 }
@@ -274,32 +276,27 @@ class MediaPlaybackService : MediaLibraryService() {
                     val plLeaf = LibraryTree.parsePlaylistLeaf(id)
                     if (plLeaf != null) {
                         val (playlistId, position, _) = plLeaf
-                        val queue = LibraryTree.playlistQueue(playlistId)
+                        val expanded = LibraryTree.playlistQueue(playlistId)
                         return@future MediaSession.MediaItemsWithStartPosition(
-                            queue,
+                            expanded,
                             position,
-                            startPositionMs,
+                            C.TIME_UNSET
                         )
                     }
                     if (id.startsWith("song:")) {
-                        val sid = id.removePrefix("song:").toLongOrNull()
-                        if (sid != null) {
+                        val songId = id.removePrefix("song:").toLongOrNull()
+                        if (songId != null) {
+                            val playable = LibraryTree.playableForSong(songId)
                             return@future MediaSession.MediaItemsWithStartPosition(
-                                listOf(LibraryTree.playableForSong(sid)),
-                                /* startIndex = */ 0,
-                                startPositionMs,
+                                listOf(playable),
+                                0,
+                                startPositionMs
                             )
                         }
                     }
                 }
-                // Multi-item or unknown scheme — return as-is. The player
-                // will still try, but unresolved items without URIs will
-                // fail fast rather than silently no-op.
-                MediaSession.MediaItemsWithStartPosition(
-                    mediaItems,
-                    startIndex,
-                    startPositionMs,
-                )
+
+                MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
             }
     }
 }

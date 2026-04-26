@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,7 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,64 +57,64 @@ fun PlaylistsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var createOpen by remember { mutableStateOf(false) }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { createOpen = true },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("New playlist") },
+    Box(modifier = modifier.fillMaxSize()) {
+        when (val s = state) {
+            PlaylistsUiState.Loading -> CenteredSpinner()
+            is PlaylistsUiState.Error -> ErrorWithRetry(
+                message = "Couldn't load playlists.\n${s.message}",
+                onRetry = viewModel::refresh,
             )
-        },
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            when (val s = state) {
-                PlaylistsUiState.Loading -> CenteredSpinner()
-                is PlaylistsUiState.Error -> ErrorWithRetry(
-                    message = "Couldn't load playlists.\n${s.message}",
-                    onRetry = viewModel::refresh,
-                )
-                is PlaylistsUiState.Success -> {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        item(key = "liked") {
-                            LikedSongsRow(onClick = onLikedSongsClick)
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        }
-                        if (s.playlists.isEmpty()) {
-                            item(key = "empty") {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        "No playlists yet. Tap the + button to create one.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        } else {
-                            items(items = s.playlists, key = { it.id }) { p ->
-                                PlaylistRow(
-                                    playlist = p,
-                                    onClick = { onPlaylistClick(p) },
-                                    onDelete = { viewModel.delete(p.id) },
+            is PlaylistsUiState.Success -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 88.dp),
+                ) {
+                    item(key = "liked") {
+                        LikedSongsRow(onClick = onLikedSongsClick)
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    if (s.playlists.isEmpty()) {
+                        item(key = "empty") {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    "No playlists yet. Tap the + button to create one.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             }
+                        }
+                    } else {
+                        items(items = s.playlists, key = { it.id }) { p ->
+                            PlaylistRow(
+                                playlist = p,
+                                onClick = { onPlaylistClick(p) },
+                                onDelete = { viewModel.delete(p.id) },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         }
                     }
                 }
             }
         }
+
+        ExtendedFloatingActionButton(
+            onClick = { createOpen = true },
+            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+            text = { Text("New playlist") },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
+                .padding(16.dp),
+        )
     }
 
     if (createOpen) {
         CreatePlaylistDialog(
             onConfirm = { name ->
-                viewModel.create(name) {
-                    // Always close, success or fail — error surfaces via refresh.
-                }
+                viewModel.create(name)
                 createOpen = false
             },
             onDismiss = { createOpen = false },
@@ -266,22 +267,6 @@ private fun CreatePlaylistDialog(
 private fun CenteredSpinner() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(modifier = Modifier.size(32.dp))
-    }
-}
-
-@Composable
-private fun CenteredMessage(text: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
