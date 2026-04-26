@@ -45,6 +45,7 @@ import com.mediaplayer.android.ui.player.MiniPlayer
 import com.mediaplayer.android.ui.player.NowPlayingSheet
 import com.mediaplayer.android.ui.playlists.PlaylistDetailScreen
 import com.mediaplayer.android.ui.playlists.PlaylistsScreen
+import com.mediaplayer.android.ui.playlists.SpotifyImportScreen
 import com.mediaplayer.android.ui.search.SearchScreen
 import com.mediaplayer.android.ui.theme.MediaPlayerTheme
 
@@ -68,6 +69,7 @@ private object Routes {
     const val FIND = "find"
     const val PLAYLISTS = "playlists"
     const val PLAYLIST_DETAIL = "playlists/{playlistId}"
+    const val SPOTIFY_IMPORT = "playlists/spotify-import"
     const val LIKED = "liked"
     const val ALBUM_LIST = "albums"
     const val ALBUM_DETAIL = "albums/{albumName}?artist={albumArtist}"
@@ -137,6 +139,17 @@ private fun AppScaffold() {
                         navController.navigate(Routes.playlistDetail(p.id))
                     },
                     onLikedSongsClick = { navController.navigate(Routes.LIKED) },
+                    onSpotifyImport = { navController.navigate(Routes.SPOTIFY_IMPORT) },
+                )
+            }
+            composable(Routes.SPOTIFY_IMPORT) {
+                SpotifyImportScreen(
+                    onBack = { navController.popBackStack() },
+                    onPlaylistCreated = { playlistId ->
+                        navController.navigate(Routes.playlistDetail(playlistId)) {
+                            popUpTo(Routes.PLAYLISTS)
+                        }
+                    },
                 )
             }
             composable(Routes.LIKED) {
@@ -273,7 +286,8 @@ private fun BottomNav(navController: NavHostController) {
         destinations.forEach { dest ->
             val selected = currentRoute == dest.route ||
                 (dest.route == Routes.PLAYLISTS && currentRoute == Routes.PLAYLIST_DETAIL) ||
-                (dest.route == Routes.PLAYLISTS && currentRoute == Routes.LIKED)
+                (dest.route == Routes.PLAYLISTS && currentRoute == Routes.LIKED) ||
+                (dest.route == Routes.PLAYLISTS && currentRoute == Routes.SPOTIFY_IMPORT)
 
             NavigationBarItem(
                 selected = selected,

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -31,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,6 +55,7 @@ fun PlaylistsScreen(
     viewModel: PlaylistsViewModel = viewModel(),
     onPlaylistClick: (PlaylistDto) -> Unit = {},
     onLikedSongsClick: () -> Unit = {},
+    onSpotifyImport: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var createOpen by remember { mutableStateOf(false) }
@@ -100,15 +103,26 @@ fun PlaylistsScreen(
             }
         }
 
-        ExtendedFloatingActionButton(
-            onClick = { createOpen = true },
-            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-            text = { Text("New playlist") },
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .navigationBarsPadding()
-                .padding(16.dp),
-        )
+                .padding(end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            SmallFloatingActionButton(
+                onClick = onSpotifyImport,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            ) {
+                Icon(Icons.Filled.PlaylistAdd, contentDescription = "Import from Spotify")
+            }
+            ExtendedFloatingActionButton(
+                onClick = { createOpen = true },
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text("New playlist") },
+            )
+        }
     }
 
     if (createOpen) {
