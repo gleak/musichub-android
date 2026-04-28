@@ -39,6 +39,8 @@ import com.mediaplayer.android.ui.albums.AlbumListScreen
 import com.mediaplayer.android.ui.albums.AlbumScreen
 import com.mediaplayer.android.ui.artists.ArtistListScreen
 import com.mediaplayer.android.ui.artists.ArtistScreen
+import com.mediaplayer.android.ui.auth.AuthViewModel
+import com.mediaplayer.android.ui.auth.LoginScreen
 import com.mediaplayer.android.ui.find.FindScreen
 import com.mediaplayer.android.ui.liked.LikedScreen
 import com.mediaplayer.android.ui.player.MiniPlayer
@@ -57,10 +59,22 @@ class MainActivity : ComponentActivity() {
         setContent {
             MediaPlayerTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    AppScaffold()
+                    AuthGate()
                 }
             }
         }
+    }
+}
+
+@UnstableApi
+@Composable
+private fun AuthGate() {
+    val authVm: AuthViewModel = viewModel(factory = AuthViewModel.Factory)
+    val authState by authVm.state.collectAsStateWithLifecycle()
+
+    when (authState) {
+        is AuthViewModel.State.SignedIn -> AppScaffold(onSignOut = authVm::signOut)
+        else -> LoginScreen(state = authState, onSignIn = authVm::signIn)
     }
 }
 
@@ -90,7 +104,7 @@ private data class BottomDestination(
 
 @UnstableApi
 @Composable
-private fun AppScaffold() {
+private fun AppScaffold(onSignOut: () -> Unit) {
     val playbackVm: PlaybackViewModel = viewModel()
     val currentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
     var sheetOpen by remember { mutableStateOf(false) }
@@ -140,6 +154,7 @@ private fun AppScaffold() {
                     },
                     onLikedSongsClick = { navController.navigate(Routes.LIKED) },
                     onSpotifyImport = { navController.navigate(Routes.SPOTIFY_IMPORT) },
+                    onSignOut = onSignOut,
                 )
             }
             composable(Routes.SPOTIFY_IMPORT) {

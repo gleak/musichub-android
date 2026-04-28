@@ -48,14 +48,20 @@ android {
     }
 
     buildTypes {
+        val GOOGLE_WEB_CLIENT_ID = localProps.getProperty(
+            "google.web.client.id",
+            "447608520923-gmoou57vgvul7fb17ivbqts3hr6cigl1.apps.googleusercontent.com"
+        )
         debug {
             val baseUrl = resolveBaseUrl("debug", fallback = "http://10.0.2.2:8080")
             buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
+            buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$GOOGLE_WEB_CLIENT_ID\"")
             isMinifyEnabled = false
         }
         release {
             val baseUrl = resolveBaseUrl("release", fallback = RELEASE_URL_DEFAULT)
             buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
+            buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$GOOGLE_WEB_CLIENT_ID\"")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -143,6 +149,14 @@ dependencies {
 
     // Drag-to-reorder for playlist songs LazyColumn.
     implementation(libs.reorderable)
+
+    // Google Sign-In via Credential Manager (no Firebase / google-services.json needed).
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
+
+    // DataStore — persists "has signed in" flag across launches.
+    implementation(libs.androidx.datastore.preferences)
 }
 
 /**

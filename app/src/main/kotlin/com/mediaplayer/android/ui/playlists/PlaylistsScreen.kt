@@ -57,6 +57,7 @@ fun PlaylistsScreen(
     onPlaylistClick: (PlaylistDto) -> Unit = {},
     onLikedSongsClick: () -> Unit = {},
     onSpotifyImport: () -> Unit = {},
+    onSignOut: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
@@ -78,6 +79,18 @@ fun PlaylistsScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 88.dp),
                 ) {
+                    item(key = "signout") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(onClick = onSignOut) {
+                                Text("Sign out")
+                            }
+                        }
+                    }
                     item(key = "liked") {
                         LikedSongsRow(onClick = onLikedSongsClick)
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

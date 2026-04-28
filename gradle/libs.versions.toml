@@ -28,6 +28,13 @@ navigationCompose = "2.9.8"
 # Drag-to-reorder for Compose LazyColumn
 reorderable = "2.4.3"
 
+# Auth — Credential Manager + Google Sign-In (no Firebase/google-services.json needed)
+credentials = "1.5.0"
+googleid = "1.1.1"
+
+# Persistent key-value storage for auth state
+datastorePreferences = "1.1.4"
+
 [libraries]
 androidx-core-ktx                   = { module = "androidx.core:core-ktx",                                 version.ref = "coreKtx" }
 androidx-lifecycle-runtime-ktx      = { module = "androidx.lifecycle:lifecycle-runtime-ktx",               version.ref = "lifecycle" }
@@ -69,6 +76,11 @@ media3-database                     = { module = "androidx.media3:media3-databas
 androidx-navigation-compose         = { module = "androidx.navigation:navigation-compose",                version.ref = "navigationCompose" }
 
 reorderable                         = { module = "sh.calvin.reorderable:reorderable",                       version.ref = "reorderable" }
+
+androidx-credentials                = { module = "androidx.credentials:credentials",                         version.ref = "credentials" }
+androidx-credentials-play-services  = { module = "androidx.credentials:credentials-play-services-auth",      version.ref = "credentials" }
+googleid                            = { module = "com.google.android.libraries.identity.googleid:googleid",  version.ref = "googleid" }
+androidx-datastore-preferences      = { module = "androidx.datastore:datastore-preferences",                 version.ref = "datastorePreferences" }
 
 [plugins]
 android-application   = { id = "com.android.application",                     version.ref = "agp" }
