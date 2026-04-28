@@ -34,6 +34,9 @@ class FindViewModel(
     private val _activeRequests = MutableStateFlow<List<RequestSummaryDto>>(emptyList())
     val activeRequests: StateFlow<List<RequestSummaryDto>> = _activeRequests.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     private var pollJob: Job? = null
     private var requestsJob: Job? = null
 
@@ -95,6 +98,17 @@ class FindViewModel(
         pollJob?.cancel()
         pollJob = null
         _state.value = FindUiState.Idle
+        startRequestsTracking()
+    }
+
+    fun refreshActiveRequests() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            try {
+                _activeRequests.value = repository.list().filter { !it.status.isTerminal }
+            } catch (_: Throwable) {}
+            _isRefreshing.value = false
+        }
         startRequestsTracking()
     }
 

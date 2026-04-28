@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -77,6 +78,7 @@ fun PlaylistDetailScreen(
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
     var sheetSong by remember { mutableStateOf<SongDto?>(null) }
     var addSongsOpen by remember { mutableStateOf(false) }
@@ -115,7 +117,11 @@ fun PlaylistDetailScreen(
             )
         },
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = viewModel::pullRefresh,
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) {
             when (val s = state) {
                 PlaylistDetailUiState.Loading -> CenteredSpinner()
                 is PlaylistDetailUiState.Error -> CenteredMessage(
@@ -170,7 +176,10 @@ private fun PlaylistDetailBody(
     var songs by remember(playlist.songs) { mutableStateOf(playlist.songs) }
 
     val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        songs = songs.toMutableList().apply { add(to.index, removeAt(from.index)) }
+        // Subtract 1 to account for the header item at LazyColumn index 0.
+        val fromIndex = from.index - 1
+        val toIndex = to.index - 1
+        songs = songs.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
     }
 
     LaunchedEffect(reorderState) {

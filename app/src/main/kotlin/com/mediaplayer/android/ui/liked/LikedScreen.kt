@@ -23,6 +23,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +52,7 @@ fun LikedScreen(
     viewModel: LikedViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -65,7 +67,11 @@ fun LikedScreen(
             )
         },
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = viewModel::pullRefresh,
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) {
             when (val s = state) {
                 LikedUiState.Loading -> CenteredSpinner()
                 is LikedUiState.Error -> CenteredMessage("Couldn't load liked songs.\n${s.message}")

@@ -28,6 +28,9 @@ class PlaylistDetailViewModel(
     private val _state = MutableStateFlow<PlaylistDetailUiState>(PlaylistDetailUiState.Loading)
     val state: StateFlow<PlaylistDetailUiState> = _state.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     init {
         refresh()
     }
@@ -40,6 +43,18 @@ class PlaylistDetailViewModel(
             } catch (t: Throwable) {
                 PlaylistDetailUiState.Error(t.message ?: "Unknown error")
             }
+        }
+    }
+
+    fun pullRefresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            _state.value = try {
+                PlaylistDetailUiState.Success(repository.detail(playlistId))
+            } catch (t: Throwable) {
+                PlaylistDetailUiState.Error(t.message ?: "Unknown error")
+            }
+            _isRefreshing.value = false
         }
     }
 

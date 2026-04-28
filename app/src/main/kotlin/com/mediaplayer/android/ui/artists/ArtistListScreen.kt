@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -55,6 +56,9 @@ class ArtistListViewModel(
     private val _state = MutableStateFlow<ArtistListUiState>(ArtistListUiState.Loading)
     val state: StateFlow<ArtistListUiState> = _state.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     init { load() }
 
     fun refresh() = load()
@@ -69,6 +73,18 @@ class ArtistListViewModel(
             }
         }
     }
+
+    fun pullRefresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            _state.value = try {
+                ArtistListUiState.Success(repository.listArtists(size = 100).items)
+            } catch (t: Throwable) {
+                ArtistListUiState.Error(t.message ?: "Unknown error")
+            }
+            _isRefreshing.value = false
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,6 +96,7 @@ fun ArtistListScreen(
     viewModel: ArtistListViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -94,7 +111,11 @@ fun ArtistListScreen(
             )
         },
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = viewModel::pullRefresh,
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) {
             when (val s = state) {
                 ArtistListUiState.Loading -> CenteredSpinner()
                 is ArtistListUiState.Error -> ErrorWithRetry(s.message, viewModel::refresh)

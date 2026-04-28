@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -67,13 +68,30 @@ class ArtistViewModel(
     private val _state = MutableStateFlow<ArtistUiState>(ArtistUiState.Loading)
     val state: StateFlow<ArtistUiState> = _state.asStateFlow()
 
-    init {
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    init { load() }
+
+    private fun load() {
         viewModelScope.launch {
             _state.value = try {
                 ArtistUiState.Success(repository.getArtist(name))
             } catch (t: Throwable) {
                 ArtistUiState.Error(t.message ?: "Unknown error")
             }
+        }
+    }
+
+    fun pullRefresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            _state.value = try {
+                ArtistUiState.Success(repository.getArtist(name))
+            } catch (t: Throwable) {
+                ArtistUiState.Error(t.message ?: "Unknown error")
+            }
+            _isRefreshing.value = false
         }
     }
 }
@@ -94,6 +112,7 @@ fun ArtistScreen(
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -111,7 +130,11 @@ fun ArtistScreen(
             )
         },
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = viewModel::pullRefresh,
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) {
             when (val s = state) {
                 ArtistUiState.Loading -> CenteredSpinner()
                 is ArtistUiState.Error -> CenteredMessage("Couldn't load artist.\n${s.message}")

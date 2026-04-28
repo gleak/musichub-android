@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalButton
@@ -58,9 +59,14 @@ fun PlaylistsScreen(
     onSpotifyImport: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     var createOpen by remember { mutableStateOf(false) }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = viewModel::pullRefresh,
+        modifier = modifier.fillMaxSize(),
+    ) {
         when (val s = state) {
             PlaylistsUiState.Loading -> CenteredSpinner()
             is PlaylistsUiState.Error -> ErrorWithRetry(

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -54,6 +55,7 @@ fun FindScreen(
     val query by viewModel.query.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val activeRequests by viewModel.activeRequests.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
     Column(modifier = modifier.fillMaxSize()) {
         QueryBar(
@@ -67,10 +69,16 @@ fun FindScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             when (val s = state) {
                 FindUiState.Idle ->
-                    IdleBody(
-                        activeRequests = activeRequests,
-                        emptyMessage = stringResource(R.string.find_empty),
-                    )
+                    PullToRefreshBox(
+                        isRefreshing = isRefreshing,
+                        onRefresh = viewModel::refreshActiveRequests,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        IdleBody(
+                            activeRequests = activeRequests,
+                            emptyMessage = stringResource(R.string.find_empty),
+                        )
+                    }
 
                 FindUiState.Searching -> CenteredSpinner()
 

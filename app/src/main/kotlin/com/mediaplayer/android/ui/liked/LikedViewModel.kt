@@ -22,6 +22,9 @@ class LikedViewModel(
     private val _state = MutableStateFlow<LikedUiState>(LikedUiState.Loading)
     val state: StateFlow<LikedUiState> = _state.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     init { refresh() }
 
     fun refresh() {
@@ -32,6 +35,18 @@ class LikedViewModel(
             } catch (t: Throwable) {
                 LikedUiState.Error(t.message ?: "Unknown error")
             }
+        }
+    }
+
+    fun pullRefresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            _state.value = try {
+                LikedUiState.Success(repository.likedSongs().items)
+            } catch (t: Throwable) {
+                LikedUiState.Error(t.message ?: "Unknown error")
+            }
+            _isRefreshing.value = false
         }
     }
 

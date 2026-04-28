@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -65,13 +66,30 @@ class AlbumViewModel(
     private val _state = MutableStateFlow<AlbumUiState>(AlbumUiState.Loading)
     val state: StateFlow<AlbumUiState> = _state.asStateFlow()
 
-    init {
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    init { load() }
+
+    private fun load() {
         viewModelScope.launch {
             _state.value = try {
                 AlbumUiState.Success(repository.getAlbum(name, artist))
             } catch (t: Throwable) {
                 AlbumUiState.Error(t.message ?: "Unknown error")
             }
+        }
+    }
+
+    fun pullRefresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            _state.value = try {
+                AlbumUiState.Success(repository.getAlbum(name, artist))
+            } catch (t: Throwable) {
+                AlbumUiState.Error(t.message ?: "Unknown error")
+            }
+            _isRefreshing.value = false
         }
     }
 }
@@ -93,6 +111,7 @@ fun AlbumScreen(
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -110,7 +129,11 @@ fun AlbumScreen(
             )
         },
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = viewModel::pullRefresh,
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) {
             when (val s = state) {
                 AlbumUiState.Loading -> CenteredSpinner()
                 is AlbumUiState.Error -> CenteredMessage("Couldn't load album.\n${s.message}")
