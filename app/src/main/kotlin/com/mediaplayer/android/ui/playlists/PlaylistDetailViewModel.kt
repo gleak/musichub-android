@@ -53,4 +53,15 @@ class PlaylistDetailViewModel(
             }
         }
     }
+
+    fun reorderSongs(songIds: List<Long>) {
+        viewModelScope.launch {
+            try {
+                val updated = repository.reorder(playlistId, songIds)
+                _state.value = PlaylistDetailUiState.Success(updated)
+            } catch (_: Throwable) {
+                refresh()
+            }
+        }
+    }
 }

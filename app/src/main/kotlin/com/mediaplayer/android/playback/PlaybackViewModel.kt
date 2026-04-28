@@ -162,7 +162,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     fun playPlaylistShuffled(songs: List<SongDto>) {
         if (songs.isEmpty()) return
         val c = controller ?: return
-        val items = songs.map { it.toMediaItem() }
+        val items = songs.shuffled().map { it.toMediaItem() }
         c.setMediaItems(items, 0, 0L)
         c.shuffleModeEnabled = true
         c.prepare()

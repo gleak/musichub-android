@@ -61,8 +61,12 @@ class SearchViewModel(
         .distinctUntilChanged()
         .flatMapLatest { q ->
             flow {
-                emit(SearchUiState.Loading)
-                emit(fetch(q))
+                if (q.isBlank()) {
+                    emit(SearchUiState.Idle)
+                } else {
+                    emit(SearchUiState.Loading)
+                    emit(fetch(q))
+                }
             }
         }
         .stateIn(
@@ -73,7 +77,7 @@ class SearchViewModel(
 
     init {
         viewModelScope.launch {
-            try { _recentSongs.value = historyRepository.recent(20) } catch (_: Throwable) {}
+            try { _recentSongs.value = historyRepository.recent(10) } catch (_: Throwable) {}
         }
     }
 

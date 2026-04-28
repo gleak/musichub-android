@@ -140,6 +140,9 @@ dependencies {
 
     // Navigation — top-level NavHost for Search / Playlists tabs (M6).
     implementation(libs.androidx.navigation.compose)
+
+    // Drag-to-reorder for playlist songs LazyColumn.
+    implementation(libs.reorderable)
 }
 
 /**

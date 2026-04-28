@@ -25,6 +25,9 @@ media3 = "1.10.0"
 # Navigation
 navigationCompose = "2.9.8"
 
+# Drag-to-reorder for Compose LazyColumn
+reorderable = "2.4.3"
+
 [libraries]
 androidx-core-ktx                   = { module = "androidx.core:core-ktx",                                 version.ref = "coreKtx" }
 androidx-lifecycle-runtime-ktx      = { module = "androidx.lifecycle:lifecycle-runtime-ktx",               version.ref = "lifecycle" }
@@ -64,6 +67,8 @@ androidx-media3-common-ktx          = { module = "androidx.media3:media3-common-
 media3-database                     = { module = "androidx.media3:media3-database",                       version.ref = "media3" }
 
 androidx-navigation-compose         = { module = "androidx.navigation:navigation-compose",                version.ref = "navigationCompose" }
+
+reorderable                         = { module = "sh.calvin.reorderable:reorderable",                       version.ref = "reorderable" }
 
 [plugins]
 android-application   = { id = "com.android.application",                     version.ref = "agp" }
