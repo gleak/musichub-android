@@ -206,23 +206,25 @@ private fun PlaylistDetailBody(
 ) {
     val lazyListState = rememberLazyListState()
     var songs by remember { mutableStateOf(playlist.songs) }
-    var isDragging by remember { mutableStateOf(false) }
-
-    LaunchedEffect(playlist.songs) {
-        if (!isDragging) songs = playlist.songs
-    }
 
     val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
         // Subtract 1 to account for the header item at LazyColumn index 0.
         val fromIndex = from.index - 1
         val toIndex = to.index - 1
+        if (fromIndex !in songs.indices || toIndex !in songs.indices) return@rememberReorderableLazyListState
         songs = songs.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+    }
+
+    // Use reorderState.isAnyItemDragging directly (synchronous gesture state) to avoid
+    // a race where the snapshotFlow collector hasn't fired yet and a playlist refresh
+    // resets songs mid-drag, causing duplicate keys in the LazyColumn.
+    LaunchedEffect(playlist.songs) {
+        if (!reorderState.isAnyItemDragging) songs = playlist.songs
     }
 
     LaunchedEffect(reorderState) {
         var wasEverDragging = false
         snapshotFlow { reorderState.isAnyItemDragging }.collect { dragging ->
-            isDragging = dragging
             if (dragging) {
                 wasEverDragging = true
             } else if (wasEverDragging) {
@@ -265,9 +267,9 @@ private fun PlaylistDetailBody(
         } else {
             itemsIndexed(
                 items = songs,
-                key = { _, song -> song.id },
+                key = { idx, song -> "${song.id}_$idx" },
             ) { idx, song ->
-                ReorderableItem(reorderState, key = song.id) {
+                ReorderableItem(reorderState, key = "${song.id}_$idx") {
                     val dismissState = rememberSwipeToDismissBoxState(
                         confirmValueChange = { value ->
                             if (value == SwipeToDismissBoxValue.EndToStart) {
