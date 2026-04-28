@@ -43,7 +43,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.CatalogRepository
+import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.dto.AlbumDetailDto
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.search.SongRow
@@ -58,6 +60,7 @@ sealed interface AlbumUiState {
     data class Error(val message: String) : AlbumUiState
 }
 
+@UnstableApi
 class AlbumViewModel(
     private val name: String,
     private val artist: String,
@@ -68,6 +71,8 @@ class AlbumViewModel(
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    val downloadedIds: StateFlow<Set<Long>> = DownloadRepository.downloadedIds
 
     init { load() }
 
@@ -112,6 +117,7 @@ fun AlbumScreen(
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    val downloadedIds by viewModel.downloadedIds.collectAsStateWithLifecycle()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -139,6 +145,7 @@ fun AlbumScreen(
                 is AlbumUiState.Error -> CenteredMessage("Couldn't load album.\n${s.message}")
                 is AlbumUiState.Success -> AlbumBody(
                     detail = s.detail,
+                    downloadedIds = downloadedIds,
                     onPlayFromIndex = onPlayFromIndex,
                     onArtistClick = onArtistClick,
                 )
@@ -150,6 +157,7 @@ fun AlbumScreen(
 @Composable
 private fun AlbumBody(
     detail: AlbumDetailDto,
+    downloadedIds: Set<Long>,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
     onArtistClick: (String) -> Unit,
 ) {
@@ -162,8 +170,12 @@ private fun AlbumBody(
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
-        itemsIndexed(items = detail.songs, key = { idx, song -> "$idx-${song.id}" }) { idx, song ->
-            SongRow(song = song, onClick = { onPlayFromIndex(detail.songs, idx) })
+        itemsIndexed(items = detail.songs, key = { _, song -> song.id }) { idx, song ->
+            SongRow(
+                song = song,
+                isDownloaded = song.id in downloadedIds,
+                onClick = { onPlayFromIndex(detail.songs, idx) },
+            )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
     }

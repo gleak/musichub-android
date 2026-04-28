@@ -1,9 +1,14 @@
 package com.mediaplayer.android.playback
 
 import android.content.Context
+import android.net.Uri
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import com.mediaplayer.android.data.Network
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 /**
  * Tiny persistence layer so Android Auto's "resume where you left off"
@@ -58,18 +63,29 @@ internal class PlaybackResumption(context: Context) {
      * case so Android Auto simply doesn't show a resume chip.
      */
     fun load(): Snapshot? {
-        val csv = prefs.getString(KEY_QUEUE, null) ?: return null
-        val ids = csv.split(",").mapNotNull { it.toLongOrNull() }
-        if (ids.isEmpty()) return null
-        val index = prefs.getInt(KEY_INDEX, 0).coerceIn(0, ids.lastIndex)
-        val positionMs = prefs.getLong(KEY_POSITION_MS, 0L).coerceAtLeast(0L)
-        val items = ids.map { id ->
-            MediaItem.Builder()
-                .setMediaId("song:$id")
-                .setUri(Network.streamUrl(id))
-                .build()
+        val json = prefs.getString(KEY_SNAPSHOT, null) ?: return null
+        return try {
+            val dto = Json.decodeFromString<SnapshotDto>(json)
+            val items = dto.items.map { s ->
+                MediaItem.Builder()
+                    .setMediaId("song:${s.id}")
+                    .setUri(Network.streamUrl(s.id))
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(s.title)
+                            .setArtist(s.artist)
+                            .setArtworkUri(Uri.parse(Network.coverUrl(s.id)))
+                            .setIsBrowsable(false)
+                            .setIsPlayable(true)
+                            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                            .build()
+                    )
+                    .build()
+            }
+            Snapshot(items, dto.index, dto.positionMs)
+        } catch (e: Exception) {
+            null
         }
-        return Snapshot(items, index, positionMs)
     }
 
     private fun save(player: Player) {
@@ -78,18 +94,44 @@ internal class PlaybackResumption(context: Context) {
             prefs.edit().clear().apply()
             return
         }
-        val ids = buildList {
-            for (i in 0 until count) {
-                val id = player.getMediaItemAt(i).mediaId
-                if (id.startsWith("song:")) add(id.removePrefix("song:"))
-            }
+
+        val items = mutableListOf<SongSnapshotDto>()
+        for (i in 0 until count) {
+            val item = player.getMediaItemAt(i)
+            val id = item.mediaId.removePrefix("song:").toLongOrNull() ?: continue
+            items.add(
+                SongSnapshotDto(
+                    id = id,
+                    title = item.mediaMetadata.title?.toString() ?: "Unknown",
+                    artist = item.mediaMetadata.artist?.toString() ?: "Unknown",
+                )
+            )
         }
+
+        val dto = SnapshotDto(
+            items = items,
+            index = player.currentMediaItemIndex,
+            positionMs = player.currentPosition,
+        )
+
         prefs.edit()
-            .putString(KEY_QUEUE, ids.joinToString(","))
-            .putInt(KEY_INDEX, player.currentMediaItemIndex)
-            .putLong(KEY_POSITION_MS, player.currentPosition)
+            .putString(KEY_SNAPSHOT, Json.encodeToString(dto))
             .apply()
     }
+
+    @Serializable
+    private data class SongSnapshotDto(
+        val id: Long,
+        val title: String,
+        val artist: String,
+    )
+
+    @Serializable
+    private data class SnapshotDto(
+        val items: List<SongSnapshotDto>,
+        val index: Int,
+        val positionMs: Long,
+    )
 
     data class Snapshot(
         val items: List<MediaItem>,
@@ -99,8 +141,6 @@ internal class PlaybackResumption(context: Context) {
 
     companion object {
         private const val PREFS = "mediaplayer_playback_resume"
-        private const val KEY_QUEUE = "queue_song_ids"
-        private const val KEY_INDEX = "queue_index"
-        private const val KEY_POSITION_MS = "queue_position_ms"
+        private const val KEY_SNAPSHOT = "playback_snapshot_v2"
     }
 }

@@ -73,6 +73,10 @@ object DownloadRepository {
         )
     }
 
+    fun downloadAll(songIds: List<Long>) = songIds.forEach { download(it) }
+
+    fun removeAll(songIds: List<Long>) = songIds.forEach { remove(it) }
+
     fun isDownloaded(songId: Long): Boolean = songId in _downloadedIds.value
 
     private fun refreshAsync(dm: DownloadManager) {

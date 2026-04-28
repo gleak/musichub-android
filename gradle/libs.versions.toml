@@ -34,6 +34,10 @@ googleid = "1.1.1"
 
 # Persistent key-value storage for auth state
 datastorePreferences = "1.1.4"
+googleGmsGoogleServices = "4.4.4"
+firebaseAuth = "24.0.1"
+firebaseCrashlytics = "20.0.5"
+googleFirebaseCrashlytics = "3.0.7"
 
 [libraries]
 androidx-core-ktx                   = { module = "androidx.core:core-ktx",                                 version.ref = "coreKtx" }
@@ -81,9 +85,13 @@ androidx-credentials                = { module = "androidx.credentials:credentia
 androidx-credentials-play-services  = { module = "androidx.credentials:credentials-play-services-auth",      version.ref = "credentials" }
 googleid                            = { module = "com.google.android.libraries.identity.googleid:googleid",  version.ref = "googleid" }
 androidx-datastore-preferences      = { module = "androidx.datastore:datastore-preferences",                 version.ref = "datastorePreferences" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth", version.ref = "firebaseAuth" }
+firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics", version.ref = "firebaseCrashlytics" }
 
 [plugins]
 android-application   = { id = "com.android.application",                     version.ref = "agp" }
 kotlin-android        = { id = "org.jetbrains.kotlin.android",                version.ref = "kotlin" }
 kotlin-compose        = { id = "org.jetbrains.kotlin.plugin.compose",         version.ref = "kotlin" }
 kotlin-serialization  = { id = "org.jetbrains.kotlin.plugin.serialization",   version.ref = "kotlin" }
+google-gms-google-services = { id = "com.google.gms.google-services", version.ref = "googleGmsGoogleServices" }
+google-firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "googleFirebaseCrashlytics" }

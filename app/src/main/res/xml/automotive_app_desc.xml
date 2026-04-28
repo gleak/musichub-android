@@ -6,6 +6,6 @@
 
     Only the `media` capability is claimed — no messaging, no template UI.
 -->
-<automotiveApp>
+<automotiveApp xmlns:android="http://schemas.android.com/apk/res/android">
     <uses name="media" />
 </automotiveApp>

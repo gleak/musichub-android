@@ -32,6 +32,7 @@ internal object LibraryTree {
     const val ROOT_ID = "root"
     const val ALL_SONGS_ID = "all-songs"
     const val PLAYLISTS_ID = "playlists"
+    const val LYRICS_ID = "lyrics"
 
     private const val PLAYLIST_PREFIX = "playlist:"
     private const val SONG_PREFIX = "song:"
@@ -45,15 +46,22 @@ internal object LibraryTree {
     suspend fun root(): MediaItem = browsable(ROOT_ID, "MediaPlayer")
 
     /** Children of [parentId], or `null` if the id is unrecognised. */
-    suspend fun children(parentId: String): List<MediaItem>? = when {
-        parentId == ROOT_ID -> listOf(
-            browsable(ALL_SONGS_ID, "All songs"),
-            browsable(PLAYLISTS_ID, "Playlists"),
-        )
-        parentId == ALL_SONGS_ID -> allSongs()
+    suspend fun children(parentId: String, currentSongId: Long? = null): List<MediaItem>? = when {
+        parentId == ROOT_ID -> {
+            val list = mutableListOf(
+                browsable(ALL_SONGS_ID, "All songs", type = MediaMetadata.MEDIA_TYPE_ALBUM),
+                browsable(PLAYLISTS_ID, "Playlists", type = MediaMetadata.MEDIA_TYPE_PLAYLIST),
+            )
+            if (currentSongId != null) {
+                list.add(infoItem("--- Lyrics ---"))
+                list.addAll(lyrics(currentSongId))
+            }
+            list
+        }
+        parentId == ALL_SONGS_ID -> allSongs(currentSongId)
         parentId == PLAYLISTS_ID -> playlists()
         parentId.startsWith(PLAYLIST_PREFIX) ->
-            parentId.removePrefix(PLAYLIST_PREFIX).toLongOrNull()?.let { playlistSongs(it) }
+            parentId.removePrefix(PLAYLIST_PREFIX).toLongOrNull()?.let { playlistSongs(it, currentSongId) }
         else -> null
     }
 
@@ -62,6 +70,7 @@ internal object LibraryTree {
         mediaId == ROOT_ID -> root()
         mediaId == ALL_SONGS_ID -> browsable(ALL_SONGS_ID, "All songs")
         mediaId == PLAYLISTS_ID -> browsable(PLAYLISTS_ID, "Playlists")
+        mediaId == LYRICS_ID -> browsable(LYRICS_ID, "Lyrics")
         mediaId.startsWith(SONG_PREFIX) ->
             mediaId.removePrefix(SONG_PREFIX).toLongOrNull()?.let { songLeaf(it) }
         mediaId.startsWith(PLAYLIST_PREFIX) -> {
@@ -107,6 +116,42 @@ internal object LibraryTree {
         return detail.songs.map { playableSong(it) }
     }
 
+    suspend fun lyrics(songId: Long): List<MediaItem> {
+        return try {
+            val lines = Network.api.getLyrics(songId)
+            if (lines.isEmpty()) {
+                listOf(infoItem("No lyrics found for this song"))
+            } else {
+                lines.mapIndexed { index, line ->
+                    MediaItem.Builder()
+                        .setMediaId("lyric:$songId:$index")
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(line.text)
+                                .setIsBrowsable(false)
+                                .setIsPlayable(false)
+                                .build()
+                        )
+                        .build()
+                }
+            }
+        } catch (e: Exception) {
+            listOf(infoItem("Error loading lyrics"))
+        }
+    }
+
+    fun infoItem(message: String): MediaItem =
+        MediaItem.Builder()
+            .setMediaId("info:${message.hashCode()}")
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(message)
+                    .setIsBrowsable(false)
+                    .setIsPlayable(false)
+                    .build()
+            )
+            .build()
+
     /** Single playable `MediaItem` for a standalone song tap (all-songs). */
     suspend fun playableForSong(songId: Long): MediaItem {
         // AA tapped a single song under /all-songs — use the stub's tags if
@@ -130,9 +175,16 @@ internal object LibraryTree {
 
     // --- internals -----------------------------------------------------------
 
-    private suspend fun allSongs(): List<MediaItem> {
+    private suspend fun allSongs(currentSongId: Long? = null): List<MediaItem> {
         val page = Network.api.listSongs(query = null, page = 0, size = PAGE_SIZE)
-        return page.items.map { songLeaf(it) }
+        val list = mutableListOf<MediaItem>()
+        for (song in page.items) {
+            list.add(songLeaf(song))
+            if (song.id == currentSongId) {
+                list.addAll(lyrics(song.id))
+            }
+        }
+        return list
     }
 
     private suspend fun playlists(): List<MediaItem> =
@@ -144,18 +196,21 @@ internal object LibraryTree {
             )
         }
 
-    private suspend fun playlistSongs(playlistId: Long): List<MediaItem> {
+    private suspend fun playlistSongs(playlistId: Long, currentSongId: Long? = null): List<MediaItem> {
         val detail = Network.api.getPlaylist(playlistId)
-        return detail.songs.mapIndexed { index, song ->
-            // Browse-side leaf: NOT playable as-is (no URI). Playback goes
-            // through MediaLibrarySession.Callback.onSetMediaItems, which
-            // recognises the `pl:` prefix and expands into the full queue
-            // starting at this position.
-            MediaItem.Builder()
-                .setMediaId("$PL_LEAF_PREFIX$playlistId:$index:${song.id}")
-                .setMediaMetadata(song.asBrowseMetadata(playable = true))
-                .build()
+        val list = mutableListOf<MediaItem>()
+        for ((index, song) in detail.songs.withIndex()) {
+            list.add(
+                MediaItem.Builder()
+                    .setMediaId("$PL_LEAF_PREFIX$playlistId:$index:${song.id}")
+                    .setMediaMetadata(song.asBrowseMetadata(playable = true))
+                    .build()
+            )
+            if (song.id == currentSongId) {
+                list.addAll(lyrics(song.id))
+            }
         }
+        return list
     }
 
     /** Browse leaf for a song that plays as a single item (under all-songs). */
@@ -187,14 +242,19 @@ internal object LibraryTree {
             .setMediaMetadata(song.asBrowseMetadata(playable = true))
             .build()
 
-    private fun browsable(mediaId: String, title: String, subtitle: String? = null): MediaItem =
+    private fun browsable(
+        mediaId: String,
+        title: String,
+        subtitle: String? = null,
+        type: Int? = null
+    ): MediaItem =
         MediaItem.Builder()
             .setMediaId(mediaId)
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setIsBrowsable(true)
                     .setIsPlayable(false)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                    .apply { if (type != null) setMediaType(type) }
                     .setTitle(title)
                     .apply { if (subtitle != null) setSubtitle(subtitle) }
                     .build()

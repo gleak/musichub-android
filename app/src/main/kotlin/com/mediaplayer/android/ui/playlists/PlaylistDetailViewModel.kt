@@ -2,6 +2,8 @@ package com.mediaplayer.android.ui.playlists
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.util.UnstableApi
+import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.PlaylistRepository
 import com.mediaplayer.android.data.dto.PlaylistDetailDto
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +22,7 @@ sealed interface PlaylistDetailUiState {
  * passed in explicitly rather than via SavedStateHandle to keep this
  * VM simple to construct from Compose's `viewModel(key = ...)`.
  */
+@UnstableApi
 class PlaylistDetailViewModel(
     private val playlistId: Long,
     private val repository: PlaylistRepository = PlaylistRepository(),
@@ -31,13 +34,17 @@ class PlaylistDetailViewModel(
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    val downloadedIds: StateFlow<Set<Long>> = DownloadRepository.downloadedIds
+
     init {
         refresh()
     }
 
     fun refresh() {
         viewModelScope.launch {
-            _state.value = PlaylistDetailUiState.Loading
+            if (_state.value !is PlaylistDetailUiState.Success) {
+                _state.value = PlaylistDetailUiState.Loading
+            }
             _state.value = try {
                 PlaylistDetailUiState.Success(repository.detail(playlistId))
             } catch (t: Throwable) {
@@ -78,5 +85,15 @@ class PlaylistDetailViewModel(
                 refresh()
             }
         }
+    }
+
+    fun downloadPlaylist() {
+        val songs = (state.value as? PlaylistDetailUiState.Success)?.playlist?.songs ?: return
+        DownloadRepository.downloadAll(songs.map { it.id })
+    }
+
+    fun removePlaylistDownloads() {
+        val songs = (state.value as? PlaylistDetailUiState.Success)?.playlist?.songs ?: return
+        DownloadRepository.removeAll(songs.map { it.id })
     }
 }

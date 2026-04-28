@@ -45,7 +45,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.CatalogRepository
+import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.dto.AlbumDto
 import com.mediaplayer.android.data.dto.ArtistDetailDto
 import com.mediaplayer.android.data.dto.SongDto
@@ -61,6 +63,7 @@ sealed interface ArtistUiState {
     data class Error(val message: String) : ArtistUiState
 }
 
+@UnstableApi
 class ArtistViewModel(
     private val name: String,
     private val repository: CatalogRepository = CatalogRepository(),
@@ -70,6 +73,8 @@ class ArtistViewModel(
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    val downloadedIds: StateFlow<Set<Long>> = DownloadRepository.downloadedIds
 
     init { load() }
 
@@ -113,6 +118,7 @@ fun ArtistScreen(
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    val downloadedIds by viewModel.downloadedIds.collectAsStateWithLifecycle()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -140,6 +146,7 @@ fun ArtistScreen(
                 is ArtistUiState.Error -> CenteredMessage("Couldn't load artist.\n${s.message}")
                 is ArtistUiState.Success -> ArtistBody(
                     detail = s.detail,
+                    downloadedIds = downloadedIds,
                     onPlayFromIndex = onPlayFromIndex,
                     onAlbumClick = onAlbumClick,
                 )
@@ -151,6 +158,7 @@ fun ArtistScreen(
 @Composable
 private fun ArtistBody(
     detail: ArtistDetailDto,
+    downloadedIds: Set<Long>,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
     onAlbumClick: (name: String, artist: String) -> Unit,
 ) {
@@ -187,8 +195,12 @@ private fun ArtistBody(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
-            itemsIndexed(items = detail.songs, key = { idx, song -> "song-$idx-${song.id}" }) { idx, song ->
-                SongRow(song = song, onClick = { onPlayFromIndex(detail.songs, idx) })
+            itemsIndexed(items = detail.songs, key = { _, song -> "song-${song.id}" }) { idx, song ->
+                SongRow(
+                    song = song,
+                    isDownloaded = song.id in downloadedIds,
+                    onClick = { onPlayFromIndex(detail.songs, idx) },
+                )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }

@@ -7,6 +7,7 @@ import androidx.media3.datasource.cache.NoOpCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.offline.DownloadManager
+import androidx.media3.exoplayer.scheduler.Requirements
 import com.mediaplayer.android.data.Network
 import java.io.File
 import java.util.concurrent.Executors
@@ -52,6 +53,9 @@ object DownloadRoot {
             getDownloadCache(app),
             OkHttpDataSource.Factory(Network.okHttp),
             Executors.newFixedThreadPool(DOWNLOAD_THREADS),
-        ).also { _manager = it }
+        ).also {
+            it.requirements = Requirements(Requirements.NETWORK_UNMETERED)
+            _manager = it
+        }
     }
 }

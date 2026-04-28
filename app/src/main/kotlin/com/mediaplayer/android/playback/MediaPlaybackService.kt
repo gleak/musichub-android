@@ -1,5 +1,6 @@
 package com.mediaplayer.android.playback
 
+import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -19,6 +20,7 @@ import androidx.media3.session.SessionError
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.mediaplayer.android.MainActivity
 import com.mediaplayer.android.data.Network
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,15 +74,14 @@ class MediaPlaybackService : MediaLibraryService() {
             .setCache(streamCache)
             .setUpstreamDataSourceFactory(httpFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-        // M13: check the persistent download cache first, then fall back to
-        // the streaming cache, then network. setCacheWriteDataSinkFactory(null)
-        // ensures playback never writes into the download cache — only
-        // MediaDownloadService may do that.
+        // Playback writes into the download cache so streamed songs become
+        // available offline automatically. DownloadRepository.download() is
+        // called after enough of the song is listened to, which causes
+        // DownloadManager to find the data already cached and mark it complete.
         val downloadCache = DownloadRoot.getDownloadCache(this)
         val cacheFactory = CacheDataSource.Factory()
             .setCache(downloadCache)
             .setUpstreamDataSourceFactory(streamCacheFactory)
-            .setCacheWriteDataSinkFactory(null)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         val dataSourceFactory = DefaultDataSource.Factory(this, cacheFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
@@ -100,7 +101,17 @@ class MediaPlaybackService : MediaLibraryService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
-        mediaSession = MediaLibrarySession.Builder(this, player, LibraryCallback()).build()
+        val intent = Intent(this, MainActivity::class.java)
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        mediaSession = MediaLibrarySession.Builder(this, player, LibraryCallback())
+            .setSessionActivity(pendingIntent)
+            .build()
 
         // M13: bind the hardware Equalizer to this player's audio session.
         // audioSessionId is allocated at build time; 0 means unsupported.
@@ -117,6 +128,13 @@ class MediaPlaybackService : MediaLibraryService() {
         prefetch = PrefetchOrchestrator(this, streamCache, httpFactory).also {
             it.install(player)
         }
+
+        player.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                mediaSession?.notifyChildrenChanged(LibraryTree.ROOT_ID, 10, null)
+                mediaSession?.notifyChildrenChanged(LibraryTree.ALL_SONGS_ID, 100, null)
+            }
+        })
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
@@ -163,6 +181,18 @@ class MediaPlaybackService : MediaLibraryService() {
      */
     private inner class LibraryCallback : MediaLibrarySession.Callback {
 
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            val connectionResult = super.onConnect(session, controller)
+            val availableSessionCommands = connectionResult.availableSessionCommands.buildUpon()
+            return MediaSession.ConnectionResult.accept(
+                availableSessionCommands.build(),
+                connectionResult.availablePlayerCommands
+            )
+        }
+
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
@@ -191,7 +221,19 @@ class MediaPlaybackService : MediaLibraryService() {
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
             serviceScope.future {
-                val items = LibraryTree.children(parentId)
+                val currentItem = session.player.currentMediaItem
+                val currentSongId = currentItem?.mediaId?.removePrefix("song:")?.toLongOrNull()
+
+                if (parentId == LibraryTree.LYRICS_ID) {
+                    val items = if (currentSongId != null) {
+                        LibraryTree.lyrics(currentSongId)
+                    } else {
+                        listOf(LibraryTree.infoItem("No song currently playing"))
+                    }
+                    return@future LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
+                }
+
+                val items = LibraryTree.children(parentId, currentSongId)
                 if (items == null) {
                     LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
                 } else {
@@ -286,9 +328,11 @@ class MediaPlaybackService : MediaLibraryService() {
                     if (id.startsWith("song:")) {
                         val songId = id.removePrefix("song:").toLongOrNull()
                         if (songId != null) {
-                            val playable = LibraryTree.playableForSong(songId)
+                            val mediaItem = mediaItems[0].buildUpon()
+                                .setUri(Network.streamUrl(songId))
+                                .build()
                             return@future MediaSession.MediaItemsWithStartPosition(
-                                listOf(playable),
+                                listOf(mediaItem),
                                 0,
                                 startPositionMs
                             )

@@ -5,6 +5,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.google.gms.google.services)
+    alias(libs.plugins.google.firebase.crashlytics)
 }
 
 /**
@@ -37,6 +39,16 @@ android {
     namespace = "com.mediaplayer.android"
     compileSdk = 36
 
+
+    signingConfigs {
+        create("myConfig") {
+            storeFile = file("C:\\Users\\Antonio\\android-keystore")
+            storePassword = "ivenutalt" // Sostituisci con la tua password
+            keyAlias = "app"
+            keyPassword = "ivenutalt" // Sostituisci con la tua password
+        }
+    }
+
     defaultConfig {
         applicationId = "com.mediaplayer.android"
         minSdk = 24
@@ -50,15 +62,17 @@ android {
     buildTypes {
         val GOOGLE_WEB_CLIENT_ID = localProps.getProperty(
             "google.web.client.id",
-            "447608520923-gmoou57vgvul7fb17ivbqts3hr6cigl1.apps.googleusercontent.com"
+            "447608520923-gcuoeisusmvvjgh0g0pe2jc8ickctmcc.apps.googleusercontent.com"
         )
         debug {
+            signingConfig = signingConfigs.getByName("myConfig")
             val baseUrl = resolveBaseUrl("debug", fallback = "http://10.0.2.2:8080")
             buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
             buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$GOOGLE_WEB_CLIENT_ID\"")
             isMinifyEnabled = false
         }
         release {
+            signingConfig = signingConfigs.getByName("myConfig")
             val baseUrl = resolveBaseUrl("release", fallback = RELEASE_URL_DEFAULT)
             buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
             buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$GOOGLE_WEB_CLIENT_ID\"")
@@ -114,6 +128,8 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.media3.common.ktx)
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.crashlytics)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // Coroutines. `-guava` bridges Media3's ListenableFuture-based

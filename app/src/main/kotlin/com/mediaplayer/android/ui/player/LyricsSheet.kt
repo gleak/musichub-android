@@ -32,12 +32,11 @@ import androidx.compose.ui.unit.dp
 import com.mediaplayer.android.data.LyricsRepository
 import com.mediaplayer.android.data.dto.LyricLineDto
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LyricsSheet(
+fun LyricsView(
     songId: Long,
     positionMs: Long,
-    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
     repository: LyricsRepository = remember { LyricsRepository() },
 ) {
     var lines by remember(songId) { mutableStateOf<List<LyricLineDto>>(emptyList()) }
@@ -69,54 +68,68 @@ fun LyricsSheet(
         }
     }
 
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = "Lyrics",
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        when {
+            loading -> Box(
+                modifier = Modifier.fillMaxWidth().height(200.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(28.dp))
+            }
+            noLyrics -> Box(
+                modifier = Modifier.fillMaxWidth().padding(32.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "No lyrics available",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            else -> LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.heightIn(max = 420.dp),
+            ) {
+                itemsIndexed(items = lines, key = { i, _ -> i }) { index, line ->
+                    Text(
+                        text = line.text,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (index == activeIndex)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LyricsSheet(
+    songId: Long,
+    positionMs: Long,
+    onDismiss: () -> Unit,
+) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
-            Text(
-                text = "Lyrics",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            when {
-                loading -> Box(
-                    modifier = Modifier.fillMaxWidth().height(200.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                }
-                noLyrics -> Box(
-                    modifier = Modifier.fillMaxWidth().padding(32.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "No lyrics available",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                else -> LazyColumn(
-                    state = listState,
-                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.heightIn(max = 420.dp),
-                ) {
-                    itemsIndexed(items = lines, key = { i, _ -> i }) { index, line ->
-                        Text(
-                            text = line.text,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (index == activeIndex)
-                                MaterialTheme.colorScheme.primary
-                            else
-                                MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-            }
-        }
+        LyricsView(
+            songId = songId,
+            positionMs = positionMs,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
     }
 }

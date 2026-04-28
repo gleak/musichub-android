@@ -77,8 +77,9 @@ class FindViewModel(
             try {
                 val updated = repository.select(requestId, candidate.id)
                 _state.value = FindUiState.Tracking(updated)
+                var backoff = POLL_MS
                 while (true) {
-                    delay(POLL_MS)
+                    delay(backoff)
                     val fresh = repository.detail(requestId)
                     _state.value = FindUiState.Tracking(fresh)
                     if (fresh.status.isTerminal) {
@@ -87,6 +88,7 @@ class FindViewModel(
                         startRequestsTracking()
                         break
                     }
+                    backoff = (backoff * 2).coerceAtMost(MAX_POLL_MS)
                 }
             } catch (t: Throwable) {
                 _state.value = FindUiState.Error(t.message ?: "Unknown error")
@@ -116,11 +118,13 @@ class FindViewModel(
         requestsJob?.cancel()
         requestsJob = viewModelScope.launch {
             try {
+                var backoff = POLL_MS
                 while (true) {
                     val fresh = repository.list().filter { !it.status.isTerminal }
                     _activeRequests.value = fresh
                     if (fresh.isEmpty()) break
-                    delay(POLL_MS)
+                    delay(backoff)
+                    backoff = (backoff * 2).coerceAtMost(MAX_POLL_MS)
                 }
             } catch (_: Throwable) {
                 // Best-effort — silently stop polling on network error.
@@ -136,6 +140,7 @@ class FindViewModel(
 
     private companion object {
         const val POLL_MS = 2_000L
+        const val MAX_POLL_MS = 10_000L
         const val TERMINAL_LINGER_MS = 2_000L
     }
 }

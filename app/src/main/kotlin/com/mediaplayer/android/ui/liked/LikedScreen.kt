@@ -53,6 +53,7 @@ fun LikedScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    val downloadedIds by viewModel.downloadedIds.collectAsStateWithLifecycle()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -77,6 +78,7 @@ fun LikedScreen(
                 is LikedUiState.Error -> CenteredMessage("Couldn't load liked songs.\n${s.message}")
                 is LikedUiState.Success -> LikedBody(
                     songs = s.songs,
+                    downloadedIds = downloadedIds,
                     onPlayFromIndex = onPlayFromIndex,
                     onShufflePlay = onShufflePlay,
                     onUnlike = viewModel::unlike,
@@ -89,6 +91,7 @@ fun LikedScreen(
 @Composable
 private fun LikedBody(
     songs: List<SongDto>,
+    downloadedIds: Set<Long>,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
     onShufflePlay: (List<SongDto>) -> Unit,
     onUnlike: (Long) -> Unit,
@@ -121,6 +124,7 @@ private fun LikedBody(
                 SongRow(
                     song = song,
                     isLiked = true,
+                    isDownloaded = song.id in downloadedIds,
                     onClick = { onPlayFromIndex(songs, idx) },
                     onToggleLike = { onUnlike(song.id) },
                 )

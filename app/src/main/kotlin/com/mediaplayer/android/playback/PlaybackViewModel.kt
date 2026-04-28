@@ -9,6 +9,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
+import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.HistoryRepository
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.SongDto
@@ -137,7 +138,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     _positionMs.value = c.currentPosition.coerceAtLeast(0)
                     if (trackedDurationMs == 0L && c.duration > 0) trackedDurationMs = c.duration
                 }
-                delay(POSITION_POLL_MS)
+                delay(if (controller?.isPlaying == true) POSITION_POLL_MS else POSITION_POLL_IDLE_MS)
             }
         }
     }
@@ -252,6 +253,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             viewModelScope.launch {
                 try { historyRepository.record(id, listened) } catch (_: Throwable) {}
             }
+            if (!DownloadRepository.isDownloaded(id)) {
+                DownloadRepository.download(id)
+            }
         }
     }
 
@@ -266,7 +270,8 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     }
 
     private companion object {
-        const val POSITION_POLL_MS = 500L
+        const val POSITION_POLL_MS = 1_000L
+        const val POSITION_POLL_IDLE_MS = 2_000L
         const val LISTEN_THRESHOLD_MS = 30_000L
         const val PREF_SHUFFLE = "shuffle"
         const val PREF_REPEAT = "repeat"

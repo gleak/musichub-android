@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Equalizer
@@ -91,9 +93,12 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
     var showEqualizer by remember { mutableStateOf(false) }
     var showSleepMenu by remember { mutableStateOf(false) }
 
+    val scrollState = rememberScrollState()
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(scrollState)
             .padding(horizontal = 24.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -103,7 +108,7 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = { showLyrics = true }) {
+            IconButton(onClick = { showLyrics = !showLyrics }) {
                 Icon(
                     imageVector = Icons.Filled.TextSnippet,
                     contentDescription = "Lyrics",
@@ -283,18 +288,20 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
         }
 
         Spacer(Modifier.height(8.dp))
+
+        if (showLyrics) {
+            LyricsView(
+                songId = current.id,
+                positionMs = position,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
     }
 
     if (showQueue) {
         QueueSheet(viewModel = viewModel, onDismiss = { showQueue = false })
-    }
-
-    if (showLyrics) {
-        LyricsSheet(
-            songId = current.id,
-            positionMs = position,
-            onDismiss = { showLyrics = false },
-        )
     }
 
     if (showEqualizer) {

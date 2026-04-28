@@ -2,6 +2,8 @@ package com.mediaplayer.android.ui.liked
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.util.UnstableApi
+import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.LikedRepository
 import com.mediaplayer.android.data.dto.SongDto
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +17,7 @@ sealed interface LikedUiState {
     data class Error(val message: String) : LikedUiState
 }
 
+@UnstableApi
 class LikedViewModel(
     private val repository: LikedRepository = LikedRepository(),
 ) : ViewModel() {
@@ -24,6 +27,8 @@ class LikedViewModel(
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    val downloadedIds: StateFlow<Set<Long>> = DownloadRepository.downloadedIds
 
     init { refresh() }
 

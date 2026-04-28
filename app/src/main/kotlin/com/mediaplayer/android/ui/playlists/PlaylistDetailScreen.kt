@@ -21,10 +21,13 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.Button
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,9 +50,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -79,6 +85,8 @@ fun PlaylistDetailScreen(
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    val downloadedIds by viewModel.downloadedIds.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     var sheetSong by remember { mutableStateOf<SongDto?>(null) }
     var addSongsOpen by remember { mutableStateOf(false) }
@@ -109,6 +117,16 @@ fun PlaylistDetailScreen(
                 },
                 actions = {
                     if (successState != null) {
+                        IconButton(
+                            onClick = viewModel::pullRefresh,
+                            enabled = !isRefreshing,
+                        ) {
+                            if (isRefreshing) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                            }
+                        }
                         IconButton(onClick = { addSongsOpen = true }) {
                             Icon(Icons.Filled.Add, contentDescription = "Add songs")
                         }
@@ -117,24 +135,34 @@ fun PlaylistDetailScreen(
             )
         },
     ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = viewModel::pullRefresh,
-            modifier = Modifier.fillMaxSize().padding(padding),
-        ) {
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when (val s = state) {
                 PlaylistDetailUiState.Loading -> CenteredSpinner()
                 is PlaylistDetailUiState.Error -> CenteredMessage(
                     "Couldn't load playlist.\n${s.message}"
                 )
-                is PlaylistDetailUiState.Success -> PlaylistDetailBody(
-                    playlist = s.playlist,
-                    onPlayFromIndex = onPlayFromIndex,
-                    onShufflePlay = onShufflePlay,
-                    onRemoveSong = viewModel::removeSong,
-                    onReorderSongs = viewModel::reorderSongs,
-                    onLongPressSong = { sheetSong = it },
-                )
+                is PlaylistDetailUiState.Success -> {
+                    val songIds = s.playlist.songs.map { it.id }
+                    val downloadedCount = songIds.count { it in downloadedIds }
+                    PlaylistDetailBody(
+                        playlist = s.playlist,
+                        downloadedCount = downloadedCount,
+                        downloadedIds = downloadedIds,
+                        onPlayFromIndex = onPlayFromIndex,
+                        onShufflePlay = onShufflePlay,
+                        onRemoveSong = viewModel::removeSong,
+                        onReorderSongs = viewModel::reorderSongs,
+                        onLongPressSong = { sheetSong = it },
+                        onDownload = {
+                            viewModel.downloadPlaylist()
+                            val cm = context.getSystemService(ConnectivityManager::class.java)
+                            val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+                            val onWifi = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
+                            if (!onWifi) lastAdded = "Download queued — will start on Wi-Fi"
+                        },
+                        onRemoveDownloads = viewModel::removePlaylistDownloads,
+                    )
+                }
             }
         }
     }
@@ -166,14 +194,23 @@ fun PlaylistDetailScreen(
 @Composable
 private fun PlaylistDetailBody(
     playlist: PlaylistDetailDto,
+    downloadedCount: Int,
+    downloadedIds: Set<Long>,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
     onShufflePlay: (List<SongDto>) -> Unit,
     onRemoveSong: (Long) -> Unit,
     onReorderSongs: (List<Long>) -> Unit,
     onLongPressSong: (SongDto) -> Unit,
+    onDownload: () -> Unit,
+    onRemoveDownloads: () -> Unit,
 ) {
     val lazyListState = rememberLazyListState()
-    var songs by remember(playlist.songs) { mutableStateOf(playlist.songs) }
+    var songs by remember { mutableStateOf(playlist.songs) }
+    var isDragging by remember { mutableStateOf(false) }
+
+    LaunchedEffect(playlist.songs) {
+        if (!isDragging) songs = playlist.songs
+    }
 
     val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
         // Subtract 1 to account for the header item at LazyColumn index 0.
@@ -184,8 +221,9 @@ private fun PlaylistDetailBody(
 
     LaunchedEffect(reorderState) {
         var wasEverDragging = false
-        snapshotFlow { reorderState.isAnyItemDragging }.collect { isDragging ->
-            if (isDragging) {
+        snapshotFlow { reorderState.isAnyItemDragging }.collect { dragging ->
+            isDragging = dragging
+            if (dragging) {
                 wasEverDragging = true
             } else if (wasEverDragging) {
                 onReorderSongs(songs.map { it.id })
@@ -198,10 +236,13 @@ private fun PlaylistDetailBody(
         item(key = "header") {
             Header(
                 playlist = playlist,
+                downloadedCount = downloadedCount,
                 onPlayAll = {
                     if (songs.isNotEmpty()) onPlayFromIndex(songs, 0)
                 },
                 onShufflePlay = { onShufflePlay(songs) },
+                onDownload = onDownload,
+                onRemoveDownloads = onRemoveDownloads,
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
@@ -224,10 +265,9 @@ private fun PlaylistDetailBody(
         } else {
             itemsIndexed(
                 items = songs,
-                key = { idx, song -> "$idx-${song.id}" },
+                key = { _, song -> song.id },
             ) { idx, song ->
-                val itemKey = "$idx-${song.id}"
-                ReorderableItem(reorderState, key = itemKey) {
+                ReorderableItem(reorderState, key = song.id) {
                     val dismissState = rememberSwipeToDismissBoxState(
                         confirmValueChange = { value ->
                             if (value == SwipeToDismissBoxValue.EndToStart) {
@@ -273,6 +313,7 @@ private fun PlaylistDetailBody(
                             }
                             SongRow(
                                 song = song,
+                                isDownloaded = song.id in downloadedIds,
                                 onClick = { onPlayFromIndex(songs, idx) },
                                 onLongPress = { onLongPressSong(song) },
                                 modifier = Modifier.weight(1f),
@@ -289,34 +330,23 @@ private fun PlaylistDetailBody(
 @Composable
 private fun Header(
     playlist: PlaylistDetailDto,
+    downloadedCount: Int,
     onPlayAll: () -> Unit,
     onShufflePlay: () -> Unit,
+    onDownload: () -> Unit,
+    onRemoveDownloads: () -> Unit,
 ) {
-    Row(
+    val total = playlist.songs.size
+    val allDownloaded = total > 0 && downloadedCount == total
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(48.dp),
-            )
-        }
-
-        Spacer(Modifier.width(16.dp))
-
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
@@ -327,27 +357,57 @@ private fun Header(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = pluralizeSongsDetail(playlist.songs.size),
+                text = if (downloadedCount > 0 && !allDownloaded)
+                    "${pluralizeSongsDetail(total)} · $downloadedCount downloaded"
+                else
+                    pluralizeSongsDetail(total),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.size(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onPlayAll,
-                    enabled = playlist.songs.isNotEmpty(),
-                ) {
-                    Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Play")
-                }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val buttonPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            Button(
+                onClick = onPlayAll,
+                enabled = playlist.songs.isNotEmpty(),
+                modifier = Modifier.weight(1f),
+                contentPadding = buttonPadding,
+            ) {
+                Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
+                Spacer(Modifier.width(4.dp))
+                Text("Play", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            OutlinedButton(
+                onClick = onShufflePlay,
+                enabled = playlist.songs.isNotEmpty(),
+                modifier = Modifier.weight(1f),
+                contentPadding = buttonPadding,
+            ) {
+                Icon(imageVector = Icons.Filled.Shuffle, contentDescription = null)
+                Spacer(Modifier.width(4.dp))
+                Text("Shuffle", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (playlist.songs.isNotEmpty()) {
                 OutlinedButton(
-                    onClick = onShufflePlay,
-                    enabled = playlist.songs.isNotEmpty(),
+                    onClick = if (allDownloaded) onRemoveDownloads else onDownload,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = buttonPadding,
                 ) {
-                    Icon(imageVector = Icons.Filled.Shuffle, contentDescription = null)
+                    val isDownloaded = allDownloaded
+                    Icon(
+                        imageVector = if (isDownloaded) Icons.Filled.CloudDone else Icons.Filled.CloudDownload,
+                        contentDescription = if (isDownloaded) "Remove downloads" else "Download",
+                    )
                     Spacer(Modifier.width(4.dp))
-                    Text("Shuffle")
+                    Text(
+                        text = if (isDownloaded) "Done" else "Download",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
