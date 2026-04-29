@@ -59,7 +59,7 @@ fun SongRow(
                 onClick = onClick,
                 onLongClick = onLongPress,
             )
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CoverArt(song = song)
@@ -72,40 +72,26 @@ fun SongRow(
         ) {
             Text(
                 text = song.title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            SubtitleRow(song = song, onArtistClick = onArtistClick, onAlbumClick = onAlbumClick)
+            SubtitleRow(song = song, onArtistClick = onArtistClick, onAlbumClick = onAlbumClick, isDownloaded = isDownloaded)
         }
 
-        Spacer(Modifier.width(12.dp))
-
-        Text(
-            text = formatDuration(song.durationMs),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Spacer(Modifier.width(8.dp))
 
         if (onToggleLike != null) {
-            IconButton(onClick = onToggleLike, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = onToggleLike, modifier = Modifier.size(40.dp)) {
                 Icon(
                     imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = if (isLiked) "Unlike" else "Like",
                     tint = if (isLiked) MaterialTheme.colorScheme.primary
                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(22.dp),
                 )
             }
-        }
-        if (isDownloaded) {
-            Icon(
-                imageVector = Icons.Filled.FileDownloadDone,
-                contentDescription = "Downloaded",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp),
-            )
         }
     }
 }
@@ -145,13 +131,22 @@ private fun SubtitleRow(
     song: SongDto,
     onArtistClick: ((String) -> Unit)?,
     onAlbumClick: ((String, String) -> Unit)?,
+    isDownloaded: Boolean,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
+        if (isDownloaded) {
+            Icon(
+                imageVector = Icons.Filled.FileDownloadDone,
+                contentDescription = "Downloaded",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(14.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+        }
         Text(
             text = song.artist,
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (onArtistClick != null) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = if (onArtistClick != null)
@@ -160,15 +155,14 @@ private fun SubtitleRow(
         )
         if (!song.album.isNullOrBlank()) {
             Text(
-                text = " · ",
-                style = MaterialTheme.typography.bodyMedium,
+                text = " • ",
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
                 text = song.album,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (onAlbumClick != null) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = if (onAlbumClick != null)
@@ -179,9 +173,3 @@ private fun SubtitleRow(
     }
 }
 
-private fun formatDuration(ms: Long): String {
-    val totalSeconds = ms / 1000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return String.format(Locale.US, "%d:%02d", minutes, seconds)
-}

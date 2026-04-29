@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -109,8 +110,7 @@ fun SearchScreen(
                                         songs = recentSongs,
                                         onSongClick = onSongClick,
                                     )
-                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                                }
+                                    }
                             }
                             items(items = s.songs, key = { it.id }) { song ->
                                 SongRow(
@@ -123,7 +123,6 @@ fun SearchScreen(
                                     onArtistClick = onArtistClick,
                                     onAlbumClick = onAlbumClick,
                                 )
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             }
                         }
                     }
@@ -228,46 +227,61 @@ private fun BrowseSections(
     onAlbumListClick: () -> Unit,
     onArtistListClick: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxSize().padding(top = 8.dp)) {
-        BrowseRow(
-            label = "Albums",
-            icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-            onSeeAll = onAlbumListClick,
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = "Browse all",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
         )
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        BrowseRow(
-            label = "Artists",
-            icon = { Icon(Icons.Filled.Person, contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-            onSeeAll = onArtistListClick,
-        )
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BrowseTile(
+                label = "Albums",
+                color = androidx.compose.ui.graphics.Color(0xFFE8115B),
+                icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null,
+                    tint = androidx.compose.ui.graphics.Color.White) },
+                onClick = onAlbumListClick,
+                modifier = Modifier.weight(1f),
+            )
+            BrowseTile(
+                label = "Artists",
+                color = androidx.compose.ui.graphics.Color(0xFF8400E7),
+                icon = { Icon(Icons.Filled.Person, contentDescription = null,
+                    tint = androidx.compose.ui.graphics.Color.White) },
+                onClick = onArtistListClick,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 
 @Composable
-private fun BrowseRow(
+private fun BrowseTile(
     label: String,
+    color: androidx.compose.ui.graphics.Color,
     icon: @Composable () -> Unit,
-    onSeeAll: () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onSeeAll)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    Box(
+        modifier = modifier
+            .height(96.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(color)
+            .clickable(onClick = onClick)
+            .padding(12.dp),
     ) {
-        icon()
         Text(
             text = label,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleLarge,
+            color = androidx.compose.ui.graphics.Color.White,
+            modifier = Modifier.align(Alignment.TopStart),
         )
-        TextButton(onClick = onSeeAll) { Text("See all") }
+        Box(modifier = Modifier.align(Alignment.BottomEnd)) {
+            icon()
+        }
     }
 }
 

@@ -48,9 +48,14 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.CatalogRepository
 import com.mediaplayer.android.data.DownloadRepository
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.graphics.Color
+import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.AlbumDto
 import com.mediaplayer.android.data.dto.ArtistDetailDto
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.CoverShape
+import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.search.SongRow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -124,10 +129,8 @@ fun ArtistScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = {
-                    val title = (state as? ArtistUiState.Success)?.detail?.name ?: artistName
-                    Text(text = title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                },
+                title = { },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -162,37 +165,43 @@ private fun ArtistBody(
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
     onAlbumClick: (name: String, artist: String) -> Unit,
 ) {
+    val coverModel = detail.songs.firstOrNull { it.hasCoverArt }?.let { Network.coverUrl(it.id) }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item(key = "header") {
-            ArtistHeader(
-                detail = detail,
-                onPlayAll = { if (detail.songs.isNotEmpty()) onPlayFromIndex(detail.songs, 0) },
+            SpotifyHero(
+                title = detail.name,
+                subtitle = "Artist • ${buildHeaderSubtitle(detail)}",
+                coverModel = coverModel,
+                coverShape = CoverShape.Circle,
+                onPlay = { if (detail.songs.isNotEmpty()) onPlayFromIndex(detail.songs, 0) },
+                onShuffle = {
+                    if (detail.songs.isNotEmpty()) onPlayFromIndex(detail.songs.shuffled(), 0)
+                },
+                playEnabled = detail.songs.isNotEmpty(),
             )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
 
         if (detail.albums.isNotEmpty()) {
             item(key = "albums-header") {
                 Text(
                     text = "Albums",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
             items(items = detail.albums, key = { "album-${it.name}" }) { album ->
                 AlbumTile(album = album, onClick = { onAlbumClick(album.name, album.artist) })
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
 
         if (detail.songs.isNotEmpty()) {
             item(key = "songs-header") {
                 Text(
-                    text = "Songs",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    text = "Popular",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
             itemsIndexed(items = detail.songs, key = { _, song -> "song-${song.id}" }) { idx, song ->
@@ -201,51 +210,6 @@ private fun ArtistBody(
                     isDownloaded = song.id in downloadedIds,
                     onClick = { onPlayFromIndex(detail.songs, idx) },
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ArtistHeader(detail: ArtistDetailDto, onPlayAll: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .clip(RoundedCornerShape(48.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Person,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(48.dp),
-            )
-        }
-        Spacer(Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = detail.name,
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = buildHeaderSubtitle(detail),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.size(4.dp))
-            Button(onClick = onPlayAll, enabled = detail.songs.isNotEmpty()) {
-                Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Play all")
             }
         }
     }

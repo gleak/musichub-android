@@ -32,6 +32,9 @@ reorderable = "2.4.3"
 credentials = "1.5.0"
 googleid = "1.1.1"
 
+# Color extraction for cover-driven gradient backdrops
+palette = "1.0.0"
+
 # Persistent key-value storage for auth state
 datastorePreferences = "1.1.4"
 googleGmsGoogleServices = "4.4.4"
@@ -85,6 +88,7 @@ androidx-credentials                = { module = "androidx.credentials:credentia
 androidx-credentials-play-services  = { module = "androidx.credentials:credentials-play-services-auth",      version.ref = "credentials" }
 googleid                            = { module = "com.google.android.libraries.identity.googleid:googleid",  version.ref = "googleid" }
 androidx-datastore-preferences      = { module = "androidx.datastore:datastore-preferences",                 version.ref = "datastorePreferences" }
+androidx-palette                    = { module = "androidx.palette:palette-ktx",                              version.ref = "palette" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth", version.ref = "firebaseAuth" }
 firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics", version.ref = "firebaseCrashlytics" }
 

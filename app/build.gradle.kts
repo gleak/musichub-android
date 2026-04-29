@@ -173,6 +173,9 @@ dependencies {
 
     // DataStore — persists "has signed in" flag across launches.
     implementation(libs.androidx.datastore.preferences)
+
+    // Palette — extracts dominant color from cover art for gradient backdrops.
+    implementation(libs.androidx.palette)
 }
 
 /**

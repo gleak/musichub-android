@@ -1,0 +1,234 @@
+package com.mediaplayer.android.ui.common
+
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.palette.graphics.Palette
+import coil3.asDrawable
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.request.crossfade
+import coil3.size.Size
+import coil3.imageLoader
+
+private val DefaultBackdrop = Color(0xFF3E3E3E)
+
+/**
+ * Re-usable hero header for detail screens (Liked / Playlist / Album / Artist),
+ * matching Spotify: square cover art at top, gradient fade from cover-derived
+ * dominant color → app background, then title + meta, then Play/Shuffle buttons.
+ */
+@Composable
+fun SpotifyHero(
+    title: String,
+    subtitle: String,
+    coverModel: Any?,
+    fallbackGradient: Pair<Color, Color>? = null,
+    coverShape: CoverShape = CoverShape.Square,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+    playEnabled: Boolean = true,
+    extraActions: @Composable () -> Unit = {},
+) {
+    var dominant by remember(coverModel) {
+        mutableStateOf(fallbackGradient?.first ?: DefaultBackdrop)
+    }
+
+    if (coverModel != null) {
+        val ctx = LocalContext.current
+        LaunchedEffect(coverModel) {
+            dominant = extractDominantColor(ctx, coverModel) ?: dominant
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val artSize: Dp = (maxWidth * 0.6f).coerceAtMost(280.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to dominant,
+                            0.65f to dominant.copy(alpha = 0.55f),
+                            1f to MaterialTheme.colorScheme.background,
+                        )
+                    )
+                    .padding(top = 24.dp, bottom = 16.dp),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    HeroCover(
+                        model = coverModel,
+                        shape = coverShape,
+                        size = artSize,
+                        fallbackGradient = fallbackGradient,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
+            }
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                extraActions()
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onShuffle, enabled = playEnabled) {
+                    Icon(
+                        imageVector = Icons.Filled.Shuffle,
+                        contentDescription = "Shuffle",
+                        tint = if (playEnabled) MaterialTheme.colorScheme.onSurface
+                               else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                FilledIconButton(
+                    onClick = onPlay,
+                    enabled = playEnabled,
+                    modifier = Modifier.size(56.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = "Play",
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+enum class CoverShape { Square, Circle }
+
+@Composable
+private fun HeroCover(
+    model: Any?,
+    shape: CoverShape,
+    size: Dp,
+    fallbackGradient: Pair<Color, Color>?,
+) {
+    val composeShape = if (shape == CoverShape.Circle) CircleShape else RoundedCornerShape(6.dp)
+    val placeholderBrush = if (fallbackGradient != null)
+        Brush.linearGradient(listOf(fallbackGradient.first, fallbackGradient.second))
+    else
+        Brush.linearGradient(listOf(DefaultBackdrop, MaterialTheme.colorScheme.surface))
+
+    Box(
+        modifier = Modifier.size(size).clip(composeShape).background(placeholderBrush),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (model != null) {
+            AsyncImage(
+                model = model,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(size),
+            )
+        }
+    }
+}
+
+@Composable
+fun rememberCoverDominantColor(model: Any?, fallback: Color): Color {
+    var color by remember(model) { mutableStateOf(fallback) }
+    if (model != null) {
+        val ctx = LocalContext.current
+        LaunchedEffect(model) {
+            color = extractDominantColor(ctx, model) ?: fallback
+        }
+    }
+    return color
+}
+
+internal suspend fun extractDominantColor(
+    context: android.content.Context,
+    model: Any,
+): Color? {
+    return try {
+        val request = ImageRequest.Builder(context)
+            .data(model)
+            .size(Size(128, 128))
+            .crossfade(false)
+            .build()
+        val result = context.imageLoader.execute(request)
+        if (result !is SuccessResult) return null
+        val bmp = (result.image.asDrawable(context.resources) as? BitmapDrawable)?.bitmap
+            ?: return null
+        val palette = Palette.from(bmp).clearFilters().generate()
+        val swatch = palette.darkVibrantSwatch
+            ?: palette.darkMutedSwatch
+            ?: palette.vibrantSwatch
+            ?: palette.dominantSwatch
+            ?: return null
+        Color(swatch.rgb)
+    } catch (_: Throwable) {
+        null
+    }
+}

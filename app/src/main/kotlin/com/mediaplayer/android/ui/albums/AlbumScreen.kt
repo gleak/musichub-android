@@ -1,41 +1,29 @@
 package com.mediaplayer.android.ui.albums
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,8 +34,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.CatalogRepository
 import com.mediaplayer.android.data.DownloadRepository
+import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.AlbumDetailDto
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.search.SongRow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -123,10 +113,8 @@ fun AlbumScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = {
-                    val title = (state as? AlbumUiState.Success)?.detail?.name ?: albumName
-                    Text(text = title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                },
+                title = { },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -147,7 +135,10 @@ fun AlbumScreen(
                     detail = s.detail,
                     downloadedIds = downloadedIds,
                     onPlayFromIndex = onPlayFromIndex,
-                    onArtistClick = onArtistClick,
+                    onShufflePlay = { songs ->
+                        if (songs.isNotEmpty())
+                            onPlayFromIndex(songs.shuffled(), 0)
+                    },
                 )
             }
         }
@@ -159,16 +150,19 @@ private fun AlbumBody(
     detail: AlbumDetailDto,
     downloadedIds: Set<Long>,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
-    onArtistClick: (String) -> Unit,
+    onShufflePlay: (List<SongDto>) -> Unit,
 ) {
+    val coverModel = detail.songs.firstOrNull { it.hasCoverArt }?.let { Network.coverUrl(it.id) }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item(key = "header") {
-            AlbumHeader(
-                detail = detail,
-                onPlayAll = { if (detail.songs.isNotEmpty()) onPlayFromIndex(detail.songs, 0) },
-                onArtistClick = onArtistClick,
+            SpotifyHero(
+                title = detail.name,
+                subtitle = "Album • ${detail.artist}",
+                coverModel = coverModel,
+                onPlay = { if (detail.songs.isNotEmpty()) onPlayFromIndex(detail.songs, 0) },
+                onShuffle = { onShufflePlay(detail.songs) },
+                playEnabled = detail.songs.isNotEmpty(),
             )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
         itemsIndexed(items = detail.songs, key = { _, song -> song.id }) { idx, song ->
             SongRow(
@@ -176,63 +170,6 @@ private fun AlbumBody(
                 isDownloaded = song.id in downloadedIds,
                 onClick = { onPlayFromIndex(detail.songs, idx) },
             )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        }
-    }
-}
-
-@Composable
-private fun AlbumHeader(
-    detail: AlbumDetailDto,
-    onPlayAll: () -> Unit,
-    onArtistClick: (String) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(48.dp),
-            )
-        }
-        Spacer(Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = detail.name,
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = detail.artist,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.clickable { onArtistClick(detail.artist) },
-            )
-            Text(
-                text = if (detail.songs.size == 1) "1 song" else "${detail.songs.size} songs",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.size(4.dp))
-            Button(onClick = onPlayAll, enabled = detail.songs.isNotEmpty()) {
-                Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Play")
-            }
         }
     }
 }

@@ -1,46 +1,38 @@
 package com.mediaplayer.android.ui.liked
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.search.SongRow
+import com.mediaplayer.android.ui.theme.SpotifyColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,12 +51,13 @@ fun LikedScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Liked Songs") },
+                title = { },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
         },
     ) { padding ->
@@ -98,12 +91,15 @@ private fun LikedBody(
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item(key = "header") {
-            LikedHeader(
-                songCount = songs.size,
-                onPlayAll = { if (songs.isNotEmpty()) onPlayFromIndex(songs, 0) },
-                onShufflePlay = { onShufflePlay(songs) },
+            SpotifyHero(
+                title = "Liked Songs",
+                subtitle = "Playlist • ${if (songs.size == 1) "1 song" else "${songs.size} songs"}",
+                coverModel = null,
+                fallbackGradient = SpotifyColors.LikedGradientStart to SpotifyColors.LikedGradientEnd,
+                onPlay = { if (songs.isNotEmpty()) onPlayFromIndex(songs, 0) },
+                onShuffle = { if (songs.isNotEmpty()) onShufflePlay(songs) },
+                playEnabled = songs.isNotEmpty(),
             )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
 
         if (songs.isEmpty()) {
@@ -128,63 +124,6 @@ private fun LikedBody(
                     onClick = { onPlayFromIndex(songs, idx) },
                     onToggleLike = { onUnlike(song.id) },
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-        }
-    }
-}
-
-@Composable
-private fun LikedHeader(songCount: Int, onPlayAll: () -> Unit, onShufflePlay: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Favorite,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(48.dp),
-            )
-        }
-
-        Spacer(Modifier.width(16.dp))
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = "Liked Songs",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = if (songCount == 1) "1 song" else "$songCount songs",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.size(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onPlayAll, enabled = songCount > 0) {
-                    Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Play")
-                }
-                OutlinedButton(onClick = onShufflePlay, enabled = songCount > 0) {
-                    Icon(imageVector = Icons.Filled.Shuffle, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Shuffle")
-                }
             }
         }
     }

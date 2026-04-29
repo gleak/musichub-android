@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.automirrored.filled.LibraryBooks
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
@@ -42,6 +43,7 @@ import com.mediaplayer.android.ui.artists.ArtistScreen
 import com.mediaplayer.android.ui.auth.AuthViewModel
 import com.mediaplayer.android.ui.auth.LoginScreen
 import com.mediaplayer.android.ui.find.FindScreen
+import com.mediaplayer.android.ui.home.HomeScreen
 import com.mediaplayer.android.ui.liked.LikedScreen
 import com.mediaplayer.android.ui.player.MiniPlayer
 import com.mediaplayer.android.ui.player.NowPlayingSheet
@@ -79,11 +81,12 @@ private fun AuthGate() {
 }
 
 private object Routes {
+    const val HOME = "home"
     const val SEARCH = "search"
     const val FIND = "find"
-    const val PLAYLISTS = "playlists"
+    const val LIBRARY = "library"
     const val PLAYLIST_DETAIL = "playlists/{playlistId}"
-    const val SPOTIFY_IMPORT = "playlists/spotify-import"
+    const val SPOTIFY_IMPORT = "library/spotify-import"
     const val LIKED = "liked"
     const val ALBUM_LIST = "albums"
     const val ALBUM_DETAIL = "albums/{albumName}?artist={albumArtist}"
@@ -124,11 +127,21 @@ private fun AppScaffold(onSignOut: () -> Unit) {
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = Routes.SEARCH,
+            startDestination = Routes.HOME,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
         ) {
+            composable(Routes.HOME) {
+                HomeScreen(
+                    onSongClick = playbackVm::play,
+                    onPlaylistClick = { p ->
+                        navController.navigate(Routes.playlistDetail(p.id))
+                    },
+                    onLikedClick = { navController.navigate(Routes.LIKED) },
+                    onSignOut = onSignOut,
+                )
+            }
             composable(Routes.SEARCH) {
                 SearchScreen(
                     onSongClick = playbackVm::play,
@@ -147,13 +160,14 @@ private fun AppScaffold(onSignOut: () -> Unit) {
             composable(Routes.FIND) {
                 FindScreen()
             }
-            composable(Routes.PLAYLISTS) {
+            composable(Routes.LIBRARY) {
                 PlaylistsScreen(
                     onPlaylistClick = { p ->
                         navController.navigate(Routes.playlistDetail(p.id))
                     },
                     onLikedSongsClick = { navController.navigate(Routes.LIKED) },
                     onSpotifyImport = { navController.navigate(Routes.SPOTIFY_IMPORT) },
+                    onFindClick = { navController.navigate(Routes.FIND) },
                     onSignOut = onSignOut,
                 )
             }
@@ -162,7 +176,7 @@ private fun AppScaffold(onSignOut: () -> Unit) {
                     onBack = { navController.popBackStack() },
                     onPlaylistCreated = { playlistId ->
                         navController.navigate(Routes.playlistDetail(playlistId)) {
-                            popUpTo(Routes.PLAYLISTS)
+                            popUpTo(Routes.LIBRARY)
                         }
                     },
                 )
@@ -278,20 +292,20 @@ private fun BottomRegion(
 private fun BottomNav(navController: NavHostController) {
     val destinations = listOf(
         BottomDestination(
+            route = Routes.HOME,
+            label = "Home",
+            icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+        ),
+        BottomDestination(
             route = Routes.SEARCH,
             label = "Search",
             icon = { Icon(Icons.Filled.Search, contentDescription = null) },
         ),
         BottomDestination(
-            route = Routes.FIND,
-            label = "Find",
-            icon = { Icon(Icons.Filled.LibraryAdd, contentDescription = null) },
-        ),
-        BottomDestination(
-            route = Routes.PLAYLISTS,
-            label = "Playlists",
+            route = Routes.LIBRARY,
+            label = "Your Library",
             icon = {
-                Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = null)
             },
         ),
     )
@@ -299,12 +313,16 @@ private fun BottomNav(navController: NavHostController) {
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
 
-    NavigationBar {
+    NavigationBar(
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
+        tonalElevation = 0.dp,
+    ) {
         destinations.forEach { dest ->
             val selected = currentRoute == dest.route ||
-                (dest.route == Routes.PLAYLISTS && currentRoute == Routes.PLAYLIST_DETAIL) ||
-                (dest.route == Routes.PLAYLISTS && currentRoute == Routes.LIKED) ||
-                (dest.route == Routes.PLAYLISTS && currentRoute == Routes.SPOTIFY_IMPORT)
+                (dest.route == Routes.LIBRARY && currentRoute == Routes.PLAYLIST_DETAIL) ||
+                (dest.route == Routes.LIBRARY && currentRoute == Routes.LIKED) ||
+                (dest.route == Routes.LIBRARY && currentRoute == Routes.SPOTIFY_IMPORT) ||
+                (dest.route == Routes.LIBRARY && currentRoute == Routes.FIND)
 
             NavigationBarItem(
                 selected = selected,

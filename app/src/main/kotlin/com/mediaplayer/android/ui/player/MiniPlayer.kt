@@ -57,16 +57,19 @@ fun MiniPlayer(
 
     val current = song ?: return  // mini-player hidden until a track loads
 
+    val cardShape = RoundedCornerShape(10.dp)
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .clip(cardShape)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable { onExpand() },
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Cover(song = current, size = 44.dp)
@@ -75,6 +78,7 @@ fun MiniPlayer(
                 Text(
                     text = current.title,
                     style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -90,6 +94,7 @@ fun MiniPlayer(
                 Icon(
                     imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                     contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
@@ -98,6 +103,8 @@ fun MiniPlayer(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(2.dp),
+            color = MaterialTheme.colorScheme.onSurface,
+            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
         )
     }
 }

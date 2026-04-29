@@ -64,7 +64,12 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mediaplayer.android.data.dto.PlaylistDetailDto
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.search.SongRow
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.ui.graphics.Color
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
@@ -106,10 +111,8 @@ fun PlaylistDetailScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = {
-                    val title = successState?.playlist?.name ?: "Playlist"
-                    Text(text = title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                },
+                title = { },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -236,17 +239,32 @@ private fun PlaylistDetailBody(
 
     LazyColumn(state = lazyListState, modifier = Modifier.fillMaxSize()) {
         item(key = "header") {
-            Header(
-                playlist = playlist,
-                downloadedCount = downloadedCount,
-                onPlayAll = {
-                    if (songs.isNotEmpty()) onPlayFromIndex(songs, 0)
+            val total = playlist.songs.size
+            val allDownloaded = total > 0 && downloadedCount == total
+            SpotifyHero(
+                title = playlist.name,
+                subtitle = if (downloadedCount > 0 && !allDownloaded)
+                    "Playlist • ${pluralizeSongsDetail(total)} • $downloadedCount downloaded"
+                else "Playlist • ${pluralizeSongsDetail(total)}",
+                coverModel = null,
+                onPlay = { if (songs.isNotEmpty()) onPlayFromIndex(songs, 0) },
+                onShuffle = { onShufflePlay(songs) },
+                playEnabled = songs.isNotEmpty(),
+                extraActions = {
+                    if (playlist.songs.isNotEmpty()) {
+                        IconButton(
+                            onClick = if (allDownloaded) onRemoveDownloads else onDownload,
+                        ) {
+                            Icon(
+                                imageVector = if (allDownloaded) Icons.Filled.CloudDone else Icons.Filled.CloudDownload,
+                                contentDescription = if (allDownloaded) "Remove downloads" else "Download",
+                                tint = if (allDownloaded) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
                 },
-                onShufflePlay = { onShufflePlay(songs) },
-                onDownload = onDownload,
-                onRemoveDownloads = onRemoveDownloads,
             )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
 
         if (songs.isEmpty()) {
