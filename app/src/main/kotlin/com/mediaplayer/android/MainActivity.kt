@@ -5,19 +5,27 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +43,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.playback.PlaybackViewModel
 import com.mediaplayer.android.ui.albums.AlbumListScreen
 import com.mediaplayer.android.ui.albums.AlbumScreen
@@ -113,6 +122,7 @@ private fun AppScaffold(onSignOut: () -> Unit) {
     var sheetOpen by remember { mutableStateOf(false) }
 
     val navController = rememberNavController()
+    val networkAvailable by ConnectivityObserver.networkAvailable.collectAsStateWithLifecycle()
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -125,12 +135,62 @@ private fun AppScaffold(onSignOut: () -> Unit) {
             )
         },
     ) { padding ->
-        NavHost(
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            NavHostBody(
+                navController = navController,
+                playbackVm = playbackVm,
+                onSignOut = onSignOut,
+            )
+            if (!networkAvailable) {
+                OfflineBadge(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(8.dp),
+                )
+            }
+        }
+    }
+
+    if (sheetOpen) {
+        NowPlayingSheet(
+            viewModel = playbackVm,
+            onDismiss = { sheetOpen = false },
+        )
+    }
+}
+
+@Composable
+private fun OfflineBadge(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(36.dp)
+            .background(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = CircleShape,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.CloudOff,
+            contentDescription = "No network — playing only downloaded songs",
+            tint = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@UnstableApi
+@Composable
+private fun NavHostBody(
+    navController: NavHostController,
+    playbackVm: PlaybackViewModel,
+    onSignOut: () -> Unit,
+) {
+    NavHost(
             navController = navController,
             startDestination = Routes.HOME,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+            modifier = Modifier.fillMaxSize(),
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
@@ -259,14 +319,6 @@ private fun AppScaffold(onSignOut: () -> Unit) {
                 )
             }
         }
-    }
-
-    if (sheetOpen) {
-        NowPlayingSheet(
-            viewModel = playbackVm,
-            onDismiss = { sheetOpen = false },
-        )
-    }
 }
 
 @UnstableApi

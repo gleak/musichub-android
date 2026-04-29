@@ -24,12 +24,19 @@ import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.TextSnippet
+import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.VideoFile
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,6 +49,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -95,6 +103,13 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
     val shuffleEnabled by viewModel.shuffleEnabled.collectAsStateWithLifecycle()
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
     val sleepActive by viewModel.sleepTimerActive.collectAsStateWithLifecycle()
+    val redownloading by viewModel.redownloading.collectAsStateWithLifecycle()
+    val redownloadError by viewModel.redownloadError.collectAsStateWithLifecycle()
+    val alarmExport by viewModel.alarmExportState.collectAsStateWithLifecycle()
+    val videoDownloading by viewModel.videoDownloading.collectAsStateWithLifecycle()
+    val videoDownloadError by viewModel.videoDownloadError.collectAsStateWithLifecycle()
+    var confirmRedownload by remember { mutableStateOf(false) }
+    var confirmMarkBroken by remember { mutableStateOf(false) }
 
     val current = song ?: run {
         LaunchedEffect(Unit) { onDismiss() }
@@ -106,6 +121,7 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
     var showLyrics by remember { mutableStateOf(false) }
     var showEqualizer by remember { mutableStateOf(false) }
     var showSleepMenu by remember { mutableStateOf(false) }
+    var showVideo by remember { mutableStateOf(false) }
 
     val coverModel = if (current.hasCoverArt) Network.coverUrl(current.id) else null
     val dominant = rememberCoverDominantColor(
@@ -334,12 +350,86 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
                         tint = Color.White.copy(alpha = 0.85f),
                     )
                 }
+                if (current.hasVideo) {
+                    IconButton(onClick = { showVideo = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.VideoLibrary,
+                            contentDescription = "Watch video",
+                            tint = Color.White.copy(alpha = 0.85f),
+                        )
+                    }
+                } else {
+                    IconButton(
+                        onClick = viewModel::downloadVideoForCurrent,
+                        enabled = !videoDownloading,
+                    ) {
+                        if (videoDownloading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.VideoFile,
+                                contentDescription = "Download video",
+                                tint = Color.White.copy(alpha = 0.45f),
+                            )
+                        }
+                    }
+                }
                 IconButton(onClick = { showEqualizer = true }) {
                     Icon(
                         imageVector = Icons.Filled.Equalizer,
                         contentDescription = "Equalizer",
                         tint = Color.White.copy(alpha = 0.85f),
                     )
+                }
+                IconButton(
+                    onClick = { confirmRedownload = true },
+                    enabled = !redownloading,
+                ) {
+                    if (redownloading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "Re-download song",
+                            tint = Color.White.copy(alpha = 0.85f),
+                        )
+                    }
+                }
+                IconButton(
+                    onClick = { confirmMarkBroken = true },
+                    enabled = !redownloading,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ReportProblem,
+                        contentDescription = "Re-download song to device",
+                        tint = Color.White.copy(alpha = 0.85f),
+                    )
+                }
+                IconButton(
+                    onClick = { viewModel.saveCurrentAsAlarmSound() },
+                    enabled = alarmExport !is PlaybackViewModel.AlarmExportState.Exporting,
+                ) {
+                    if (alarmExport is PlaybackViewModel.AlarmExportState.Exporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Alarm,
+                            contentDescription = "Save as alarm sound",
+                            tint = Color.White.copy(alpha = 0.85f),
+                        )
+                    }
                 }
                 IconButton(onClick = { showQueue = true }) {
                     Icon(
@@ -362,12 +452,109 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
         }
     }
 
+    if (showVideo) {
+        VideoPlayerSheet(song = current, onDismiss = { showVideo = false })
+    }
+
     if (showQueue) {
         QueueSheet(viewModel = viewModel, onDismiss = { showQueue = false })
     }
 
     if (showEqualizer) {
         EqualizerSheet(onDismiss = { showEqualizer = false })
+    }
+
+    if (confirmRedownload) {
+        AlertDialog(
+            onDismissRequest = { confirmRedownload = false },
+            title = { Text("Re-download song?") },
+            text = {
+                Text(
+                    "Delete the current audio and cover for \"${current.title}\" and " +
+                        "fetch them again from the original source. Useful when the file " +
+                        "is corrupted or the cover is wrong."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRedownload = false
+                    viewModel.redownloadCurrent()
+                }) { Text("Re-download") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRedownload = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (confirmMarkBroken) {
+        AlertDialog(
+            onDismissRequest = { confirmMarkBroken = false },
+            title = { Text("Re-download song to device?") },
+            text = {
+                Text(
+                    "Drop the local cache, offline copy and cover for \"${current.title}\" " +
+                        "and fetch fresh bytes from the server. Use this when the file on " +
+                        "your phone is corrupted but the server copy is fine."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmMarkBroken = false
+                    viewModel.refreshLocalDownload()
+                }) { Text("Re-download") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmMarkBroken = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    redownloadError?.let { msg ->
+        AlertDialog(
+            onDismissRequest = viewModel::consumeRedownloadError,
+            title = { Text("Re-download failed") },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = viewModel::consumeRedownloadError) { Text("OK") }
+            },
+        )
+    }
+
+    videoDownloadError?.let { msg ->
+        AlertDialog(
+            onDismissRequest = viewModel::consumeVideoDownloadError,
+            title = { Text("Video download failed") },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = viewModel::consumeVideoDownloadError) { Text("OK") }
+            },
+        )
+    }
+
+    when (val s = alarmExport) {
+        is PlaybackViewModel.AlarmExportState.Success -> AlertDialog(
+            onDismissRequest = viewModel::consumeAlarmExportState,
+            title = { Text("Saved as alarm sound") },
+            text = {
+                Text(
+                    "\"${s.title}\" is now available in your Clock app — open an alarm, " +
+                        "tap the sound row and pick it from the list."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::consumeAlarmExportState) { Text("OK") }
+            },
+        )
+        is PlaybackViewModel.AlarmExportState.Failure -> AlertDialog(
+            onDismissRequest = viewModel::consumeAlarmExportState,
+            title = { Text("Couldn't save alarm sound") },
+            text = { Text(s.message) },
+            confirmButton = {
+                TextButton(onClick = viewModel::consumeAlarmExportState) { Text("OK") }
+            },
+        )
+        else -> Unit
     }
 }
 

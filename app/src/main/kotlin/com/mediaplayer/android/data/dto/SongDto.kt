@@ -15,4 +15,5 @@ data class SongDto(
     val album: String? = null,
     val durationMs: Long,
     val hasCoverArt: Boolean,
+    val hasVideo: Boolean = false,
 )

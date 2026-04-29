@@ -159,6 +159,7 @@ dependencies {
     // queue neighbours. Needs StandaloneDatabaseProvider for SimpleCache's
     // on-disk index.
     implementation(libs.media3.database)
+    implementation(libs.media3.ui)
 
     // Navigation — top-level NavHost for Search / Playlists tabs (M6).
     implementation(libs.androidx.navigation.compose)

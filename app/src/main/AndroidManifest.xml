@@ -14,6 +14,12 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- Saving songs as alarm sound writes to MediaStore. Android 10+ uses
+         scoped storage (no permission); pre-Q needs the legacy write perm. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <application
         android:name=".MediaPlayerApp"
         android:allowBackup="true"

@@ -22,4 +22,8 @@ class SongRepository(
         val normalized = query?.trim()?.takeIf { it.isNotEmpty() }
         return api.listSongs(query = normalized, page = page, size = size)
     }
+
+    suspend fun redownload(songId: Long): SongDto = api.redownloadSong(songId)
+
+    suspend fun downloadVideo(songId: Long): SongDto = api.downloadVideo(songId)
 }

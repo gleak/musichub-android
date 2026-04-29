@@ -38,7 +38,14 @@ object Network {
                     header("X-Api-Key", DEV_API_KEY)
                 }
             }.build()
-            chain.proceed(req)
+            try {
+                val resp = chain.proceed(req)
+                ConnectivityObserver.recordBackendSuccess()
+                resp
+            } catch (e: java.io.IOException) {
+                ConnectivityObserver.recordBackendFailure()
+                throw e
+            }
         }
         .addInterceptor(HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) {
@@ -61,6 +68,7 @@ object Network {
 
     fun coverUrl(songId: Long): String = "${baseUrl}api/songs/$songId/cover"
     fun streamUrl(songId: Long): String = "${baseUrl}api/songs/$songId/stream"
+    fun videoStreamUrl(songId: Long): String = "${baseUrl}api/songs/$songId/stream/video"
 
     private fun String.ensureTrailingSlash(): String =
         if (endsWith("/")) this else "$this/"

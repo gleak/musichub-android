@@ -6,6 +6,7 @@ import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.playback.PlayerConnection
@@ -28,6 +29,7 @@ class MediaPlayerApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        ConnectivityObserver.init()
         PlayerConnection.connect(this)
         DownloadRepository.init()
     }

@@ -55,6 +55,14 @@ interface MediaPlayerApi {
         @Query("size") size: Int = 20,
     ): PageResponse<SongDto>
 
+    /** Re-download a corrupted song from its YouTube source — id stays stable. */
+    @POST("api/songs/{id}/redownload")
+    suspend fun redownloadSong(@Path("id") id: Long): SongDto
+
+    /** Download the MP4 video for a YouTube-sourced song that has no video yet. */
+    @POST("api/songs/{id}/download-video")
+    suspend fun downloadVideo(@Path("id") id: Long): SongDto
+
     // ---------- Spotify import ----------
 
     @Multipart

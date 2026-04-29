@@ -4,8 +4,27 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Simple music-note glyph in the safe zone, white on transparent. -->
+
+    <!-- Subtle accent ring -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#30FFFFFF"
+        android:strokeWidth="2.5"
+        android:pathData="M22,54 A32,32 0 1,0 86,54 A32,32 0 1,0 22,54 Z" />
+
+    <!-- Note head -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M66,32 L66,68 C66,74 61,78 56,78 C51,78 46,74 46,68 C46,62 51,58 56,58 C58,58 60,58.7 62,60 L62,40 L44,44 L44,72 C44,78 39,82 34,82 C29,82 24,78 24,72 C24,66 29,62 34,62 C36,62 38,62.7 40,64 L40,38 L66,32 Z" />
+        android:pathData="M62,68 C62,62 55,57 49,60 C43,63 40,70 43,76 C46,83 55,85 61,82 C66,79 63,73 62,68 Z" />
+
+    <!-- Stem -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M61.5,68 L61.5,27 L65.5,26 L65.5,71 Z" />
+
+    <!-- Flag -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M65.5,26 C75,29 80,39 76,50 C74,56 68,60 64,57 L64,51 C67,53 72,50 73,44 C75,38 71,31 65.5,29 Z" />
+
 </vector>

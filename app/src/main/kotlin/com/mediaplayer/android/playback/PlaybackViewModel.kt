@@ -9,9 +9,12 @@ import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
+import coil3.SingletonImageLoader
+import coil3.memory.MemoryCache
 import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.HistoryRepository
 import com.mediaplayer.android.data.Network
+import com.mediaplayer.android.data.SongRepository
 import com.mediaplayer.android.data.dto.SongDto
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +27,7 @@ import kotlinx.coroutines.launch
 class PlaybackViewModel(application: Application) : AndroidViewModel(application) {
 
     private val historyRepository = HistoryRepository()
+    private val songRepository = SongRepository()
 
     private val _currentSong = MutableStateFlow<SongDto?>(null)
     val currentSong: StateFlow<SongDto?> = _currentSong.asStateFlow()
@@ -54,6 +58,28 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     private val sleepTimer = SleepTimer(viewModelScope)
     val sleepTimerActive: StateFlow<Boolean> = sleepTimer.isActive
+
+    private val _redownloading = MutableStateFlow(false)
+    val redownloading: StateFlow<Boolean> = _redownloading.asStateFlow()
+
+    private val _redownloadError = MutableStateFlow<String?>(null)
+    val redownloadError: StateFlow<String?> = _redownloadError.asStateFlow()
+
+    private val _alarmExportState = MutableStateFlow<AlarmExportState>(AlarmExportState.Idle)
+    val alarmExportState: StateFlow<AlarmExportState> = _alarmExportState.asStateFlow()
+
+    private val _videoDownloading = MutableStateFlow(false)
+    val videoDownloading: StateFlow<Boolean> = _videoDownloading.asStateFlow()
+
+    private val _videoDownloadError = MutableStateFlow<String?>(null)
+    val videoDownloadError: StateFlow<String?> = _videoDownloadError.asStateFlow()
+
+    sealed class AlarmExportState {
+        data object Idle : AlarmExportState()
+        data object Exporting : AlarmExportState()
+        data class Success(val title: String) : AlarmExportState()
+        data class Failure(val message: String) : AlarmExportState()
+    }
 
     // Play-time tracking for history reporting
     private var trackedSongId: Long? = null
@@ -215,6 +241,173 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     fun skipToQueueItem(index: Int) {
         controller?.seekTo(index, 0L)
+    }
+
+    /**
+     * Re-download the currently playing song from its YouTube source. The
+     * backend deletes the corrupted file/cover and refetches; on success we
+     * invalidate the streaming cache + offline download + Coil cover cache,
+     * then reload the current MediaItem from position 0 so the user hears
+     * the fresh bytes immediately.
+     *
+     * 422 from the backend (no source URL — non-YouTube imports) is exposed
+     * via [redownloadError] for the UI to surface as a snackbar.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    fun redownloadCurrent() {
+        val current = _currentSong.value ?: return
+        if (_redownloading.value) return
+        _redownloading.value = true
+        _redownloadError.value = null
+        viewModelScope.launch {
+            try {
+                val fresh = songRepository.redownload(current.id)
+                val ctx = getApplication<Application>()
+                val streamUrl = Network.streamUrl(fresh.id)
+                val coverUrl = Network.coverUrl(fresh.id)
+
+                runCatching { PlayerCache.get(ctx).removeResource(streamUrl) }
+                runCatching {
+                    val wasDownloaded = DownloadRepository.isDownloaded(fresh.id)
+                    DownloadRepository.remove(fresh.id)
+                    if (wasDownloaded) DownloadRepository.download(fresh.id)
+                }
+                runCatching {
+                    val loader = SingletonImageLoader.get(ctx)
+                    loader.diskCache?.remove(coverUrl)
+                    loader.memoryCache?.remove(MemoryCache.Key(coverUrl))
+                }
+
+                controller?.let { c ->
+                    val idx = c.currentMediaItemIndex
+                    val item = MediaItem.Builder()
+                        .setMediaId(fresh.id.toString())
+                        .setUri(streamUrl)
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(fresh.title)
+                                .setArtist(fresh.artist)
+                                .setAlbumTitle(fresh.album)
+                                .setArtworkUri(
+                                    if (fresh.hasCoverArt) android.net.Uri.parse(coverUrl) else null
+                                )
+                                .build()
+                        )
+                        .build()
+                    c.replaceMediaItem(idx, item)
+                    c.seekTo(idx, 0L)
+                    c.prepare()
+                    c.playWhenReady = true
+                }
+                _currentSong.value = fresh.copy(durationMs = current.durationMs)
+            } catch (t: Throwable) {
+                _redownloadError.value = redownloadErrorMessage(t)
+            } finally {
+                _redownloading.value = false
+            }
+        }
+    }
+
+    fun consumeRedownloadError() { _redownloadError.value = null }
+
+    @Suppress("TooGenericExceptionCaught")
+    fun downloadVideoForCurrent() {
+        val current = _currentSong.value ?: return
+        if (_videoDownloading.value) return
+        _videoDownloading.value = true
+        _videoDownloadError.value = null
+        viewModelScope.launch {
+            try {
+                val fresh = songRepository.downloadVideo(current.id)
+                _currentSong.value = current.copy(hasVideo = fresh.hasVideo)
+            } catch (t: Throwable) {
+                _videoDownloadError.value = t.message ?: "Video download failed"
+            } finally {
+                _videoDownloading.value = false
+            }
+        }
+    }
+
+    fun consumeVideoDownloadError() { _videoDownloadError.value = null }
+
+    private fun redownloadErrorMessage(t: Throwable): String {
+        if (t is retrofit2.HttpException) {
+            val body = runCatching { t.response()?.errorBody()?.string() }.getOrNull()
+            if (!body.isNullOrBlank()) return body.trim()
+        }
+        return t.message ?: "Re-download failed"
+    }
+
+    /**
+     * Save the current song's audio into MediaStore so the system Clock app
+     * can pick it as an alarm sound. Result is surfaced via [alarmExportState].
+     */
+    @Suppress("TooGenericExceptionCaught")
+    fun saveCurrentAsAlarmSound() {
+        val current = _currentSong.value ?: return
+        if (_alarmExportState.value is AlarmExportState.Exporting) return
+        _alarmExportState.value = AlarmExportState.Exporting
+        viewModelScope.launch {
+            try {
+                RingtoneExporter.exportAsAlarm(getApplication(), current)
+                _alarmExportState.value = AlarmExportState.Success(current.title)
+            } catch (t: Throwable) {
+                _alarmExportState.value =
+                    AlarmExportState.Failure(t.message ?: "Failed to save alarm sound")
+            }
+        }
+    }
+
+    fun consumeAlarmExportState() { _alarmExportState.value = AlarmExportState.Idle }
+
+    /**
+     * Re-download the current song's bytes locally — no backend work. Drops the
+     * streaming cache, the offline copy and the Coil cover for this song, then
+     * reloads the current MediaItem so ExoPlayer refetches from the backend.
+     *
+     * Use when the local copy is corrupted (truncated, scrambled, wrong cover)
+     * but the backend's master file is fine. For a backend-side re-acquire from
+     * YouTube, use [redownloadCurrent].
+     */
+    fun refreshLocalDownload() {
+        val current = _currentSong.value ?: return
+        val ctx = getApplication<Application>()
+        val streamUrl = Network.streamUrl(current.id)
+        val coverUrl = Network.coverUrl(current.id)
+
+        runCatching { PlayerCache.get(ctx).removeResource(streamUrl) }
+        runCatching {
+            val wasDownloaded = DownloadRepository.isDownloaded(current.id)
+            DownloadRepository.remove(current.id)
+            if (wasDownloaded) DownloadRepository.download(current.id)
+        }
+        runCatching {
+            val loader = SingletonImageLoader.get(ctx)
+            loader.diskCache?.remove(coverUrl)
+            loader.memoryCache?.remove(MemoryCache.Key(coverUrl))
+        }
+
+        controller?.let { c ->
+            val idx = c.currentMediaItemIndex
+            val item = MediaItem.Builder()
+                .setMediaId(current.id.toString())
+                .setUri(streamUrl)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(current.title)
+                        .setArtist(current.artist)
+                        .setAlbumTitle(current.album)
+                        .setArtworkUri(
+                            if (current.hasCoverArt) android.net.Uri.parse(coverUrl) else null
+                        )
+                        .build()
+                )
+                .build()
+            c.replaceMediaItem(idx, item)
+            c.seekTo(idx, 0L)
+            c.prepare()
+            c.playWhenReady = true
+        }
     }
 
     fun setSleepTimer(minutes: Int) {
