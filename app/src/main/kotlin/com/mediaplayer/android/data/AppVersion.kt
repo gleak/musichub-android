@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.0.1"
+    const val VERSION = "0.1.1"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,15 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.1.1",
+            title = "Inline video + slow-stream fix",
+            highlights = listOf(
+                "Music videos now play inline where the cover art sits, not fullscreen",
+                "Tap the fullscreen icon in the controller to expand to fullscreen",
+                "Removed the 30s read timeout that aborted first-time video streams while the server fetches them",
+            ),
+        ),
         ChangelogEntry(
             version = "0.0.1",
             title = "Initial release",

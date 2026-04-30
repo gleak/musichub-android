@@ -220,11 +220,27 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
 
             BoxWithConstraints {
                 val artSize = (maxWidth * 0.92f).coerceAtMost(360.dp)
-                Box(
-                    modifier = Modifier.size(artSize),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Cover(song = current, size = artSize)
+                if (showVideo) {
+                    val videoWidth = maxWidth * 0.96f
+                    Box(
+                        modifier = Modifier
+                            .width(videoWidth)
+                            .height(videoWidth * 9f / 16f),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        VideoPlayerInline(
+                            song = current,
+                            onClose = { showVideo = false },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier.size(artSize),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Cover(song = current, size = artSize)
+                    }
                 }
             }
 
@@ -485,14 +501,6 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
             }
 
             Spacer(Modifier.height(24.dp))
-        }
-
-        if (showVideo) {
-            VideoPlayerOverlay(
-                song = current,
-                modifier = Modifier.fillMaxSize(),
-                onDismiss = { showVideo = false },
-            )
         }
     }
 
