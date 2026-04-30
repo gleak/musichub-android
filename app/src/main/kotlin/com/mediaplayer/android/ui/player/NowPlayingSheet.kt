@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Alarm
@@ -64,6 +65,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -107,6 +110,7 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
     val sleepActive by viewModel.sleepTimerActive.collectAsStateWithLifecycle()
     val liked by viewModel.currentLiked.collectAsStateWithLifecycle()
+    val haptics = LocalHapticFeedback.current
     val redownloading by viewModel.redownloading.collectAsStateWithLifecycle()
     val redownloadError by viewModel.redownloadError.collectAsStateWithLifecycle()
     val alarmExport by viewModel.alarmExportState.collectAsStateWithLifecycle()
@@ -116,6 +120,7 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
     val videoReinitializeError by viewModel.videoReinitializeError.collectAsStateWithLifecycle()
     var confirmRedownload by remember { mutableStateOf(false) }
     var confirmMarkBroken by remember { mutableStateOf(false) }
+    var overflowOpen by remember { mutableStateOf(false) }
 
     val current = song ?: run {
         LaunchedEffect(Unit) { onDismiss() }
@@ -269,7 +274,10 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                IconButton(onClick = viewModel::toggleCurrentLike) {
+                IconButton(onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    viewModel.toggleCurrentLike()
+                }) {
                     Icon(
                         imageVector = if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                         contentDescription = if (liked) "Unlike" else "Like",
@@ -447,58 +455,56 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
                         tint = Color.White.copy(alpha = 0.85f),
                     )
                 }
-                IconButton(
-                    onClick = { confirmRedownload = true },
-                    enabled = !redownloading,
-                ) {
-                    if (redownloading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = Color.White,
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Re-download song",
-                            tint = Color.White.copy(alpha = 0.85f),
-                        )
-                    }
-                }
-                IconButton(
-                    onClick = { confirmMarkBroken = true },
-                    enabled = !redownloading,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.ReportProblem,
-                        contentDescription = "Re-download song to device",
-                        tint = Color.White.copy(alpha = 0.85f),
-                    )
-                }
-                IconButton(
-                    onClick = { viewModel.saveCurrentAsAlarmSound() },
-                    enabled = alarmExport !is PlaybackViewModel.AlarmExportState.Exporting,
-                ) {
-                    if (alarmExport is PlaybackViewModel.AlarmExportState.Exporting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = Color.White,
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Filled.Alarm,
-                            contentDescription = "Save as alarm sound",
-                            tint = Color.White.copy(alpha = 0.85f),
-                        )
-                    }
-                }
                 IconButton(onClick = { showQueue = true }) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.QueueMusic,
                         contentDescription = "Queue",
                         tint = Color.White.copy(alpha = 0.85f),
                     )
+                }
+                Box {
+                    IconButton(onClick = { overflowOpen = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.MoreVert,
+                            contentDescription = "More",
+                            tint = Color.White.copy(alpha = 0.85f),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = overflowOpen,
+                        onDismissRequest = { overflowOpen = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (redownloading) "Re-downloading…" else "Re-download song") },
+                            enabled = !redownloading,
+                            onClick = {
+                                overflowOpen = false
+                                confirmRedownload = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Mark song as broken") },
+                            enabled = !redownloading,
+                            onClick = {
+                                overflowOpen = false
+                                confirmMarkBroken = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (alarmExport is PlaybackViewModel.AlarmExportState.Exporting)
+                                        "Saving as alarm…"
+                                    else "Save as alarm sound"
+                                )
+                            },
+                            enabled = alarmExport !is PlaybackViewModel.AlarmExportState.Exporting,
+                            onClick = {
+                                overflowOpen = false
+                                viewModel.saveCurrentAsAlarmSound()
+                            },
+                        )
+                    }
                 }
             }
 

@@ -189,8 +189,6 @@ class MediaPlaybackService : MediaLibraryService() {
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                mediaSession?.notifyChildrenChanged(LibraryTree.ROOT_ID, 10, null)
-                mediaSession?.notifyChildrenChanged(LibraryTree.ALL_SONGS_ID, 100, null)
                 refreshLikeButtonForCurrent(mediaItem)
             }
         })
@@ -394,7 +392,7 @@ class MediaPlaybackService : MediaLibraryService() {
                 val currentItem = session.player.currentMediaItem
                 val currentSongId = currentItem?.mediaId?.removePrefix("song:")?.toLongOrNull()
 
-                val items = LibraryTree.children(parentId, currentSongId)
+                val items = LibraryTree.children(parentId, currentSongId, page, pageSize)
                 if (items == null) {
                     LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
                 } else {
@@ -409,11 +407,10 @@ class MediaPlaybackService : MediaLibraryService() {
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<Void>> =
             serviceScope.future {
-                // Spec: we signal readiness here; the controller then calls
-                // onGetSearchResult to pull the actual hits. We notify first
-                // so paging hints line up with what we'll return.
-                val hits = LibraryTree.search(query)
-                session.notifySearchResultChanged(browser, query, hits.size, params)
+                // Probe the first page to get an item count for AA's UI.
+                // The actual paged hits are fetched lazily in onGetSearchResult.
+                val firstPage = LibraryTree.search(query, page = 0, pageSize = 50)
+                session.notifySearchResultChanged(browser, query, firstPage.size, params)
                 LibraryResult.ofVoid()
             }
 
@@ -426,7 +423,8 @@ class MediaPlaybackService : MediaLibraryService() {
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
             serviceScope.future {
-                LibraryResult.ofItemList(ImmutableList.copyOf(LibraryTree.search(query)), params)
+                val hits = LibraryTree.search(query, page, pageSize)
+                LibraryResult.ofItemList(ImmutableList.copyOf(hits), params)
             }
 
         /**

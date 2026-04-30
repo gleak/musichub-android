@@ -6,6 +6,7 @@ import com.mediaplayer.android.data.HistoryRepository
 import com.mediaplayer.android.data.PlaylistRepository
 import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.friendlyMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,7 +56,7 @@ class HomeViewModel(
             val pls = runCatching { playlists.list() }.getOrDefault(emptyList())
             HomeUiState.Success(recents, pls)
         } catch (t: Throwable) {
-            HomeUiState.Error(t.message ?: "Unknown error")
+            HomeUiState.Error(friendlyMessage(t))
         }
     }
 }

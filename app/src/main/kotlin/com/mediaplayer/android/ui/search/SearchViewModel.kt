@@ -8,6 +8,7 @@ import com.mediaplayer.android.data.HistoryRepository
 import com.mediaplayer.android.data.LikedRepository
 import com.mediaplayer.android.data.SongRepository
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.friendlyMessage
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -112,7 +113,7 @@ class SearchViewModel(
         _likedIds.value = if (ids.isEmpty()) emptySet() else likedRepository.status(ids)
         SearchUiState.Success(page.items)
     } catch (t: Throwable) {
-        SearchUiState.Error(t.message ?: "Unknown error")
+        SearchUiState.Error(friendlyMessage(t))
     }
 
     private companion object {

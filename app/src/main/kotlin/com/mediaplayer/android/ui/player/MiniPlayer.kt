@@ -29,7 +29,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -59,6 +61,7 @@ fun MiniPlayer(
     val liked by viewModel.currentLiked.collectAsStateWithLifecycle()
 
     val current = song ?: return  // mini-player hidden until a track loads
+    val haptics = LocalHapticFeedback.current
 
     val cardShape = RoundedCornerShape(10.dp)
     Column(
@@ -93,7 +96,10 @@ fun MiniPlayer(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            IconButton(onClick = viewModel::toggleCurrentLike) {
+            IconButton(onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.toggleCurrentLike()
+            }) {
                 Icon(
                     imageVector = if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                     contentDescription = if (liked) "Unlike" else "Like",

@@ -17,4 +17,5 @@ data class PlaylistDto(
     val songCount: Int,
     val createdAt: String,
     val updatedAt: String,
+    val coverSongId: Long? = null,
 )

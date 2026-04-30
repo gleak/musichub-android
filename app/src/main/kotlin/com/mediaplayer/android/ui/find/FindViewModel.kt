@@ -7,6 +7,7 @@ import com.mediaplayer.android.data.dto.CandidateDto
 import com.mediaplayer.android.data.dto.RequestDto
 import com.mediaplayer.android.data.dto.RequestStatus
 import com.mediaplayer.android.data.dto.RequestSummaryDto
+import com.mediaplayer.android.ui.common.friendlyMessage
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,7 +65,7 @@ class FindViewModel(
                     else -> _state.value = FindUiState.Tracking(created)
                 }
             } catch (t: Throwable) {
-                _state.value = FindUiState.Error(t.message ?: "Unknown error")
+                _state.value = FindUiState.Error(friendlyMessage(t))
             }
         }
     }
@@ -91,7 +92,7 @@ class FindViewModel(
                     backoff = (backoff * 2).coerceAtMost(MAX_POLL_MS)
                 }
             } catch (t: Throwable) {
-                _state.value = FindUiState.Error(t.message ?: "Unknown error")
+                _state.value = FindUiState.Error(friendlyMessage(t))
             }
         }
     }

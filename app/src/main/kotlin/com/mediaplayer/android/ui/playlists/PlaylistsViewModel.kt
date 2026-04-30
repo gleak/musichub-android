@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mediaplayer.android.data.PlaylistRepository
 import com.mediaplayer.android.data.dto.PlaylistDto
+import com.mediaplayer.android.ui.common.friendlyMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,7 +43,7 @@ class PlaylistsViewModel(
             _state.value = try {
                 PlaylistsUiState.Success(repository.list())
             } catch (t: Throwable) {
-                PlaylistsUiState.Error(t.message ?: "Unknown error")
+                PlaylistsUiState.Error(friendlyMessage(t))
             }
         }
     }
@@ -53,7 +54,7 @@ class PlaylistsViewModel(
             _state.value = try {
                 PlaylistsUiState.Success(repository.list())
             } catch (t: Throwable) {
-                PlaylistsUiState.Error(t.message ?: "Unknown error")
+                PlaylistsUiState.Error(friendlyMessage(t))
             }
             _isRefreshing.value = false
         }

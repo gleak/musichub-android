@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.2.0"
+    const val VERSION = "0.2.1"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,20 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.2.1",
+            title = "Cover art everywhere + polish",
+            highlights = listOf(
+                "Album, artist, and playlist tiles now show cover art on Android Auto",
+                "Album track lists carry track numbers (1/12, 2/12…)",
+                "Voice search and All Songs no longer truncate at 50 results — paging works in the car",
+                "Lyrics removed from the browse tree (they belong on the now-playing card)",
+                "Haptic tap on like, in the mini-player, Now Playing, and song rows",
+                "Now Playing's action row decluttered — Re-download / Mark broken / Save as alarm moved into a ⋮ overflow menu",
+                "Friendlier error messages on Home, Search, Liked, Playlists, Find — no more raw stack traces",
+                "Library tab stays highlighted when you're inside any sub-route (albums, artists, find…)",
+            ),
+        ),
         ChangelogEntry(
             version = "0.2.0",
             title = "Guest mode + Android Auto sleep timer",

@@ -6,6 +6,7 @@ import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.LikedRepository
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.friendlyMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,7 +39,7 @@ class LikedViewModel(
             _state.value = try {
                 LikedUiState.Success(repository.likedSongs().items)
             } catch (t: Throwable) {
-                LikedUiState.Error(t.message ?: "Unknown error")
+                LikedUiState.Error(friendlyMessage(t))
             }
         }
     }
@@ -49,7 +50,7 @@ class LikedViewModel(
             _state.value = try {
                 LikedUiState.Success(repository.likedSongs().items)
             } catch (t: Throwable) {
-                LikedUiState.Error(t.message ?: "Unknown error")
+                LikedUiState.Error(friendlyMessage(t))
             }
             _isRefreshing.value = false
         }

@@ -9,6 +9,7 @@ data class AlbumDto(
     val songCount: Int,
     val totalDurationMs: Long,
     val year: Int? = null,
+    val coverSongId: Long? = null,
 )
 
 @Serializable

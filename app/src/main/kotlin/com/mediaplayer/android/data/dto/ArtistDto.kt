@@ -7,6 +7,7 @@ data class ArtistDto(
     val name: String,
     val albumCount: Int,
     val songCount: Int,
+    val coverSongId: Long? = null,
 )
 
 @Serializable

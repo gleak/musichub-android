@@ -126,6 +126,28 @@ private object Routes {
     fun albumDetail(name: String, artist: String) =
         "albums/${Uri.encode(name)}?artist=${Uri.encode(artist)}"
     fun artistDetail(name: String) = "artists/${Uri.encode(name)}"
+
+    /**
+     * Routes that conceptually live under the "Library" tab. Any sub-route
+     * the bottom nav must keep "Library" highlighted while it's open should
+     * appear here. Prefix-matched, so `playlists/123` resolves to LIBRARY.
+     */
+    private val libraryPrefixes = listOf(
+        LIBRARY,
+        LIKED,
+        FIND,
+        SPOTIFY_IMPORT,
+        "playlists",
+        ALBUM_LIST,
+        "albums",
+        ARTIST_LIST,
+        "artists",
+    )
+
+    fun belongsToLibrary(currentRoute: String?): Boolean {
+        val r = currentRoute ?: return false
+        return libraryPrefixes.any { r == it || r.startsWith("$it/") || r.startsWith("$it?") }
+    }
 }
 
 private data class BottomDestination(
@@ -405,10 +427,7 @@ private fun BottomNav(navController: NavHostController) {
     ) {
         destinations.forEach { dest ->
             val selected = currentRoute == dest.route ||
-                (dest.route == Routes.LIBRARY && currentRoute == Routes.PLAYLIST_DETAIL) ||
-                (dest.route == Routes.LIBRARY && currentRoute == Routes.LIKED) ||
-                (dest.route == Routes.LIBRARY && currentRoute == Routes.SPOTIFY_IMPORT) ||
-                (dest.route == Routes.LIBRARY && currentRoute == Routes.FIND)
+                (dest.route == Routes.LIBRARY && Routes.belongsToLibrary(currentRoute))
 
             NavigationBarItem(
                 selected = selected,

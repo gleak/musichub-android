@@ -52,7 +52,6 @@ internal object LibraryTree {
     const val ROOT_ID = "root"
     const val ALL_SONGS_ID = "all-songs"
     const val PLAYLISTS_ID = "playlists"
-    const val LYRICS_ID = "lyrics"
     const val LIKED_ID = "liked"
     const val RECENTS_ID = "recents"
     const val ALBUMS_ID = "albums"
@@ -99,24 +98,32 @@ internal object LibraryTree {
 
     suspend fun root(): MediaItem = browsable(ROOT_ID, "MediaPlayer")
 
-    /** Children of [parentId], or `null` if the id is unrecognised. */
-    suspend fun children(parentId: String, currentSongId: Long? = null): List<MediaItem>? = when {
-        parentId == ROOT_ID -> rootChildren(currentSongId)
-        parentId == ALL_SONGS_ID -> allSongs(currentSongId)
+    /**
+     * Children of [parentId], or `null` if the id is unrecognised. Honours AA's
+     * pagination: [page] / [pageSize] propagate to network calls so deep lists
+     * (all-songs, search, large playlists) don't truncate at PAGE_SIZE.
+     */
+    suspend fun children(
+        parentId: String,
+        currentSongId: Long? = null,
+        page: Int = 0,
+        pageSize: Int = PAGE_SIZE,
+    ): List<MediaItem>? = when {
+        parentId == ROOT_ID -> rootChildren()
+        parentId == ALL_SONGS_ID -> allSongs(page, pageSize)
         parentId == PLAYLISTS_ID -> playlists()
-        parentId == LIKED_ID -> liked(currentSongId)
-        parentId == RECENTS_ID -> recents(currentSongId)
-        parentId == ALBUMS_ID -> albums()
-        parentId == ARTISTS_ID -> artists()
-        parentId == LYRICS_ID -> lyricsFor(currentSongId)
+        parentId == LIKED_ID -> liked()
+        parentId == RECENTS_ID -> recents()
+        parentId == ALBUMS_ID -> albums(page, pageSize)
+        parentId == ARTISTS_ID -> artists(page, pageSize)
         parentId.startsWith(PLAYLIST_PREFIX) ->
             parentId.removePrefix(PLAYLIST_PREFIX).toLongOrNull()
-                ?.let { playlistSongs(it, currentSongId) }
+                ?.let { playlistSongs(it) }
         parentId.startsWith(ALBUM_PREFIX) ->
             decodeAlbumKey(parentId.removePrefix(ALBUM_PREFIX))
-                ?.let { (name, artist) -> albumSongs(name, artist, currentSongId) }
+                ?.let { (name, artist) -> albumSongs(name, artist) }
         parentId.startsWith(ARTIST_PREFIX) ->
-            artistChildren(decodePart(parentId.removePrefix(ARTIST_PREFIX)), currentSongId)
+            artistChildren(decodePart(parentId.removePrefix(ARTIST_PREFIX)))
         else -> null
     }
 
@@ -129,7 +136,6 @@ internal object LibraryTree {
         mediaId == RECENTS_ID -> sectionFolder(RECENTS_ID, "Recently Played", grid = false)
         mediaId == ALBUMS_ID -> sectionFolder(ALBUMS_ID, "Albums", grid = true)
         mediaId == ARTISTS_ID -> sectionFolder(ARTISTS_ID, "Artists", grid = false)
-        mediaId == LYRICS_ID -> browsable(LYRICS_ID, "Lyrics")
         mediaId.startsWith(SONG_PREFIX) ->
             mediaId.removePrefix(SONG_PREFIX).toLongOrNull()?.let { songLeaf(it) }
         mediaId.startsWith(PLAYLIST_PREFIX) -> {
@@ -174,9 +180,9 @@ internal object LibraryTree {
     }
 
     /** Voice-search proxy against the backend `/api/songs?q=` endpoint. */
-    suspend fun search(query: String): List<MediaItem> {
-        val page = Network.api.listSongs(query = query, page = 0, size = PAGE_SIZE)
-        return page.items.map { songLeaf(it) }
+    suspend fun search(query: String, page: Int = 0, pageSize: Int = PAGE_SIZE): List<MediaItem> {
+        val resp = Network.api.listSongs(query = query, page = page, size = pageSize)
+        return resp.items.map { songLeaf(it) }
     }
 
     // --- mediaId parsers -----------------------------------------------------
@@ -245,35 +251,7 @@ internal object LibraryTree {
     suspend fun recentsQueue(): List<MediaItem> =
         Network.api.recentSongs(limit = RECENT_LIMIT).map { playableSong(it) }
 
-    // --- lyrics --------------------------------------------------------------
-
-    suspend fun lyrics(songId: Long): List<MediaItem> {
-        return try {
-            val lines = Network.api.getLyrics(songId)
-            if (lines.isEmpty()) {
-                listOf(infoItem("No lyrics found for this song"))
-            } else {
-                lines.mapIndexed { index, line ->
-                    MediaItem.Builder()
-                        .setMediaId("lyric:$songId:$index")
-                        .setMediaMetadata(
-                            MediaMetadata.Builder()
-                                .setTitle(line.text)
-                                .setIsBrowsable(false)
-                                .setIsPlayable(false)
-                                .build()
-                        )
-                        .build()
-                }
-            }
-        } catch (e: Exception) {
-            listOf(infoItem("Error loading lyrics"))
-        }
-    }
-
-    private suspend fun lyricsFor(currentSongId: Long?): List<MediaItem> =
-        if (currentSongId != null) lyrics(currentSongId)
-        else listOf(infoItem("No song currently playing"))
+    // --- info placeholder ----------------------------------------------------
 
     fun infoItem(message: String): MediaItem =
         MediaItem.Builder()
@@ -304,36 +282,24 @@ internal object LibraryTree {
 
     // --- internals -----------------------------------------------------------
 
-    private suspend fun rootChildren(currentSongId: Long?): List<MediaItem> {
-        val list = mutableListOf(
-            sectionFolder(RECENTS_ID, "Recently Played", grid = false,
-                type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
-            sectionFolder(LIKED_ID, "Liked Songs", grid = false,
-                type = MediaMetadata.MEDIA_TYPE_PLAYLIST),
-            sectionFolder(PLAYLISTS_ID, "Playlists", grid = true,
-                type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS),
-            sectionFolder(ALBUMS_ID, "Albums", grid = true,
-                type = MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS),
-            sectionFolder(ARTISTS_ID, "Artists", grid = false,
-                type = MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS),
-            sectionFolder(ALL_SONGS_ID, "All Songs", grid = false,
-                type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
-        )
-        if (currentSongId != null) {
-            list.add(infoItem("--- Lyrics ---"))
-            list.addAll(lyrics(currentSongId))
-        }
-        return list
-    }
+    private fun rootChildren(): List<MediaItem> = listOf(
+        sectionFolder(RECENTS_ID, "Recently Played", grid = false,
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
+        sectionFolder(LIKED_ID, "Liked Songs", grid = false,
+            type = MediaMetadata.MEDIA_TYPE_PLAYLIST),
+        sectionFolder(PLAYLISTS_ID, "Playlists", grid = true,
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS),
+        sectionFolder(ALBUMS_ID, "Albums", grid = true,
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS),
+        sectionFolder(ARTISTS_ID, "Artists", grid = false,
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS),
+        sectionFolder(ALL_SONGS_ID, "All Songs", grid = false,
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
+    )
 
-    private suspend fun allSongs(currentSongId: Long?): List<MediaItem> {
-        val page = Network.api.listSongs(query = null, page = 0, size = PAGE_SIZE)
-        val list = mutableListOf<MediaItem>()
-        for (song in page.items) {
-            list.add(songLeaf(song))
-            if (song.id == currentSongId) list.addAll(lyrics(song.id))
-        }
-        return list
+    private suspend fun allSongs(page: Int, pageSize: Int): List<MediaItem> {
+        val resp = Network.api.listSongs(query = null, page = page, size = pageSize)
+        return resp.items.map { songLeaf(it) }
     }
 
     private suspend fun playlists(): List<MediaItem> =
@@ -343,54 +309,52 @@ internal object LibraryTree {
                 title = pl.name,
                 subtitle = "${pl.songCount} song${if (pl.songCount == 1) "" else "s"}",
                 type = MediaMetadata.MEDIA_TYPE_PLAYLIST,
-                artworkSongId = null,
+                artworkSongId = pl.coverSongId,
                 grid = true,
             )
         }
 
-    private suspend fun playlistSongs(playlistId: Long, currentSongId: Long?): List<MediaItem> {
+    private suspend fun playlistSongs(playlistId: Long): List<MediaItem> {
         val detail = Network.api.getPlaylist(playlistId)
-        val list = mutableListOf<MediaItem>()
-        for ((index, song) in detail.songs.withIndex()) {
-            list.add(
-                MediaItem.Builder()
-                    .setMediaId("$PL_LEAF_PREFIX$playlistId:$index:${song.id}")
-                    .setMediaMetadata(song.asBrowseMetadata(playable = true))
-                    .build()
-            )
-            if (song.id == currentSongId) list.addAll(lyrics(song.id))
+        return detail.songs.mapIndexed { index, song ->
+            MediaItem.Builder()
+                .setMediaId("$PL_LEAF_PREFIX$playlistId:$index:${song.id}")
+                .setMediaMetadata(song.asBrowseMetadata(
+                    playable = true,
+                    trackNumber = index + 1,
+                    totalTrackCount = detail.songs.size,
+                ))
+                .build()
         }
-        return list
     }
 
-    private suspend fun albums(): List<MediaItem> {
-        val page = Network.api.listAlbums(query = null, page = 0, size = PAGE_SIZE)
-        return page.items.map { it.asTile() }
+    private suspend fun albums(page: Int, pageSize: Int): List<MediaItem> {
+        val resp = Network.api.listAlbums(query = null, page = page, size = pageSize)
+        return resp.items.map { it.asTile() }
     }
 
-    private suspend fun albumSongs(name: String, artist: String, currentSongId: Long?): List<MediaItem> {
+    private suspend fun albumSongs(name: String, artist: String): List<MediaItem> {
         val detail = Network.api.getAlbum(name, artist)
-        val list = mutableListOf<MediaItem>()
         val nameEnc = encodePart(detail.name)
         val artistEnc = encodePart(detail.artist)
-        for ((index, song) in detail.songs.withIndex()) {
-            list.add(
-                MediaItem.Builder()
-                    .setMediaId("$ALBUM_LEAF_PREFIX$nameEnc|$artistEnc|$index|${song.id}")
-                    .setMediaMetadata(song.asBrowseMetadata(playable = true))
-                    .build()
-            )
-            if (song.id == currentSongId) list.addAll(lyrics(song.id))
+        return detail.songs.mapIndexed { index, song ->
+            MediaItem.Builder()
+                .setMediaId("$ALBUM_LEAF_PREFIX$nameEnc|$artistEnc|$index|${song.id}")
+                .setMediaMetadata(song.asBrowseMetadata(
+                    playable = true,
+                    trackNumber = index + 1,
+                    totalTrackCount = detail.songs.size,
+                ))
+                .build()
         }
-        return list
     }
 
-    private suspend fun artists(): List<MediaItem> {
-        val page = Network.api.listArtists(query = null, page = 0, size = PAGE_SIZE)
-        return page.items.map { it.asTile() }
+    private suspend fun artists(page: Int, pageSize: Int): List<MediaItem> {
+        val resp = Network.api.listArtists(query = null, page = page, size = pageSize)
+        return resp.items.map { it.asTile() }
     }
 
-    private suspend fun artistChildren(name: String, currentSongId: Long?): List<MediaItem> {
+    private suspend fun artistChildren(name: String): List<MediaItem> {
         val detail = Network.api.getArtist(name)
         val list = mutableListOf<MediaItem>()
         // Albums first as grid tiles, then songs as list leaves.
@@ -403,41 +367,30 @@ internal object LibraryTree {
                     .setMediaMetadata(song.asBrowseMetadata(playable = true))
                     .build()
             )
-            if (song.id == currentSongId) list.addAll(lyrics(song.id))
         }
         return list
     }
 
-    private suspend fun liked(currentSongId: Long?): List<MediaItem> {
+    private suspend fun liked(): List<MediaItem> {
         val page = Network.api.getLikedSongs(page = 0, size = LIKED_LIMIT)
-        val list = mutableListOf<MediaItem>()
-        for ((index, song) in page.items.withIndex()) {
-            list.add(
-                MediaItem.Builder()
-                    .setMediaId("$LIKED_LEAF_PREFIX$index|${song.id}")
-                    .setMediaMetadata(song.asBrowseMetadata(playable = true))
-                    .build()
-            )
-            if (song.id == currentSongId) list.addAll(lyrics(song.id))
+        val list = page.items.mapIndexed { index, song ->
+            MediaItem.Builder()
+                .setMediaId("$LIKED_LEAF_PREFIX$index|${song.id}")
+                .setMediaMetadata(song.asBrowseMetadata(playable = true))
+                .build()
         }
-        if (list.isEmpty()) list.add(infoItem("No liked songs yet"))
-        return list
+        return list.ifEmpty { listOf(infoItem("No liked songs yet")) }
     }
 
-    private suspend fun recents(currentSongId: Long?): List<MediaItem> {
+    private suspend fun recents(): List<MediaItem> {
         val songs = Network.api.recentSongs(limit = RECENT_LIMIT)
-        val list = mutableListOf<MediaItem>()
-        for ((index, song) in songs.withIndex()) {
-            list.add(
-                MediaItem.Builder()
-                    .setMediaId("$RECENT_LEAF_PREFIX$index|${song.id}")
-                    .setMediaMetadata(song.asBrowseMetadata(playable = true))
-                    .build()
-            )
-            if (song.id == currentSongId) list.addAll(lyrics(song.id))
+        val list = songs.mapIndexed { index, song ->
+            MediaItem.Builder()
+                .setMediaId("$RECENT_LEAF_PREFIX$index|${song.id}")
+                .setMediaMetadata(song.asBrowseMetadata(playable = true))
+                .build()
         }
-        if (list.isEmpty()) list.add(infoItem("Nothing played yet"))
-        return list
+        return list.ifEmpty { listOf(infoItem("Nothing played yet")) }
     }
 
     /** Browse leaf for a song that plays as a single item (search results). */
@@ -553,7 +506,7 @@ internal object LibraryTree {
         title = name,
         subtitle = artist,
         type = MediaMetadata.MEDIA_TYPE_ALBUM,
-        artworkSongId = null,
+        artworkSongId = coverSongId,
         grid = false,
     )
 
@@ -562,18 +515,26 @@ internal object LibraryTree {
         title = name,
         subtitle = "$songCount song${if (songCount == 1) "" else "s"} · $albumCount album${if (albumCount == 1) "" else "s"}",
         type = MediaMetadata.MEDIA_TYPE_ARTIST,
-        artworkSongId = null,
+        artworkSongId = coverSongId,
         grid = false,
     )
 
-    private fun SongDto.asBrowseMetadata(playable: Boolean): MediaMetadata =
+    private fun SongDto.asBrowseMetadata(
+        playable: Boolean,
+        trackNumber: Int? = null,
+        totalTrackCount: Int? = null,
+    ): MediaMetadata =
         MediaMetadata.Builder()
             .setIsBrowsable(false)
             .setIsPlayable(playable)
             .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
             .setTitle(title)
             .setArtist(artist)
-            .apply { if (album != null) setAlbumTitle(album) }
+            .apply {
+                if (album != null) setAlbumTitle(album)
+                if (trackNumber != null) setTrackNumber(trackNumber)
+                if (totalTrackCount != null) setTotalTrackCount(totalTrackCount)
+            }
             .setArtworkUri(Uri.parse(Network.coverUrl(id)))
             .build()
 
