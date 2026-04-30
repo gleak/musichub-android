@@ -26,4 +26,8 @@ class SongRepository(
     suspend fun redownload(songId: Long): SongDto = api.redownloadSong(songId)
 
     suspend fun downloadVideo(songId: Long): SongDto = api.downloadVideo(songId)
+
+    suspend fun reinitializeVideo(songId: Long) = api.reinitializeVideo(songId)
+
+    suspend fun getReinitializeStatus(songId: Long) = api.getReinitializeStatus(songId)
 }

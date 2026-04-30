@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,8 +44,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.mediaplayer.android.data.AppVersion
+import com.mediaplayer.android.data.ChangelogPreferences
 import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.playback.PlaybackViewModel
+import com.mediaplayer.android.ui.changelog.ChangelogSheet
 import com.mediaplayer.android.ui.albums.AlbumListScreen
 import com.mediaplayer.android.ui.albums.AlbumScreen
 import com.mediaplayer.android.ui.artists.ArtistListScreen
@@ -120,9 +124,16 @@ private fun AppScaffold(onSignOut: () -> Unit) {
     val playbackVm: PlaybackViewModel = viewModel()
     val currentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
     var sheetOpen by remember { mutableStateOf(false) }
+    var changelogOpen by remember { mutableStateOf(false) }
 
     val navController = rememberNavController()
     val networkAvailable by ConnectivityObserver.networkAvailable.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        if (ChangelogPreferences.instance.lastSeenVersion() != AppVersion.VERSION) {
+            changelogOpen = true
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -140,6 +151,7 @@ private fun AppScaffold(onSignOut: () -> Unit) {
                 navController = navController,
                 playbackVm = playbackVm,
                 onSignOut = onSignOut,
+                onShowChangelog = { changelogOpen = true },
             )
             if (!networkAvailable) {
                 OfflineBadge(
@@ -157,6 +169,10 @@ private fun AppScaffold(onSignOut: () -> Unit) {
             viewModel = playbackVm,
             onDismiss = { sheetOpen = false },
         )
+    }
+
+    if (changelogOpen) {
+        ChangelogSheet(onDismiss = { changelogOpen = false })
     }
 }
 
@@ -186,6 +202,7 @@ private fun NavHostBody(
     navController: NavHostController,
     playbackVm: PlaybackViewModel,
     onSignOut: () -> Unit,
+    onShowChangelog: () -> Unit,
 ) {
     NavHost(
             navController = navController,
@@ -200,6 +217,7 @@ private fun NavHostBody(
                     },
                     onLikedClick = { navController.navigate(Routes.LIKED) },
                     onSignOut = onSignOut,
+                    onShowChangelog = onShowChangelog,
                 )
             }
             composable(Routes.SEARCH) {

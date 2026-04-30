@@ -18,6 +18,7 @@ import com.mediaplayer.android.data.dto.RequestDto
 import com.mediaplayer.android.data.dto.RequestSummaryDto
 import com.mediaplayer.android.data.dto.ReorderSongsRequest
 import com.mediaplayer.android.data.dto.SelectCandidateBody
+import com.mediaplayer.android.data.dto.ReinitStatusDto
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.data.dto.SpotifyImportResultDto
 import okhttp3.MultipartBody
@@ -62,6 +63,14 @@ interface MediaPlayerApi {
     /** Download the MP4 video for a YouTube-sourced song that has no video yet. */
     @POST("api/songs/{id}/download-video")
     suspend fun downloadVideo(@Path("id") id: Long): SongDto
+
+    /** Re-mux existing MP4 with -movflags faststart for instant seek support. Starts async job, returns 202. */
+    @POST("api/songs/{id}/video/reinitialize")
+    suspend fun reinitializeVideo(@Path("id") id: Long)
+
+    /** Poll status of ongoing reinitialize job. Returns {status: RUNNING|DONE|ERROR, error: String}. */
+    @GET("api/songs/{id}/video/reinitialize/status")
+    suspend fun getReinitializeStatus(@Path("id") id: Long): ReinitStatusDto
 
     // ---------- Spotify import ----------
 

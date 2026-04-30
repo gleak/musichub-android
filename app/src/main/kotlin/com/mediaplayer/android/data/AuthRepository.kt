@@ -10,12 +10,14 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.mediaplayer.android.BuildConfig
 import com.mediaplayer.android.MediaPlayerApp
 import kotlinx.coroutines.flow.first
+import java.util.UUID
 
 private val Context.authDataStore: DataStore<Preferences> by preferencesDataStore(name = "auth")
 
@@ -64,6 +66,18 @@ class AuthRepository private constructor(private val context: Context) {
         context.authDataStore.edit { it.remove(HAS_SIGNED_IN) }
     }
 
+    /**
+     * Returns the persistent anonymous device id. Generated on first call, then
+     * stored in DataStore so it survives app upgrades. Never cleared on signOut —
+     * if the user logs out, they resume the same anonymous identity.
+     */
+    suspend fun anonymousId(): String {
+        context.authDataStore.data.first()[ANON_ID]?.let { return it }
+        val id = UUID.randomUUID().toString()
+        context.authDataStore.edit { it[ANON_ID] = id }
+        return id
+    }
+
     private suspend fun hasEverSignedIn(): Boolean =
         context.authDataStore.data.first()[HAS_SIGNED_IN] == true
 
@@ -83,6 +97,7 @@ class AuthRepository private constructor(private val context: Context) {
 
     companion object {
         private val HAS_SIGNED_IN = booleanPreferencesKey("has_signed_in")
+        private val ANON_ID = stringPreferencesKey("anonymous_id")
 
         val instance: AuthRepository by lazy {
             AuthRepository(MediaPlayerApp.instance)

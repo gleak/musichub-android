@@ -74,6 +74,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     private val _videoDownloadError = MutableStateFlow<String?>(null)
     val videoDownloadError: StateFlow<String?> = _videoDownloadError.asStateFlow()
 
+    private val _videoReinitializing = MutableStateFlow(false)
+    val videoReinitializing: StateFlow<Boolean> = _videoReinitializing.asStateFlow()
+
+    private val _videoReinitializeError = MutableStateFlow<String?>(null)
+    val videoReinitializeError: StateFlow<String?> = _videoReinitializeError.asStateFlow()
+
     sealed class AlarmExportState {
         data object Idle : AlarmExportState()
         data object Exporting : AlarmExportState()
@@ -200,6 +206,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         val c = controller ?: return
         if (c.isPlaying) c.pause() else c.play()
     }
+
+    fun pause() { controller?.pause() }
+    fun play() { controller?.play() }
 
     fun seekTo(positionMs: Long) {
         controller?.seekTo(positionMs)
@@ -329,6 +338,36 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun consumeVideoDownloadError() { _videoDownloadError.value = null }
+
+    @Suppress("TooGenericExceptionCaught")
+    fun reinitializeVideoForCurrent() {
+        val current = _currentSong.value ?: return
+        if (_videoReinitializing.value) return
+        _videoReinitializing.value = true
+        _videoReinitializeError.value = null
+        viewModelScope.launch {
+            try {
+                songRepository.reinitializeVideo(current.id)
+                while (true) {
+                    delay(2_000)
+                    val s = songRepository.getReinitializeStatus(current.id)
+                    when (s.status) {
+                        "DONE" -> break
+                        "ERROR" -> {
+                            _videoReinitializeError.value = s.error.ifBlank { "Reinitialize failed" }
+                            break
+                        }
+                    }
+                }
+            } catch (t: Throwable) {
+                _videoReinitializeError.value = t.message ?: "Reinitialize failed"
+            } finally {
+                _videoReinitializing.value = false
+            }
+        }
+    }
+
+    fun consumeVideoReinitializeError() { _videoReinitializeError.value = null }
 
     private fun redownloadErrorMessage(t: Throwable): String {
         if (t is retrofit2.HttpException) {

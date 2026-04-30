@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit
 
 object AuthTokenHolder {
     @Volatile var idToken: String? = null
+    @Volatile var anonymousId: String? = null
 }
 
 object Network {
@@ -23,19 +24,22 @@ object Network {
         coerceInputValues = true
     }
 
-    // Dev fallback — used when no Google token is present (Swagger / local testing).
-    private const val DEV_API_KEY = "cf3ea1ea-f12a-4557-b926-1ac32a5ac4e2"
+    // Client identification key — always sent so the backend can gate by allowed client.
+    // User identity is layered on top via Bearer (signed-in) or X-Anonymous-Id (anon device).
+    const val API_KEY = "cf3ea1ea-f12a-4557-b926-1ac32a5ac4e2"
 
     val okHttp: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .addInterceptor { chain ->
             val token = AuthTokenHolder.idToken
+            val anonId = AuthTokenHolder.anonymousId
             val req = chain.request().newBuilder().apply {
+                header("X-Api-Key", API_KEY)
                 if (token != null) {
                     header("Authorization", "Bearer $token")
-                } else {
-                    header("X-Api-Key", DEV_API_KEY)
+                } else if (anonId != null) {
+                    header("X-Anonymous-Id", anonId)
                 }
             }.build()
             try {

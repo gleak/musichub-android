@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -35,6 +37,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +66,7 @@ fun HomeScreen(
     onPlaylistClick: (PlaylistDto) -> Unit = {},
     onLikedClick: () -> Unit = {},
     onSignOut: () -> Unit = {},
+    onShowChangelog: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = viewModel(),
 ) {
@@ -82,6 +88,7 @@ fun HomeScreen(
                 onPlaylistClick = onPlaylistClick,
                 onLikedClick = onLikedClick,
                 onSignOut = onSignOut,
+                onShowChangelog = onShowChangelog,
             )
         }
     }
@@ -95,6 +102,7 @@ private fun HomeContent(
     onPlaylistClick: (PlaylistDto) -> Unit,
     onLikedClick: () -> Unit,
     onSignOut: () -> Unit,
+    onShowChangelog: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -102,7 +110,10 @@ private fun HomeContent(
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         item(key = "greeting") {
-            GreetingHeader(onSignOut = onSignOut)
+            GreetingHeader(
+                onSignOut = onSignOut,
+                onShowChangelog = onShowChangelog,
+            )
         }
 
         if (recents.isNotEmpty() || playlists.isNotEmpty()) {
@@ -138,7 +149,11 @@ private fun HomeContent(
 }
 
 @Composable
-private fun GreetingHeader(onSignOut: () -> Unit) {
+private fun GreetingHeader(
+    onSignOut: () -> Unit,
+    onShowChangelog: () -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -151,12 +166,33 @@ private fun GreetingHeader(onSignOut: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
-        IconButton(onClick = onSignOut) {
-            Icon(
-                imageVector = Icons.Filled.Settings,
-                contentDescription = "Sign out",
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
+        Box {
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Settings",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("What's new") },
+                    onClick = {
+                        menuOpen = false
+                        onShowChangelog()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Sign out") },
+                    onClick = {
+                        menuOpen = false
+                        onSignOut()
+                    },
+                )
+            }
         }
     }
 }

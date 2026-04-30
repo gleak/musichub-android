@@ -33,8 +33,9 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.TextSnippet
-import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VideoFile
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -108,6 +109,8 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
     val alarmExport by viewModel.alarmExportState.collectAsStateWithLifecycle()
     val videoDownloading by viewModel.videoDownloading.collectAsStateWithLifecycle()
     val videoDownloadError by viewModel.videoDownloadError.collectAsStateWithLifecycle()
+    val videoReinitializing by viewModel.videoReinitializing.collectAsStateWithLifecycle()
+    val videoReinitializeError by viewModel.videoReinitializeError.collectAsStateWithLifecycle()
     var confirmRedownload by remember { mutableStateOf(false) }
     var confirmMarkBroken by remember { mutableStateOf(false) }
 
@@ -122,6 +125,19 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
     var showEqualizer by remember { mutableStateOf(false) }
     var showSleepMenu by remember { mutableStateOf(false) }
     var showVideo by remember { mutableStateOf(false) }
+    var pausedForVideo by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showVideo) {
+        if (showVideo) {
+            if (isPlaying) {
+                viewModel.pause()
+                pausedForVideo = true
+            }
+        } else if (pausedForVideo) {
+            viewModel.play()
+            pausedForVideo = false
+        }
+    }
 
     val coverModel = if (current.hasCoverArt) Network.coverUrl(current.id) else null
     val dominant = rememberCoverDominantColor(
@@ -351,12 +367,32 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
                     )
                 }
                 if (current.hasVideo) {
-                    IconButton(onClick = { showVideo = true }) {
-                        Icon(
-                            imageVector = Icons.Filled.VideoLibrary,
-                            contentDescription = "Watch video",
-                            tint = Color.White.copy(alpha = 0.85f),
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { showVideo = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.VideoLibrary,
+                                contentDescription = "Watch video",
+                                tint = Color.White.copy(alpha = 0.85f),
+                            )
+                        }
+                        IconButton(
+                            onClick = viewModel::reinitializeVideoForCurrent,
+                            enabled = !videoReinitializing,
+                        ) {
+                            if (videoReinitializing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White,
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.Tune,
+                                    contentDescription = "Reinitialize video for fast seeking",
+                                    tint = Color.White.copy(alpha = 0.45f),
+                                )
+                            }
+                        }
                     }
                 } else {
                     IconButton(
@@ -450,10 +486,14 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
 
             Spacer(Modifier.height(24.dp))
         }
-    }
 
-    if (showVideo) {
-        VideoPlayerSheet(song = current, onDismiss = { showVideo = false })
+        if (showVideo) {
+            VideoPlayerOverlay(
+                song = current,
+                modifier = Modifier.fillMaxSize(),
+                onDismiss = { showVideo = false },
+            )
+        }
     }
 
     if (showQueue) {
@@ -528,6 +568,17 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
             text = { Text(msg) },
             confirmButton = {
                 TextButton(onClick = viewModel::consumeVideoDownloadError) { Text("OK") }
+            },
+        )
+    }
+
+    videoReinitializeError?.let { msg ->
+        AlertDialog(
+            onDismissRequest = viewModel::consumeVideoReinitializeError,
+            title = { Text("Video reinitialize failed") },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = viewModel::consumeVideoReinitializeError) { Text("OK") }
             },
         )
     }

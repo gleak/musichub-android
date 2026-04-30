@@ -6,10 +6,13 @@ import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import com.mediaplayer.android.data.AuthRepository
+import com.mediaplayer.android.data.AuthTokenHolder
 import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.playback.PlayerConnection
+import kotlinx.coroutines.runBlocking
 
 /**
  * Application class — single place where app-wide singletons get wired:
@@ -29,6 +32,9 @@ class MediaPlayerApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // Resolve the persistent anonymous device id before any network call so
+        // unauthenticated requests carry X-Anonymous-Id instead of the dev API key.
+        AuthTokenHolder.anonymousId = runBlocking { AuthRepository.instance.anonymousId() }
         ConnectivityObserver.init()
         PlayerConnection.connect(this)
         DownloadRepository.init()
