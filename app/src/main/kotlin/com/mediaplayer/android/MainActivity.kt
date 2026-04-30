@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +56,8 @@ import com.mediaplayer.android.ui.artists.ArtistListScreen
 import com.mediaplayer.android.ui.artists.ArtistScreen
 import com.mediaplayer.android.ui.auth.AuthViewModel
 import com.mediaplayer.android.ui.auth.LoginScreen
+import com.mediaplayer.android.ui.common.CurrentUser
+import com.mediaplayer.android.ui.common.LocalCurrentUser
 import com.mediaplayer.android.ui.find.FindScreen
 import com.mediaplayer.android.ui.home.HomeScreen
 import com.mediaplayer.android.ui.liked.LikedScreen
@@ -87,9 +90,22 @@ private fun AuthGate() {
     val authVm: AuthViewModel = viewModel(factory = AuthViewModel.Factory)
     val authState by authVm.state.collectAsStateWithLifecycle()
 
-    when (authState) {
-        is AuthViewModel.State.SignedIn -> AppScaffold(onSignOut = authVm::signOut)
-        else -> LoginScreen(state = authState, onSignIn = authVm::signIn)
+    when (val s = authState) {
+        is AuthViewModel.State.SignedIn -> {
+            val currentUser = CurrentUser(
+                user = s.user,
+                onSignIn = authVm::signOut, // upgrading from anon → drop anon state, return to LoginScreen
+                onSignOut = authVm::signOut,
+            )
+            CompositionLocalProvider(LocalCurrentUser provides currentUser) {
+                AppScaffold(onSignOut = authVm::signOut)
+            }
+        }
+        else -> LoginScreen(
+            state = authState,
+            onSignIn = authVm::signIn,
+            onContinueAsGuest = authVm::signInAnonymously,
+        )
     }
 }
 

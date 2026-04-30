@@ -20,12 +20,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LibraryAdd
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -56,6 +58,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mediaplayer.android.data.dto.PlaylistDto
+import com.mediaplayer.android.ui.common.AnonymousBanner
+import com.mediaplayer.android.ui.common.CenteredSpinner
+import com.mediaplayer.android.ui.common.ErrorWithRetry
+import com.mediaplayer.android.ui.common.LocalCurrentUser
+import com.mediaplayer.android.ui.common.displayInitial
 import com.mediaplayer.android.ui.theme.SpotifyColors
 
 private enum class LibraryFilter { All, Playlists, Liked }
@@ -82,6 +89,7 @@ fun PlaylistsScreen(
                 onAdd = { createOpen = true },
                 onSignOut = onSignOut,
             )
+            AnonymousBanner()
             FilterRow(filter = filter, onChange = { filter = it })
 
             PullToRefreshBox(
@@ -137,6 +145,10 @@ private fun LibraryTopBar(
     onAdd: () -> Unit,
     onSignOut: () -> Unit,
 ) {
+    val currentUser = LocalCurrentUser.current
+    val isAnonymous = currentUser?.user?.anonymous == true
+    val initial = currentUser?.user?.displayInitial().orEmpty()
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -150,11 +162,20 @@ private fun LibraryTopBar(
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "M",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            if (isAnonymous || initial.isEmpty()) {
+                Icon(
+                    imageVector = Icons.Filled.Person,
+                    contentDescription = if (isAnonymous) "Guest" else "Account",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            } else {
+                Text(
+                    text = initial,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
         Spacer(Modifier.width(12.dp))
         Text(
@@ -179,8 +200,8 @@ private fun LibraryTopBar(
         }
         IconButton(onClick = onSignOut) {
             Icon(
-                imageVector = Icons.Filled.Logout,
-                contentDescription = "Sign out",
+                imageVector = if (isAnonymous) Icons.AutoMirrored.Filled.Login else Icons.AutoMirrored.Filled.Logout,
+                contentDescription = if (isAnonymous) "Sign in" else "Sign out",
                 tint = MaterialTheme.colorScheme.onSurface,
             )
         }
@@ -460,36 +481,6 @@ private fun CreatePlaylistDialog(
     )
 }
 
-@Composable
-private fun CenteredSpinner() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(modifier = Modifier.size(32.dp))
-    }
-}
-
-@Composable
-private fun ErrorWithRetry(message: String, onRetry: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            FilledTonalButton(onClick = onRetry) {
-                Text("Retry")
-            }
-        }
-    }
-}
 
 private fun pluralizeSongs(count: Int): String =
     if (count == 1) "1 song" else "$count songs"

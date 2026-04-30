@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.dp
 fun LoginScreen(
     state: AuthViewModel.State,
     onSignIn: (Context) -> Unit,
+    onContinueAsGuest: () -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -52,6 +54,10 @@ fun LoginScreen(
                     Spacer(modifier = Modifier.height(48.dp))
                     Button(onClick = { onSignIn(context) }) {
                         Text("Sign in with Google")
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(onClick = onContinueAsGuest) {
+                        Text("Continue as guest")
                     }
                     if (state is AuthViewModel.State.Error) {
                         Spacer(modifier = Modifier.height(16.dp))

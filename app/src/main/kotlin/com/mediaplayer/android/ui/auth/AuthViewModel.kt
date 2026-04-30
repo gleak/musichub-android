@@ -35,7 +35,10 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                 try {
                     _state.value = State.SignedIn(Network.api.getMe())
                 } catch (_: Exception) {
-                    _state.value = State.SignedIn(UserDto(id = -1))
+                    // Server rejected the token — drop it and let the user pick again
+                    // (sign in or continue as guest) rather than entering a half-signed-in state.
+                    AuthTokenHolder.idToken = null
+                    _state.value = State.NotSignedIn
                 }
             } else {
                 _state.value = State.NotSignedIn
@@ -60,6 +63,26 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                 } else {
                     _state.value = State.Error(msg.ifEmpty { "Sign-in failed" })
                 }
+            }
+        }
+    }
+
+    /**
+     * Enters the app as an anonymous guest. No Google sign-in dialog — the network
+     * layer's persistent {@code X-Anonymous-Id} header carries the device identity,
+     * and the backend creates (or returns) the corresponding anonymous user row.
+     */
+    fun signInAnonymously() {
+        viewModelScope.launch {
+            _state.value = State.Loading
+            AuthTokenHolder.idToken = null
+            try {
+                val user = Network.api.getMe()
+                _state.value = State.SignedIn(user)
+            } catch (e: Exception) {
+                _state.value = State.Error(
+                    e.message?.takeIf { it.isNotBlank() } ?: "Couldn't reach the server"
+                )
             }
         }
     }

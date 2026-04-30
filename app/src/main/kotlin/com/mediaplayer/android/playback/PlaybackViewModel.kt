@@ -9,6 +9,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import coil3.SingletonImageLoader
 import coil3.memory.MemoryCache
 import com.mediaplayer.android.data.DownloadRepository
@@ -56,8 +57,15 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     private val _queue = MutableStateFlow<List<SongDto>>(emptyList())
     val queue: StateFlow<List<SongDto>> = _queue.asStateFlow()
 
-    private val sleepTimer = SleepTimer(viewModelScope)
-    val sleepTimerActive: StateFlow<Boolean> = sleepTimer.isActive
+    // Sleep timer state mirrored from MediaPlaybackService — the service owns the
+    // authoritative timer so phone + AA stay in sync. We seed from the controller's
+    // session extras and refresh whenever the service publishes a change.
+    private val _sleepTimerActive = MutableStateFlow(false)
+    val sleepTimerActive: StateFlow<Boolean> = _sleepTimerActive.asStateFlow()
+
+    /** Liked state of the currently playing song. Mirrored from the service via session extras. */
+    private val _currentLiked = MutableStateFlow(false)
+    val currentLiked: StateFlow<Boolean> = _currentLiked.asStateFlow()
 
     private val _redownloading = MutableStateFlow(false)
     val redownloading: StateFlow<Boolean> = _redownloading.asStateFlow()
@@ -171,6 +179,16 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     if (trackedDurationMs == 0L && c.duration > 0) trackedDurationMs = c.duration
                 }
                 delay(if (controller?.isPlaying == true) POSITION_POLL_MS else POSITION_POLL_IDLE_MS)
+            }
+        }
+
+        // Mirror service-owned UX state (sleep timer + like) to UI.
+        viewModelScope.launch {
+            PlayerConnection.sessionExtras.collectLatest { extras ->
+                _sleepTimerActive.value =
+                    extras.getBoolean(MediaPlaybackService.EXTRA_SLEEP_ACTIVE, false)
+                _currentLiked.value =
+                    extras.getBoolean(MediaPlaybackService.EXTRA_LIKED, false)
             }
         }
     }
@@ -449,12 +467,33 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** Arms the service-side sleep timer. Triggers a pause when it expires. */
     fun setSleepTimer(minutes: Int) {
-        sleepTimer.set(minutes) { controller?.pause() }
+        val c = controller ?: return
+        val args = android.os.Bundle().apply { putInt("minutes", minutes) }
+        c.sendCustomCommand(
+            SessionCommand(MediaPlaybackService.ACTION_SLEEP_TIMER, android.os.Bundle.EMPTY),
+            args,
+        )
     }
 
+    /** Cancels the service-side sleep timer if armed. */
     fun cancelSleepTimer() {
-        sleepTimer.cancel()
+        val c = controller ?: return
+        val args = android.os.Bundle().apply { putInt("minutes", 0) }
+        c.sendCustomCommand(
+            SessionCommand(MediaPlaybackService.ACTION_SLEEP_TIMER, android.os.Bundle.EMPTY),
+            args,
+        )
+    }
+
+    /** Toggles the like state of the currently playing track via the service. */
+    fun toggleCurrentLike() {
+        val c = controller ?: return
+        c.sendCustomCommand(
+            SessionCommand(MediaPlaybackService.ACTION_TOGGLE_LIKE, android.os.Bundle.EMPTY),
+            android.os.Bundle.EMPTY,
+        )
     }
 
     private fun pushDuration() {

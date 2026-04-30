@@ -64,6 +64,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mediaplayer.android.data.dto.PlaylistDetailDto
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.CenteredMessage
+import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.search.SongRow
 import androidx.compose.material3.TopAppBarDefaults
@@ -434,28 +436,6 @@ private fun Header(
     }
 }
 
-@Composable
-private fun CenteredSpinner() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(modifier = Modifier.size(32.dp))
-    }
-}
-
-@Composable
-private fun CenteredMessage(text: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
 
 private fun pluralizeSongsDetail(count: Int): String =
     if (count == 1) "1 song" else "$count songs"

@@ -54,6 +54,8 @@ import coil3.request.crossfade
 import com.mediaplayer.android.R
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.CenteredMessage
+import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
 
 @Composable
@@ -315,25 +317,3 @@ private fun SearchBar(
     )
 }
 
-@Composable
-private fun CenteredSpinner() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(modifier = Modifier.size(32.dp))
-    }
-}
-
-@Composable
-private fun CenteredMessage(text: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}

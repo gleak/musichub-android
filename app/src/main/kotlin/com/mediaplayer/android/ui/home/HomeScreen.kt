@@ -56,6 +56,10 @@ import coil3.request.crossfade
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.AnonymousBanner
+import com.mediaplayer.android.ui.common.CenteredSpinner
+import com.mediaplayer.android.ui.common.ErrorWithRetry
+import com.mediaplayer.android.ui.common.LocalCurrentUser
 import com.mediaplayer.android.ui.theme.SpotifyColors
 import java.util.Calendar
 
@@ -116,6 +120,10 @@ private fun HomeContent(
             )
         }
 
+        item(key = "anonymous_banner") {
+            AnonymousBanner()
+        }
+
         if (recents.isNotEmpty() || playlists.isNotEmpty()) {
             item(key = "shortcuts") {
                 ShortcutGrid(
@@ -153,6 +161,7 @@ private fun GreetingHeader(
     onSignOut: () -> Unit,
     onShowChangelog: () -> Unit,
 ) {
+    val isAnonymous = LocalCurrentUser.current?.user?.anonymous == true
     var menuOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
@@ -186,7 +195,7 @@ private fun GreetingHeader(
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("Sign out") },
+                    text = { Text(if (isAnonymous) "Sign in" else "Sign out") },
                     onClick = {
                         menuOpen = false
                         onSignOut()
@@ -476,23 +485,6 @@ private fun PlaylistCardSquare(playlist: PlaylistDto, onClick: () -> Unit) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-    }
-}
-
-@Composable
-private fun CenteredSpinner() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(modifier = Modifier.size(32.dp))
-    }
-}
-
-@Composable
-private fun ErrorWithRetry(message: String, onRetry: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            FilledTonalButton(onClick = onRetry) { Text("Retry") }
-        }
     }
 }
 

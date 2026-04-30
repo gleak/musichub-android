@@ -2,6 +2,7 @@ package com.mediaplayer.android.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.Bundle
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -26,8 +27,22 @@ object PlayerConnection {
     private val _controller = MutableStateFlow<MediaController?>(null)
     val controller: StateFlow<MediaController?> = _controller.asStateFlow()
 
+    /**
+     * Most recent session-level extras bundle published by [MediaPlaybackService]
+     * via {@link androidx.media3.session.MediaSession#setSessionExtras}. Used to
+     * surface service-owned state (e.g. sleep timer active) to the UI.
+     */
+    private val _sessionExtras = MutableStateFlow(Bundle.EMPTY)
+    val sessionExtras: StateFlow<Bundle> = _sessionExtras.asStateFlow()
+
     @Volatile
     private var inFlight: com.google.common.util.concurrent.ListenableFuture<MediaController>? = null
+
+    private val controllerListener = object : MediaController.Listener {
+        override fun onExtrasChanged(controller: MediaController, extras: Bundle) {
+            _sessionExtras.value = extras
+        }
+    }
 
     fun connect(context: Context) {
         if (_controller.value != null || inFlight != null) return
@@ -36,12 +51,16 @@ object PlayerConnection {
             context.applicationContext,
             ComponentName(context.applicationContext, MediaPlaybackService::class.java),
         )
-        val future = MediaController.Builder(context.applicationContext, token).buildAsync()
+        val future = MediaController.Builder(context.applicationContext, token)
+            .setListener(controllerListener)
+            .buildAsync()
         inFlight = future
         future.addListener(
             {
                 try {
-                    _controller.value = future.get()
+                    val c = future.get()
+                    _controller.value = c
+                    _sessionExtras.value = c.sessionExtras
                 } catch (t: Throwable) {
                     // Bind failure — log via stderr; no UI path for this yet.
                     t.printStackTrace()

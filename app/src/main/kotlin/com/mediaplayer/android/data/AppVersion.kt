@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.1.1"
+    const val VERSION = "0.2.0"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,19 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.2.0",
+            title = "Guest mode + Android Auto sleep timer",
+            highlights = listOf(
+                "Continue as guest — use the app without signing in; data lives under your device",
+                "Sign-in upgrade banner so you know when you're a guest",
+                "Avatar now shows your initial when signed in (or a guest icon)",
+                "Like button added to Now Playing and the mini-player",
+                "Sleep timer reachable from Android Auto's now-playing card",
+                "Phone and Android Auto now share one sleep timer — set it anywhere, see it everywhere",
+                "Loading and error states unified across screens",
+            ),
+        ),
         ChangelogEntry(
             version = "0.1.1",
             title = "Inline video + slow-stream fix",

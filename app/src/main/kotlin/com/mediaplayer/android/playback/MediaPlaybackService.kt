@@ -32,6 +32,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.guava.future
 import kotlinx.coroutines.launch
 
@@ -57,6 +58,17 @@ class MediaPlaybackService : MediaLibraryService() {
 
     companion object {
         const val ACTION_TOGGLE_LIKE = "com.mediaplayer.android.TOGGLE_LIKE"
+        /**
+         * Custom session command for setting / cancelling the sleep timer.
+         * Args bundle key: {@code "minutes"} (Int). 0 cancels an active timer.
+         * Authoritative timer state lives on this service so controllers on
+         * Android Auto and the phone share one timer instance.
+         */
+        const val ACTION_SLEEP_TIMER = "com.mediaplayer.android.SLEEP_TIMER"
+        /** Bundle key on session extras: Boolean. True when a sleep timer is armed. */
+        const val EXTRA_SLEEP_ACTIVE = "sleep_active"
+        /** Bundle key on session extras: Boolean. True when current song is liked. */
+        const val EXTRA_LIKED = "liked"
     }
 
     private var mediaSession: MediaLibrarySession? = null
@@ -81,6 +93,18 @@ class MediaPlaybackService : MediaLibraryService() {
     private val toggleLikeCommand =
         SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY)
     @Volatile private var currentLiked: Boolean = false
+
+    // --- Sleep timer (service-owned, single source of truth across phone + AA)
+    //
+    // The service owns the timer so a timer set in the car keeps ticking when
+    // the activity is destroyed, and a timer set on the phone is reflected
+    // back in AA's now-playing card. Controllers send {@link #ACTION_SLEEP_TIMER}
+    // with a "minutes" int (0 = cancel); state is published via session extras.
+    private val sleepTimer = SleepTimer(serviceScope)
+    private val sleepTimerCommand =
+        SessionCommand(ACTION_SLEEP_TIMER, Bundle.EMPTY)
+    /** Default minutes used when AA presses the Sleep button without args. */
+    private val defaultSleepMinutes = 30
 
     override fun onCreate() {
         super.onCreate()
@@ -133,8 +157,19 @@ class MediaPlaybackService : MediaLibraryService() {
 
         mediaSession = MediaLibrarySession.Builder(this, player, LibraryCallback())
             .setSessionActivity(pendingIntent)
-            .setCustomLayout(ImmutableList.of(buildLikeButton(liked = false)))
+            .setCustomLayout(buildCustomLayout(liked = false, sleepActive = false))
             .build()
+
+        // Mirror service-owned sleep timer state to controllers (phone VM + AA)
+        // via session extras + a refresh of the custom layout.
+        serviceScope.launch {
+            sleepTimer.isActive.collectLatest { active ->
+                mediaSession?.let { session ->
+                    session.setSessionExtras(buildSessionExtras(currentLiked, active))
+                    session.setCustomLayout(buildCustomLayout(currentLiked, active))
+                }
+            }
+        }
 
         // M13: bind the hardware Equalizer to this player's audio session.
         // audioSessionId is allocated at build time; 0 means unsupported.
@@ -187,10 +222,24 @@ class MediaPlaybackService : MediaLibraryService() {
     }
 
     private fun updateCustomLayout() {
-        mediaSession?.setCustomLayout(
-            ImmutableList.of(buildLikeButton(currentLiked))
-        )
+        val sleepActive = sleepTimer.isActive.value
+        mediaSession?.let { session ->
+            session.setCustomLayout(buildCustomLayout(currentLiked, sleepActive))
+            session.setSessionExtras(buildSessionExtras(currentLiked, sleepActive))
+        }
     }
+
+    private fun buildSessionExtras(liked: Boolean, sleepActive: Boolean): Bundle =
+        Bundle().apply {
+            putBoolean(EXTRA_LIKED, liked)
+            putBoolean(EXTRA_SLEEP_ACTIVE, sleepActive)
+        }
+
+    private fun buildCustomLayout(liked: Boolean, sleepActive: Boolean): ImmutableList<CommandButton> =
+        ImmutableList.of(
+            buildLikeButton(liked),
+            buildSleepButton(sleepActive),
+        )
 
     private fun buildLikeButton(liked: Boolean): CommandButton =
         CommandButton.Builder()
@@ -198,6 +247,15 @@ class MediaPlaybackService : MediaLibraryService() {
             .setDisplayName(if (liked) "Unlike" else "Like")
             .setIconResId(
                 if (liked) R.drawable.ic_favorite else R.drawable.ic_favorite_border
+            )
+            .build()
+
+    private fun buildSleepButton(active: Boolean): CommandButton =
+        CommandButton.Builder()
+            .setSessionCommand(sleepTimerCommand)
+            .setDisplayName(if (active) "Cancel sleep" else "Sleep ${defaultSleepMinutes}m")
+            .setIconResId(
+                if (active) R.drawable.ic_bedtime else R.drawable.ic_bedtime_off
             )
             .build()
 
@@ -253,6 +311,7 @@ class MediaPlaybackService : MediaLibraryService() {
             val availableSessionCommands = connectionResult.availableSessionCommands
                 .buildUpon()
                 .add(toggleLikeCommand)
+                .add(sleepTimerCommand)
                 .build()
             return MediaSession.ConnectionResult.accept(
                 availableSessionCommands,
@@ -266,19 +325,35 @@ class MediaPlaybackService : MediaLibraryService() {
             customCommand: SessionCommand,
             args: Bundle,
         ): ListenableFuture<SessionResult> = serviceScope.future {
-            if (customCommand.customAction != ACTION_TOGGLE_LIKE) {
-                return@future SessionResult(SessionError.ERROR_NOT_SUPPORTED)
-            }
-            val songId = songIdOf(session.player.currentMediaItem)
-                ?: return@future SessionResult(SessionError.ERROR_INVALID_STATE)
-            try {
-                if (currentLiked) likedRepository.unlike(songId)
-                else likedRepository.like(songId)
-                currentLiked = !currentLiked
-                updateCustomLayout()
-                SessionResult(SessionResult.RESULT_SUCCESS)
-            } catch (_: Exception) {
-                SessionResult(SessionError.ERROR_UNKNOWN)
+            when (customCommand.customAction) {
+                ACTION_TOGGLE_LIKE -> {
+                    val songId = songIdOf(session.player.currentMediaItem)
+                        ?: return@future SessionResult(SessionError.ERROR_INVALID_STATE)
+                    try {
+                        if (currentLiked) likedRepository.unlike(songId)
+                        else likedRepository.like(songId)
+                        currentLiked = !currentLiked
+                        updateCustomLayout()
+                        SessionResult(SessionResult.RESULT_SUCCESS)
+                    } catch (_: Exception) {
+                        SessionResult(SessionError.ERROR_UNKNOWN)
+                    }
+                }
+                ACTION_SLEEP_TIMER -> {
+                    // 0 cancels; absent / negative defaults to AA's quick-set value.
+                    val minutes = if (args.containsKey("minutes")) {
+                        args.getInt("minutes")
+                    } else {
+                        defaultSleepMinutes
+                    }
+                    if (minutes <= 0 || sleepTimer.isActive.value) {
+                        sleepTimer.cancel()
+                    } else {
+                        sleepTimer.set(minutes) { session.player.pause() }
+                    }
+                    SessionResult(SessionResult.RESULT_SUCCESS)
+                }
+                else -> SessionResult(SessionError.ERROR_NOT_SUPPORTED)
             }
         }
 

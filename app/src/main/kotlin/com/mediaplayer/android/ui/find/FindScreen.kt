@@ -46,6 +46,8 @@ import com.mediaplayer.android.data.dto.CandidateDto
 import com.mediaplayer.android.data.dto.RequestDto
 import com.mediaplayer.android.data.dto.RequestStatus
 import com.mediaplayer.android.data.dto.RequestSummaryDto
+import com.mediaplayer.android.ui.common.CenteredMessage
+import com.mediaplayer.android.ui.common.CenteredSpinner
 
 @Composable
 fun FindScreen(
@@ -377,29 +379,6 @@ private fun MetaText(text: String) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-@Composable
-private fun CenteredSpinner() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(modifier = Modifier.size(32.dp))
-    }
-}
-
-@Composable
-private fun CenteredMessage(text: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
 }
 
 private fun formatDuration(seconds: Int): String {
