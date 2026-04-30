@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.mediaplayer.android.ui.theme.CoverShapes
+import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FileDownloadDone
@@ -61,7 +63,7 @@ fun SongRow(
                 onClick = onClick,
                 onLongClick = onLongPress,
             )
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = MediaPlayerSpacing.M, vertical = MediaPlayerSpacing.Xs + 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CoverArt(song = song)
@@ -105,7 +107,7 @@ fun SongRow(
 @Composable
 private fun CoverArt(song: SongDto) {
     val size = 52.dp
-    val shape = RoundedCornerShape(6.dp)
+    val shape = CoverShapes.SongRow
     Box(
         modifier = Modifier
             .size(size)

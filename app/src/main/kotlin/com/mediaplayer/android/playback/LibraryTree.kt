@@ -526,7 +526,9 @@ internal object LibraryTree {
     ): MediaMetadata =
         MediaMetadata.Builder()
             .setIsBrowsable(false)
-            .setIsPlayable(playable)
+            // Disable AA tap when the backend says the audio file is missing —
+            // AA renders the row dimmed instead of opaquely failing playback.
+            .setIsPlayable(playable && this.playable)
             .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
             .setTitle(title)
             .setArtist(artist)

@@ -1,10 +1,16 @@
 package com.mediaplayer.android
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,8 +38,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,6 +58,7 @@ import com.mediaplayer.android.data.ChangelogPreferences
 import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.playback.PlaybackViewModel
 import com.mediaplayer.android.ui.changelog.ChangelogSheet
+import com.mediaplayer.android.ui.onboarding.OnboardingSheet
 import com.mediaplayer.android.ui.albums.AlbumListScreen
 import com.mediaplayer.android.ui.albums.AlbumScreen
 import com.mediaplayer.android.ui.artists.ArtistListScreen
@@ -68,6 +77,7 @@ import com.mediaplayer.android.ui.playlists.PlaylistsScreen
 import com.mediaplayer.android.ui.playlists.SpotifyImportScreen
 import com.mediaplayer.android.ui.search.SearchScreen
 import com.mediaplayer.android.ui.theme.MediaPlayerTheme
+import kotlinx.coroutines.launch
 
 @UnstableApi
 class MainActivity : ComponentActivity() {
@@ -163,13 +173,38 @@ private fun AppScaffold(onSignOut: () -> Unit) {
     val currentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
     var sheetOpen by remember { mutableStateOf(false) }
     var changelogOpen by remember { mutableStateOf(false) }
+    var onboardingOpen by remember { mutableStateOf(false) }
 
     val navController = rememberNavController()
     val networkAvailable by ConnectivityObserver.networkAvailable.collectAsStateWithLifecycle()
 
+    // Android 13+ silent-notifications gap: declare in manifest is not enough,
+    // the runtime permission must be requested. Trigger on first playback so the
+    // ask lands at a moment the user understands ("we want to show a media
+    // notification while music plays") instead of cold on app start.
+    val ctx = LocalContext.current
+    var notifPermAsked by remember { mutableStateOf(false) }
+    val notifPermLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { /* user choice persists in OS — nothing to do */ },
+    )
+    LaunchedEffect(currentSong) {
+        if (currentSong != null && !notifPermAsked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                ctx, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            notifPermAsked = true
+        }
+    }
+
     LaunchedEffect(Unit) {
-        if (ChangelogPreferences.instance.lastSeenVersion() != AppVersion.VERSION) {
-            changelogOpen = true
+        // Distinguish first-launch (null) from upgrade (different version):
+        // brand-new users see the welcome sheet, returning users see what's new.
+        val seen = ChangelogPreferences.instance.lastSeenVersion()
+        when {
+            seen == null -> onboardingOpen = true
+            seen != AppVersion.VERSION -> changelogOpen = true
         }
     }
 
@@ -211,6 +246,18 @@ private fun AppScaffold(onSignOut: () -> Unit) {
 
     if (changelogOpen) {
         ChangelogSheet(onDismiss = { changelogOpen = false })
+    }
+
+    if (onboardingOpen) {
+        val scope = rememberCoroutineScope()
+        OnboardingSheet(onDismiss = {
+            onboardingOpen = false
+            // Mark current version as seen so the changelog sheet doesn't immediately
+            // pop after dismissing the welcome sheet.
+            scope.launch {
+                ChangelogPreferences.instance.markSeen(AppVersion.VERSION)
+            }
+        })
     }
 }
 

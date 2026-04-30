@@ -69,6 +69,21 @@ class MediaPlaybackService : MediaLibraryService() {
         const val EXTRA_SLEEP_ACTIVE = "sleep_active"
         /** Bundle key on session extras: Boolean. True when current song is liked. */
         const val EXTRA_LIKED = "liked"
+
+        /**
+         * Controllers we accept on the {@link MediaLibrarySession}. Anything not
+         * in this set (or our own package) is rejected in {@code onConnect} so
+         * an arbitrary app on the device can't subscribe to our session and
+         * issue custom commands.
+         */
+        private val ALLOWED_CONTROLLER_PACKAGES = setOf(
+            "com.google.android.projection.gearhead", // Android Auto
+            "com.google.android.car.media",          // Automotive OS media center
+            "com.google.android.googlequicksearchbox", // Assistant
+            "com.android.bluetooth",                  // BT car/headphone media controls
+            "com.android.systemui",                   // System lockscreen / notification controls
+            "android",                                // System "android" package (lockscreen, etc.)
+        )
     }
 
     private var mediaSession: MediaLibrarySession? = null
@@ -305,6 +320,15 @@ class MediaPlaybackService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo
         ): MediaSession.ConnectionResult {
+            // Gate by package: only ourselves and known media controllers (Android
+            // Auto, Assistant, system media controls, BT) get the session.
+            // Reject everything else so other apps can't subscribe and abuse
+            // our custom session commands.
+            val pkg = controller.packageName
+            val ours = pkg == applicationContext.packageName
+            if (!ours && pkg !in ALLOWED_CONTROLLER_PACKAGES) {
+                return MediaSession.ConnectionResult.reject()
+            }
             val connectionResult = super.onConnect(session, controller)
             val availableSessionCommands = connectionResult.availableSessionCommands
                 .buildUpon()

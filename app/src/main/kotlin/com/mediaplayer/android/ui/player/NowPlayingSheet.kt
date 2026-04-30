@@ -61,8 +61,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -243,8 +247,25 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
                         )
                     }
                 } else {
+                    // Approximate a shared-element rise from the mini-player by scaling
+                    // the hero cover up from a quarter size on first composition. True
+                    // SharedTransitionLayout would require lifting the modal sheet out
+                    // of its Popup host — deferred. The spring keeps the entry feeling
+                    // material rather than mechanical.
+                    var heroSettled by remember(current.id) { mutableStateOf(false) }
+                    LaunchedEffect(current.id) { heroSettled = true }
+                    val scale by animateFloatAsState(
+                        targetValue = if (heroSettled) 1f else 0.25f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow,
+                        ),
+                        label = "hero-cover-scale",
+                    )
                     Box(
-                        modifier = Modifier.size(artSize),
+                        modifier = Modifier
+                            .size(artSize)
+                            .scale(scale),
                         contentAlignment = Alignment.Center,
                     ) {
                         Cover(song = current, size = artSize)

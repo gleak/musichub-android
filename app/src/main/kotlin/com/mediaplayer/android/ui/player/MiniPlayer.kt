@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.mediaplayer.android.ui.theme.CoverShapes
+import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -63,11 +65,11 @@ fun MiniPlayer(
     val current = song ?: return  // mini-player hidden until a track loads
     val haptics = LocalHapticFeedback.current
 
-    val cardShape = RoundedCornerShape(10.dp)
+    val cardShape = CoverShapes.Card
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .padding(horizontal = MediaPlayerSpacing.S, vertical = MediaPlayerSpacing.Xs)
             .clip(cardShape)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable { onExpand() },
@@ -75,11 +77,11 @@ fun MiniPlayer(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .padding(horizontal = MediaPlayerSpacing.S, vertical = MediaPlayerSpacing.S),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Cover(song = current, size = 44.dp)
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(MediaPlayerSpacing.Xs + MediaPlayerSpacing.S))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = current.title,
@@ -128,7 +130,7 @@ fun MiniPlayer(
 
 @Composable
 internal fun Cover(song: SongDto, size: androidx.compose.ui.unit.Dp) {
-    val shape = RoundedCornerShape(6.dp)
+    val shape = CoverShapes.MiniPlayer
     Box(
         modifier = Modifier
             .size(size)

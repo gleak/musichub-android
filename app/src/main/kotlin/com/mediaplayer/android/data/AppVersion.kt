@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.2.1"
+    const val VERSION = "0.3.0"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,24 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.3.0",
+            title = "Welcome sheet + cover rise + design tokens",
+            highlights = listOf(
+                "First-launch welcome sheet — separate from the changelog returning users see",
+                "Notification permission requested at the right moment (when you start playing)",
+                "Now Playing's hero cover springs in from the mini-player when you tap to expand",
+                "New Spacing + Shape tokens replacing magic-number padding — consistent rhythm across mini-player, song rows, and future screens",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.2.2",
+            title = "Hardening + broken-song dimming",
+            highlights = listOf(
+                "Songs missing their audio file are now greyed out on Android Auto instead of failing on tap",
+                "Media session only accepts known controllers (Android Auto, Assistant, system, Bluetooth) — other apps can no longer attach",
+            ),
+        ),
         ChangelogEntry(
             version = "0.2.1",
             title = "Cover art everywhere + polish",

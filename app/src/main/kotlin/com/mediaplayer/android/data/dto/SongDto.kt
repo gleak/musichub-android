@@ -16,4 +16,5 @@ data class SongDto(
     val durationMs: Long,
     val hasCoverArt: Boolean,
     val hasVideo: Boolean = false,
+    val playable: Boolean = true,
 )

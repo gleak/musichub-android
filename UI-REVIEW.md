@@ -9,16 +9,38 @@ Surfaces: Smartphone (Compose) + Android Auto (MediaLibraryService)
 - ✅ Anonymous-aware avatar in LibraryTopBar (Finding 1.4) — initial / guest icon, no more hardcoded "M"
 - ✅ Anon-aware copy in HomeScreen GreetingHeader settings menu
 - ✅ Shared `ui/common/States.kt` (Findings 3.1, 3.2, 3.3, 3.4, 3.5) — `CenteredSpinner`/`CenteredMessage`/`ErrorWithRetry`/`EmptyState`/`SongRowShimmer`/`SongListShimmer`. ~250 LOC of duplicates removed across 9 screens
-- ✅ `friendlyMessage(Throwable)` helper exposed (Finding 4.5, 11.4) — ready to wire in viewmodels
+- ✅ `friendlyMessage(Throwable)` helper exposed (Finding 4.5, 11.4)
 - ✅ AA Like button kept; AA Sleep button added (Finding 8.1) — service-side `SleepTimer`, `ACTION_SLEEP_TIMER` SessionCommand, dynamic CommandButton
 - ✅ Phone+AA sleep timer single source of truth — service owns timer, state mirrored to phone via session extras (`EXTRA_SLEEP_ACTIVE`, `EXTRA_LIKED`)
 - ✅ Like button on Now Playing (Finding 8.5 inverse — phone was missing) and on MiniPlayer (Finding 8.5)
 - ✅ MiniPlayer play/pause `contentDescription` fixed (Finding 6.5)
 - ✅ Login-screen wiring polish: dropped `UserDto(id=-1)` half-signed-in fallback
 
+**Shipped in v0.2.1:**
+- ✅ AA tile cover art (Finding 10.1) — backend now exposes `coverSongId` on AlbumDto/ArtistDto/PlaylistDto via projection min(s.id) / first-position song; LibraryTree wires it into folder tiles
+- ✅ Track number + total track count metadata on album / playlist leaves (Finding 10.3)
+- ✅ Lyric inlining removed from browse tree (Findings 8.2, 9.8) — no more lyrics nodes mixed with songs; lyrics live only on the now-playing card / phone
+- ✅ `notifyChildrenChanged` spam removed from `onMediaItemTransition` (Finding 9.6) — was firing for every track change, now only the like CommandButton refreshes
+- ✅ Pagination wired through `onGetChildren` and `onGetSearchResult` (Findings 9.1, 9.3) — voice search and All Songs no longer cap at 50
+- ✅ Haptics on like (SongRow, MiniPlayer, NowPlayingSheet) (Finding 5.1)
+- ✅ Touch-target fix on SongRow heart (Finding 6.2) — dropped explicit 40dp, default 48dp restored
+- ✅ NowPlayingSheet ⋮ overflow menu (Finding 8.6) — Re-download / Mark broken / Save as alarm moved off the action row
+- ✅ `friendlyMessage()` wired in HomeViewModel, LikedViewModel, PlaylistsViewModel, PlaylistDetailViewModel, SearchViewModel, FindViewModel (Findings 4.5, 11.4) — no raw exception text in UI
+- ✅ Bottom-nav prefix matcher (Finding 1.5) — `Routes.belongsToLibrary(currentRoute)`; future sub-routes auto-light Library
+
+**Shipped in v0.2.2:**
+- ✅ Controller package allow-list in `onConnect` (Finding 9.5) — only Android Auto / Assistant / system / Bluetooth / our own package can attach. Unknown controllers rejected.
+- ✅ `SongDto.playable` flag (Finding 10.4) — backend computes from `filePath` presence; LibraryTree gates `setIsPlayable` so AA shows broken songs as disabled rows instead of failing on tap.
+
+**Shipped in v0.3.0:**
+- ✅ `MediaPlayerSpacing` + `CoverShapes` tokens (Findings 2.3, 2.4) — `theme/Spacing.kt` (Xs/S/M/L/Xl), `theme/Shapes.kt` (SongRow/Tile/MiniPlayer/Card). Applied in MiniPlayer + SongRow as the high-traffic surfaces; remaining screens can adopt incrementally with no behaviour change.
+- ✅ First-launch onboarding sheet (Findings 12.1, 12.5) — distinct from changelog upgrade sheet; gated on `lastSeenVersion() == null` so brand-new installs see "Welcome to MediaPlayer" and returning users see "What's new".
+- ✅ POST_NOTIFICATIONS runtime request (Finding 12.2) — fires on first non-null `currentSong` so the ask lands in context ("we want to show a media notification while music plays") rather than cold on app start. Android 13+ only.
+- ✅ Hero-cover spring entry on NowPlayingSheet (Finding 5.2 — partial) — cover scales from 0.25→1.0 with a `MediumBouncy` spring on each new song. Approximates a shared-element rise from the mini-player.
+
 **Skipped/blocked:**
-- ⏸ 10.4 server-side `playable: Boolean` flag — needs backend change beyond this batch
 - ⏸ 1.7 phone playlist grid vs AA grid — design decision pending
+- ⏸ 5.2 *true* `SharedTransitionLayout` mini ↔ sheet shared element — `ModalBottomSheet`'s Popup host fights cross-tree shared elements. Lifting the sheet content out of the popup is a larger refactor; the spring entry above is the pragmatic substitute.
 
 ## Executive summary
 
@@ -430,19 +452,19 @@ High-impact, low-effort first:
 
 1. ~~**Add `Continue as guest` button + anonymous UI affordance** (Findings 11.1, 11.2, 11.3).~~ ✅ Done v0.2.0
 2. ~~**Add `ui/common/States.kt` with shared CenteredSpinner/CenteredMessage/ErrorWithRetry/EmptyState/LoadingShimmer** (Findings 3.1–3.5).~~ ✅ Done v0.2.0
-3. **Wire AA covers on tiles (artworkSongId)** (Finding 10.1). Single-file change in `LibraryTree.kt`, dramatically improves AA grid look. **← NEXT**
-4. **Stop inlining lyrics in browse tree, drop `notifyChildrenChanged` spam, page through onGetChildren** (Findings 8.2, 9.6, 9.1, 9.3, 9.8). One PR cleans up four AA misbehaviours.
+3. ~~**Wire AA covers on tiles (artworkSongId)** (Finding 10.1).~~ ✅ Done v0.2.1
+4. ~~**Stop inlining lyrics in browse tree, drop `notifyChildrenChanged` spam, page through onGetChildren** (Findings 8.2, 9.6, 9.1, 9.3, 9.8).~~ ✅ Done v0.2.1
 5. ~~**Expose phone NowPlayingSheet's like button + add Sleep timer commands to MediaSession** (Findings 8.1, 8.5).~~ ✅ Done v0.2.0
-6. **Add haptics on like / drag / skip** (Finding 5.1). 5-line change, big perceived polish lift.
-7. **Move Re-download/Mark broken/Alarm into NowPlayingSheet overflow menu** (Finding 8.6). Frees the action row, gets touch targets back to 48dp.
-8. **Add `MediaPlayerSpacing` and `MediaPlayerShapes` tokens** (Findings 2.3, 2.4). Replaces magic numbers; future screens become plug-and-play.
-9. **Wire shared element transition Mini ↔ NowPlayingSheet** (Finding 5.2). Highest-perceived-quality change. Compose 1.7 SharedTransitionLayout.
-10. **First-launch onboarding sheet + POST_NOTIFICATIONS request** (Findings 12.1, 12.2, 12.5). Touches the cold-start gap and the Android 13+ silent-notifications gap.
-11. **Map raw exceptions to friendly error copy** (Findings 4.5, 11.4). `friendlyMessage()` helper already in `ui/common/States.kt` — needs to be wired in every viewmodel's catch.
-12. **Add fixed-route prefix matcher for bottom-nav selection** (Finding 1.5). Prevents future M14 bug-by-omission.
+6. ~~**Add haptics on like / drag / skip** (Finding 5.1).~~ ✅ Done v0.2.1 (like only — drag/skip optional polish)
+7. ~~**Move Re-download/Mark broken/Alarm into NowPlayingSheet overflow menu** (Finding 8.6).~~ ✅ Done v0.2.1
+8. ~~**Add `MediaPlayerSpacing` and `MediaPlayerShapes` tokens** (Findings 2.3, 2.4).~~ ✅ Done v0.3.0 (tokens shipped + applied to high-traffic screens; full sweep is incremental)
+9. ~~**Wire shared element transition Mini ↔ NowPlayingSheet** (Finding 5.2).~~ ✅ Done v0.3.0 (spring scale-in approximation; true `SharedTransitionLayout` deferred — see Skipped)
+10. ~~**First-launch onboarding sheet + POST_NOTIFICATIONS request** (Findings 12.1, 12.2, 12.5).~~ ✅ Done v0.3.0
+11. ~~**Map raw exceptions to friendly error copy** (Findings 4.5, 11.4).~~ ✅ Done v0.2.1
+12. ~~**Add fixed-route prefix matcher for bottom-nav selection** (Finding 1.5).~~ ✅ Done v0.2.1
 13. ~~**Anonymous-aware avatar in `LibraryTopBar`** (Finding 1.4).~~ ✅ Done v0.2.0
-14. **Add disabled-state items + track number metadata to AA** (Findings 10.3, 10.4). Backend coordination needed for `playable` flag — Finding 10.3 (track number) can ship without backend.
-15. **Implement controller package allow-list in `onConnect`** (Finding 9.5). Hardening; can wait if posture stays "private LAN".
+14. ~~**Add track number metadata + playable flag to AA** (Findings 10.3, 10.4).~~ ✅ Done v0.2.1 (track number) + v0.2.2 (playable)
+15. ~~**Implement controller package allow-list in `onConnect`** (Finding 9.5).~~ ✅ Done v0.2.2
 
 ---
 
