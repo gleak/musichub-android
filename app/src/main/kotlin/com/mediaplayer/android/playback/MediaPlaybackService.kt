@@ -2,6 +2,7 @@ package com.mediaplayer.android.playback
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Bundle
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -12,21 +13,27 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.CommandButton
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
+import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.mediaplayer.android.MainActivity
+import com.mediaplayer.android.R
+import com.mediaplayer.android.data.LikedRepository
 import com.mediaplayer.android.data.Network
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.guava.future
+import kotlinx.coroutines.launch
 
 /**
  * Bound foreground service that owns the ExoPlayer instance.
@@ -48,6 +55,10 @@ import kotlinx.coroutines.guava.future
 @UnstableApi
 class MediaPlaybackService : MediaLibraryService() {
 
+    companion object {
+        const val ACTION_TOGGLE_LIKE = "com.mediaplayer.android.TOGGLE_LIKE"
+    }
+
     private var mediaSession: MediaLibrarySession? = null
     private var resumption: PlaybackResumption? = null
     private var resumptionListener: Player.Listener? = null
@@ -59,6 +70,17 @@ class MediaPlaybackService : MediaLibraryService() {
      * `kotlinx-coroutines-guava`'s `future { ... }` builder.
      */
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // --- "Like current song" custom command (mirrors phone heart button)
+    //
+    // Exposed as a CommandButton so Android Auto / Wear / lockscreen all
+    // get a quick toggle for the currently playing track. Icon flips
+    // between filled and outline based on the cached liked state, which
+    // is refreshed every time the player transitions to a new media item.
+    private val likedRepository = LikedRepository()
+    private val toggleLikeCommand =
+        SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY)
+    @Volatile private var currentLiked: Boolean = false
 
     override fun onCreate() {
         super.onCreate()
@@ -111,6 +133,7 @@ class MediaPlaybackService : MediaLibraryService() {
 
         mediaSession = MediaLibrarySession.Builder(this, player, LibraryCallback())
             .setSessionActivity(pendingIntent)
+            .setCustomLayout(ImmutableList.of(buildLikeButton(liked = false)))
             .build()
 
         // M13: bind the hardware Equalizer to this player's audio session.
@@ -133,9 +156,50 @@ class MediaPlaybackService : MediaLibraryService() {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 mediaSession?.notifyChildrenChanged(LibraryTree.ROOT_ID, 10, null)
                 mediaSession?.notifyChildrenChanged(LibraryTree.ALL_SONGS_ID, 100, null)
+                refreshLikeButtonForCurrent(mediaItem)
             }
         })
     }
+
+    /** Resolves the song id from a `song:{id}` mediaId, or null otherwise. */
+    private fun songIdOf(mediaItem: MediaItem?): Long? =
+        mediaItem?.mediaId?.removePrefix("song:")?.toLongOrNull()
+
+    /**
+     * Pull liked status for the new track and rebuild the custom layout
+     * so the heart icon reflects reality. Network call lives off the
+     * main thread; failures degrade silently to "not liked".
+     */
+    private fun refreshLikeButtonForCurrent(mediaItem: MediaItem?) {
+        val songId = songIdOf(mediaItem) ?: run {
+            currentLiked = false
+            updateCustomLayout()
+            return
+        }
+        serviceScope.launch {
+            currentLiked = try {
+                likedRepository.status(listOf(songId)).contains(songId)
+            } catch (_: Exception) {
+                false
+            }
+            updateCustomLayout()
+        }
+    }
+
+    private fun updateCustomLayout() {
+        mediaSession?.setCustomLayout(
+            ImmutableList.of(buildLikeButton(currentLiked))
+        )
+    }
+
+    private fun buildLikeButton(liked: Boolean): CommandButton =
+        CommandButton.Builder()
+            .setSessionCommand(toggleLikeCommand)
+            .setDisplayName(if (liked) "Unlike" else "Like")
+            .setIconResId(
+                if (liked) R.drawable.ic_favorite else R.drawable.ic_favorite_border
+            )
+            .build()
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
         mediaSession
@@ -186,11 +250,36 @@ class MediaPlaybackService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo
         ): MediaSession.ConnectionResult {
             val connectionResult = super.onConnect(session, controller)
-            val availableSessionCommands = connectionResult.availableSessionCommands.buildUpon()
+            val availableSessionCommands = connectionResult.availableSessionCommands
+                .buildUpon()
+                .add(toggleLikeCommand)
+                .build()
             return MediaSession.ConnectionResult.accept(
-                availableSessionCommands.build(),
+                availableSessionCommands,
                 connectionResult.availablePlayerCommands
             )
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> = serviceScope.future {
+            if (customCommand.customAction != ACTION_TOGGLE_LIKE) {
+                return@future SessionResult(SessionError.ERROR_NOT_SUPPORTED)
+            }
+            val songId = songIdOf(session.player.currentMediaItem)
+                ?: return@future SessionResult(SessionError.ERROR_INVALID_STATE)
+            try {
+                if (currentLiked) likedRepository.unlike(songId)
+                else likedRepository.like(songId)
+                currentLiked = !currentLiked
+                updateCustomLayout()
+                SessionResult(SessionResult.RESULT_SUCCESS)
+            } catch (_: Exception) {
+                SessionResult(SessionError.ERROR_UNKNOWN)
+            }
         }
 
         override fun onGetLibraryRoot(
@@ -199,7 +288,13 @@ class MediaPlaybackService : MediaLibraryService() {
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<MediaItem>> =
             serviceScope.future {
-                LibraryResult.ofItem(LibraryTree.root(), params)
+                // Hand AA a LibraryParams whose extras advertise content-style
+                // support so per-folder GRID/LIST hints (set on each section's
+                // MediaMetadata in LibraryTree) are honoured by the AA UI.
+                val rootParams = LibraryParams.Builder()
+                    .setExtras(LibraryTree.rootExtras())
+                    .build()
+                LibraryResult.ofItem(LibraryTree.root(), rootParams)
             }
 
         override fun onGetItem(
@@ -223,15 +318,6 @@ class MediaPlaybackService : MediaLibraryService() {
             serviceScope.future {
                 val currentItem = session.player.currentMediaItem
                 val currentSongId = currentItem?.mediaId?.removePrefix("song:")?.toLongOrNull()
-
-                if (parentId == LibraryTree.LYRICS_ID) {
-                    val items = if (currentSongId != null) {
-                        LibraryTree.lyrics(currentSongId)
-                    } else {
-                        listOf(LibraryTree.infoItem("No song currently playing"))
-                    }
-                    return@future LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
-                }
 
                 val items = LibraryTree.children(parentId, currentSongId)
                 if (items == null) {
@@ -315,16 +401,42 @@ class MediaPlaybackService : MediaLibraryService() {
             serviceScope.future {
                 if (mediaItems.size == 1) {
                     val id = mediaItems[0].mediaId
-                    val plLeaf = LibraryTree.parsePlaylistLeaf(id)
-                    if (plLeaf != null) {
-                        val (playlistId, position, _) = plLeaf
-                        val expanded = LibraryTree.playlistQueue(playlistId)
+
+                    // Playlist leaf → expand the whole playlist starting at pos.
+                    LibraryTree.parsePlaylistLeaf(id)?.let { (pid, pos, _) ->
                         return@future MediaSession.MediaItemsWithStartPosition(
-                            expanded,
-                            position,
-                            C.TIME_UNSET
+                            LibraryTree.playlistQueue(pid), pos, C.TIME_UNSET
                         )
                     }
+
+                    // Album leaf → expand album from chosen position.
+                    LibraryTree.parseAlbumLeaf(id)?.let { quad ->
+                        return@future MediaSession.MediaItemsWithStartPosition(
+                            LibraryTree.albumQueue(quad.a, quad.b), quad.c, C.TIME_UNSET
+                        )
+                    }
+
+                    // Artist leaf → expand artist's full song list from pos.
+                    LibraryTree.parseArtistLeaf(id)?.let { (name, pos, _) ->
+                        return@future MediaSession.MediaItemsWithStartPosition(
+                            LibraryTree.artistQueue(name), pos, C.TIME_UNSET
+                        )
+                    }
+
+                    // Liked leaf → expand liked collection from pos.
+                    LibraryTree.parseSimpleLeaf(id, "lk:")?.let { (pos, _) ->
+                        return@future MediaSession.MediaItemsWithStartPosition(
+                            LibraryTree.likedQueue(), pos, C.TIME_UNSET
+                        )
+                    }
+
+                    // Recents leaf → expand recents queue from pos.
+                    LibraryTree.parseSimpleLeaf(id, "rc:")?.let { (pos, _) ->
+                        return@future MediaSession.MediaItemsWithStartPosition(
+                            LibraryTree.recentsQueue(), pos, C.TIME_UNSET
+                        )
+                    }
+
                     if (id.startsWith("song:")) {
                         val songId = id.removePrefix("song:").toLongOrNull()
                         if (songId != null) {
@@ -332,9 +444,7 @@ class MediaPlaybackService : MediaLibraryService() {
                                 .setUri(Network.streamUrl(songId))
                                 .build()
                             return@future MediaSession.MediaItemsWithStartPosition(
-                                listOf(mediaItem),
-                                0,
-                                startPositionMs
+                                listOf(mediaItem), 0, startPositionMs
                             )
                         }
                     }

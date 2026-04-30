@@ -389,24 +389,68 @@ too.
 | M10| ✅     | Disk cache (1 GiB) + unmetered-only prev/next prefetch       |
 | M11a| ✅    | Liked Songs — heart toggle on search, Liked Songs screen     |
 | M11b| ✅    | Album + Artist pages — group-by projections, browse from search |
+| M12 | ✅    | Spotify-style theme + lyrics + downloads + sleep timer + EQ    |
+| M13 | ✅    | Android Auto Spotify-style alignment (browse + custom command)  |
 
-## Non-goals (for now)
+### Android Auto Spotify-style alignment (M13)
 
-- DI framework. Plain singletons (`Network`, `PlayerConnection`) and
-  default ViewModel construction are enough through M5.
-- Paging 3. Backend already returns an offset/limit page; the full list
-  fits easily on one screen for now. Revisit if the library grows past a
-  few hundred tracks.
-- Offline cache of the catalog. We have the network; loading failures
-  surface via the `Error` state.
-- Explicit download / "keep this song offline" UX. M10 caches
-  opportunistically (on-play + prev/next prefetch on Wi-Fi) but
-  doesn't pin tracks — the LRU evictor can reclaim anything.
-- Audio effects (EQ, replay-gain). ExoPlayer defaults are fine for a v1.
-- Drag-to-reorder inside playlist detail. Backend supports it via
-  `PUT /api/playlists/{id}/songs`, but the Compose UI is read-only for
-  now — ordering is set at creation time.
-- Playlist cover art. The `PlaylistDto` has no cover field; list rows
-  and the detail header use a generic queue icon tile instead.
-- Removing songs from within the detail screen. The VM exposes
-  `removeSong`, but no affordance is wired in yet.
+Brings the AA browse tree and now-playing controls into parity with the
+phone Spotify-style UI. No backend changes — pure client.
+
+**Browse tree (`playback/LibraryTree.kt`).** Root expanded from
+`{ all-songs, playlists }` to mirror the phone library:
+
+```
+root
+├── recents     (last 30 plays, list)
+├── liked       (heart collection, list, page size 100)
+├── playlists   (grid)
+│   └── playlist:{id}                 — songs in playlist
+├── albums      (grid)
+│   └── album:{nameEnc}|{artistEnc}   — songs in album
+├── artists     (list)
+│   └── artist:{nameEnc}              — albums (grid) + songs (list)
+└── all-songs   (list, first page of catalog)
+```
+
+Plus an inline `--- Lyrics ---` block under the currently playing song
+when expanding any section that contains it (preserved from M12).
+
+**Content-style hints.** Each browsable folder carries
+`MediaMetadata.extras` with the documented AA constants
+(`android.media.browse.CONTENT_STYLE_BROWSABLE_HINT` /
+`...PLAYABLE_HINT`, values `1`=list / `2`=grid). The library root advertises
+support via `LibraryParams.extras` (`CONTENT_STYLE_SUPPORTED=true`) so AA
+honours per-folder styling. Playlists/Albums use grid; Artists, Recents,
+Liked, All-Songs use list. `MEDIA_TYPE_FOLDER_PLAYLISTS`,
+`MEDIA_TYPE_FOLDER_ALBUMS`, `MEDIA_TYPE_FOLDER_ARTISTS`,
+`MEDIA_TYPE_FOLDER_MIXED` are set on root tiles for the right iconography.
+
+**MediaId scheme.** Stable, parsed in `LibraryTree.parse*` helpers and
+dispatched in `MediaPlaybackService.LibraryCallback.onSetMediaItems`:
+
+| prefix      | shape                                  | tap behaviour                  |
+|-------------|----------------------------------------|--------------------------------|
+| `song:`     | `song:{id}`                            | single-track queue             |
+| `pl:`       | `pl:{pid}:{pos}:{sid}`                 | expand playlist from pos       |
+| `al:`       | `al:{nameEnc}\|{artistEnc}\|{pos}\|{sid}` | expand album from pos       |
+| `ar:`       | `ar:{nameEnc}\|{pos}\|{sid}`           | expand artist songs from pos   |
+| `lk:`       | `lk:{pos}\|{sid}`                      | expand liked queue from pos    |
+| `rc:`       | `rc:{pos}\|{sid}`                      | expand recents queue from pos  |
+
+Names are `Uri.encode`d with empty allow-list to survive `:` and `|`
+inside titles. Position prefixes preserve duplicates (same song twice in
+a playlist remains addressable).
+
+**Like custom command.** `MediaPlaybackService.ACTION_TOGGLE_LIKE` is
+exposed as a `CommandButton` on the session's custom layout, surfacing
+on AA, Wear, and the lock-screen notification. Icon flips between
+`ic_favorite` and `ic_favorite_border` based on cached liked state,
+which is refreshed via `LikedRepository.status(...)` on every
+`onMediaItemTransition`. `onCustomCommand` calls `like()`/`unlike()`,
+flips local state, and rebuilds the layout via
+`mediaSession.setCustomLayout(...)`. Failures degrade silently to "not
+liked" — no toast plumbing on the AA surface.
+
+Search (`onSearch` / `onGetSearchResult`) was already in place from M8b
+and remains unchanged — voice "play X" works against the catalog.
