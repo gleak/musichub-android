@@ -60,10 +60,10 @@ fun SpotifyImportScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
             }
             Text(
-                text = "Import from Spotify",
+                text = "Importa da Spotify",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(start = 4.dp),
             )
@@ -75,7 +75,7 @@ fun SpotifyImportScreen(
                 IdleContent(onFilePicked = viewModel::importFromUri)
 
             SpotifyImportUiState.FetchingPlaylist ->
-                CenteredSpinnerWithLabel("Reading file…")
+                CenteredSpinnerWithLabel("Leggo il file…")
 
             is SpotifyImportUiState.Confirming ->
                 ConfirmingContent(
@@ -85,7 +85,7 @@ fun SpotifyImportScreen(
                 )
 
             SpotifyImportUiState.Importing ->
-                CenteredSpinnerWithLabel("Importing playlist…")
+                CenteredSpinnerWithLabel("Importo la playlist…")
 
             is SpotifyImportUiState.Done ->
                 DoneContent(
@@ -114,12 +114,12 @@ private fun IdleContent(onFilePicked: (Uri) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = "How to export your Spotify playlist:",
+            text = "Come esportare la playlist da Spotify:",
             style = MaterialTheme.typography.titleSmall,
         )
-        StepRow(step = "1", text = "Tap the button below to open Exportify")
-        StepRow(step = "2", text = "Log in with Spotify and export the playlist as CSV")
-        StepRow(step = "3", text = "Save the file to your phone, then import it here")
+        StepRow(step = "1", text = "Tocca il pulsante qui sotto per aprire Exportify")
+        StepRow(step = "2", text = "Accedi con Spotify ed esporta la playlist in CSV")
+        StepRow(step = "3", text = "Salva il file sul telefono, poi importalo qui")
 
         Spacer(Modifier.height(8.dp))
 
@@ -130,14 +130,14 @@ private fun IdleContent(onFilePicked: (Uri) -> Unit) {
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Open Exportify")
+            Text("Apri Exportify")
         }
 
         Button(
             onClick = { launcher.launch("*/*") },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Choose CSV File")
+            Text("Scegli file CSV")
         }
     }
 }
@@ -176,7 +176,7 @@ private fun ConfirmingContent(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "${state.tracks.size} tracks found",
+                text = "${state.tracks.size} brani trovati",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -184,19 +184,19 @@ private fun ConfirmingContent(
                 value = playlistName,
                 onValueChange = { playlistName = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Playlist name") },
+                label = { Text("Nome playlist") },
                 singleLine = true,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             ) {
-                TextButton(onClick = onCancel) { Text("Cancel") }
+                TextButton(onClick = onCancel) { Text("Annulla") }
                 Button(
                     onClick = { onStartImport(playlistName) },
                     enabled = playlistName.trim().isNotEmpty(),
                 ) {
-                    Text("Start Import")
+                    Text("Avvia import")
                 }
             }
         }
@@ -249,13 +249,13 @@ private fun DoneContent(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.weight(1f))
-        Text(text = "Import complete", style = MaterialTheme.typography.headlineSmall)
+        Text(text = "Import completato", style = MaterialTheme.typography.headlineSmall)
         Text(
             text = buildString {
-                val s = if (state.matched == 1) "" else "s"
-                append("${state.matched} song$s added to \"${state.playlistName}\"")
-                if (state.queued > 0) append("\n${state.queued} downloading — will be added when ready")
-                if (state.failed > 0) append("\n${state.failed} couldn't be found")
+                val s = if (state.matched == 1) "o" else "i"
+                append("${state.matched} bran$s aggiunt$s a \"${state.playlistName}\"")
+                if (state.queued > 0) append("\n${state.queued} in scaricamento — saranno aggiunti quando pronti")
+                if (state.failed > 0) append("\n${state.failed} non trovati")
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -263,10 +263,10 @@ private fun DoneContent(
         )
         Spacer(Modifier.weight(1f))
         Button(onClick = onViewPlaylist, modifier = Modifier.fillMaxWidth()) {
-            Text("View Playlist")
+            Text("Apri playlist")
         }
         TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-            Text("Back to Playlists")
+            Text("Torna alle playlist")
         }
     }
 }

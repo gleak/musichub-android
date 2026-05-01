@@ -48,6 +48,9 @@ interface MediaPlayerApi {
     @GET("api/auth/me")
     suspend fun getMe(): UserDto
 
+    @GET("api/auth/stats")
+    suspend fun getStats(): com.mediaplayer.android.data.dto.StatsDto
+
     // ---------- Taste / Onboarding (M14e) ----------
 
     /** Seeds GENRE rows in user_taste so the recommender's cold-start path has signal. */

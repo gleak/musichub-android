@@ -134,13 +134,13 @@ internal object LibraryTree {
     /** Item lookup for resume / deep-link requests. */
     suspend fun item(mediaId: String): MediaItem? = when {
         mediaId == ROOT_ID -> root()
-        mediaId == ALL_SONGS_ID -> sectionFolder(ALL_SONGS_ID, "All songs", grid = false)
-        mediaId == PLAYLISTS_ID -> sectionFolder(PLAYLISTS_ID, "Playlists", grid = true)
-        mediaId == MADE_FOR_YOU_ID -> sectionFolder(MADE_FOR_YOU_ID, "Made for you", grid = true)
-        mediaId == LIKED_ID -> sectionFolder(LIKED_ID, "Liked Songs", grid = false)
-        mediaId == RECENTS_ID -> sectionFolder(RECENTS_ID, "Recently Played", grid = false)
-        mediaId == ALBUMS_ID -> sectionFolder(ALBUMS_ID, "Albums", grid = true)
-        mediaId == ARTISTS_ID -> sectionFolder(ARTISTS_ID, "Artists", grid = false)
+        mediaId == ALL_SONGS_ID -> sectionFolder(ALL_SONGS_ID, "Tutti i brani", grid = false)
+        mediaId == PLAYLISTS_ID -> sectionFolder(PLAYLISTS_ID, "Playlist", grid = true)
+        mediaId == MADE_FOR_YOU_ID -> sectionFolder(MADE_FOR_YOU_ID, "Per te", grid = true)
+        mediaId == LIKED_ID -> sectionFolder(LIKED_ID, "Brani preferiti", grid = false)
+        mediaId == RECENTS_ID -> sectionFolder(RECENTS_ID, "Ascoltati di recente", grid = false)
+        mediaId == ALBUMS_ID -> sectionFolder(ALBUMS_ID, "Album", grid = true)
+        mediaId == ARTISTS_ID -> sectionFolder(ARTISTS_ID, "Artisti", grid = false)
         mediaId.startsWith(SONG_PREFIX) ->
             mediaId.removePrefix(SONG_PREFIX).toLongOrNull()?.let { songLeaf(it) }
         mediaId.startsWith(PLAYLIST_PREFIX) -> {
@@ -308,19 +308,19 @@ internal object LibraryTree {
     // --- internals -----------------------------------------------------------
 
     private fun rootChildren(): List<MediaItem> = listOf(
-        sectionFolder(MADE_FOR_YOU_ID, "Made for you", grid = true,
+        sectionFolder(MADE_FOR_YOU_ID, "Per te", grid = true,
             type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS),
-        sectionFolder(RECENTS_ID, "Recently Played", grid = false,
+        sectionFolder(RECENTS_ID, "Ascoltati di recente", grid = false,
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
-        sectionFolder(LIKED_ID, "Liked Songs", grid = false,
+        sectionFolder(LIKED_ID, "Brani preferiti", grid = false,
             type = MediaMetadata.MEDIA_TYPE_PLAYLIST),
-        sectionFolder(PLAYLISTS_ID, "Playlists", grid = true,
+        sectionFolder(PLAYLISTS_ID, "Playlist", grid = true,
             type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS),
-        sectionFolder(ALBUMS_ID, "Albums", grid = true,
+        sectionFolder(ALBUMS_ID, "Album", grid = true,
             type = MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS),
-        sectionFolder(ARTISTS_ID, "Artists", grid = false,
+        sectionFolder(ARTISTS_ID, "Artisti", grid = false,
             type = MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS),
-        sectionFolder(ALL_SONGS_ID, "All Songs", grid = false,
+        sectionFolder(ALL_SONGS_ID, "Tutti i brani", grid = false,
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
     )
 
@@ -334,7 +334,7 @@ internal object LibraryTree {
             folderTile(
                 mediaId = "$PLAYLIST_PREFIX${pl.id}",
                 title = pl.name,
-                subtitle = "${pl.songCount} song${if (pl.songCount == 1) "" else "s"}",
+                subtitle = "${pl.songCount} bran${if (pl.songCount == 1) "o" else "i"}",
                 type = MediaMetadata.MEDIA_TYPE_PLAYLIST,
                 artworkSongId = pl.coverSongId,
                 grid = true,
@@ -357,7 +357,7 @@ internal object LibraryTree {
             folderTile(
                 mediaId = "$PLAYLIST_PREFIX${pl.id}",
                 title = pl.name,
-                subtitle = "Made for you · ${pl.songCount} song${if (pl.songCount == 1) "" else "s"}",
+                subtitle = "Per te · ${pl.songCount} bran${if (pl.songCount == 1) "o" else "i"}",
                 type = MediaMetadata.MEDIA_TYPE_PLAYLIST,
                 artworkSongId = pl.coverSongId,
                 grid = true,

@@ -32,11 +32,13 @@ import com.mediaplayer.android.data.LikedRepository
 import com.mediaplayer.android.data.Network
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.guava.future
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * Bound foreground service that owns the ExoPlayer instance.
@@ -92,6 +94,7 @@ class MediaPlaybackService : MediaLibraryService() {
     private var resumption: PlaybackResumption? = null
     private var resumptionListener: Player.Listener? = null
     private var prefetch: PrefetchOrchestrator? = null
+    private var crossfadeJob: Job? = null
 
     /**
      * Off-main scope for `MediaLibrarySession.Callback` work (browse tree
@@ -221,8 +224,43 @@ class MediaPlaybackService : MediaLibraryService() {
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 refreshLikeButtonForCurrent(mediaItem)
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    fadeInOnAutoTransition()
+                }
             }
         })
+    }
+
+    /**
+     * Crossfade approximation: when ExoPlayer auto-advances to the next
+     * track, ramp [Player.volume] from 0 → 1 over the user-configured
+     * duration. With Media3's default gapless playback this gives a
+     * perceptible smooth entrance without needing two players. Skipped
+     * when the user picked 0 sec.
+     *
+     * Reads the player from [mediaSession] since this is invoked from
+     * the listener body where the local `player` is no longer in scope.
+     */
+    private fun fadeInOnAutoTransition() {
+        val p = mediaSession?.player ?: return
+        val seconds = runBlocking {
+            com.mediaplayer.android.data.PlayerSettings.instance.crossfadeSecondsNow()
+        }
+        if (seconds <= 0) {
+            p.volume = 1f
+            return
+        }
+        crossfadeJob?.cancel()
+        crossfadeJob = serviceScope.launch {
+            val totalMs = seconds * 1000L
+            val stepMs = 50L
+            val steps = (totalMs / stepMs).toInt().coerceAtLeast(1)
+            for (i in 0..steps) {
+                p.volume = i.toFloat() / steps
+                kotlinx.coroutines.delay(stepMs)
+            }
+            p.volume = 1f
+        }
     }
 
     /** Resolves the song id from a `song:{id}` mediaId, or null otherwise. */

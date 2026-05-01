@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
@@ -192,6 +193,11 @@ private fun AuthGate(
 internal object Routes {
     const val HOME = "home"
     const val SEARCH = "search"
+    const val FOR_YOU = "for-you"
+    const val PROFILE = "profile"
+    const val SETTINGS_CROSSFADE = "profile/crossfade"
+    const val SETTINGS_DOWNLOAD = "profile/download"
+    const val SETTINGS_THEME = "profile/theme"
     const val FIND = "find"
     const val LIBRARY = "library"
     const val PLAYLIST_DETAIL = "playlists/{playlistId}"
@@ -441,6 +447,39 @@ private fun NavHostBody(
                     onSpotifyImport = { navController.navigate(Routes.SPOTIFY_IMPORT) },
                     onSignOut = onSignOut,
                     onShowChangelog = onShowChangelog,
+                    onProfileClick = { navController.navigate(Routes.PROFILE) },
+                )
+            }
+            composable(Routes.FOR_YOU) {
+                com.mediaplayer.android.ui.foryou.ForYouScreen(
+                    onPlaylistClick = { p ->
+                        navController.navigate(Routes.playlistDetail(p.id))
+                    },
+                )
+            }
+            composable(Routes.PROFILE) {
+                com.mediaplayer.android.ui.profile.ProfileScreen(
+                    onShowChangelog = onShowChangelog,
+                    onCheckUpdates = {
+                        // TODO wire AppUpdateChecker.forceCheck via VM in Phase J
+                    },
+                    onSignOut = onSignOut,
+                    onOpenSetting = { route -> navController.navigate(route) },
+                )
+            }
+            composable(Routes.SETTINGS_CROSSFADE) {
+                com.mediaplayer.android.ui.profile.settings.CrossfadeScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.SETTINGS_DOWNLOAD) {
+                com.mediaplayer.android.ui.profile.settings.DownloadOfflineScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.SETTINGS_THEME) {
+                com.mediaplayer.android.ui.profile.settings.ThemeScreen(
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable(Routes.SEARCH) {
@@ -612,14 +651,21 @@ private fun BottomNav(navController: NavHostController) {
         ),
         BottomDestination(
             route = Routes.SEARCH,
-            label = "Search",
-            icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
+            label = "Cerca",
+            icon = { Icon(Icons.Filled.Search, contentDescription = "Cerca") },
+        ),
+        BottomDestination(
+            route = Routes.FOR_YOU,
+            label = "Per te",
+            icon = {
+                Icon(Icons.Filled.AutoAwesome, contentDescription = "Per te")
+            },
         ),
         BottomDestination(
             route = Routes.LIBRARY,
-            label = "Your Library",
+            label = "Libreria",
             icon = {
-                Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = "Your Library")
+                Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = "Libreria")
             },
         ),
     )

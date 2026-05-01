@@ -246,7 +246,7 @@ private fun ArtistBody(
         item(key = "header") {
             SpotifyHero(
                 title = detail.name,
-                subtitle = "Artist • ${buildHeaderSubtitle(detail)}",
+                subtitle = "Artista · ${buildHeaderSubtitle(detail)}",
                 coverModel = coverModel,
                 coverShape = CoverShape.Circle,
                 onPlay = { if (detail.songs.isNotEmpty()) onPlayFromIndex(detail.songs, 0) },
@@ -260,7 +260,8 @@ private fun ArtistBody(
         if (detail.albums.isNotEmpty()) {
             item(key = "albums-header") {
                 SectionHeader(
-                    title = "Albums",
+                    eyebrow = "Discografia",
+                    title = "Album",
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
             }
@@ -272,7 +273,8 @@ private fun ArtistBody(
         if (detail.songs.isNotEmpty()) {
             item(key = "songs-header") {
                 SectionHeader(
-                    title = "Popular",
+                    eyebrow = "Popolari",
+                    title = "Più ascoltati",
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
             }

@@ -41,6 +41,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -84,6 +85,7 @@ fun HomeScreen(
     onSpotifyImport: () -> Unit = {},
     onSignOut: () -> Unit = {},
     onShowChangelog: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = viewModel(),
 ) {
@@ -108,6 +110,7 @@ fun HomeScreen(
                 onSpotifyImport = onSpotifyImport,
                 onSignOut = onSignOut,
                 onShowChangelog = onShowChangelog,
+                onProfileClick = onProfileClick,
             )
         }
     }
@@ -124,6 +127,7 @@ private fun HomeContent(
     onSpotifyImport: () -> Unit,
     onSignOut: () -> Unit,
     onShowChangelog: () -> Unit,
+    onProfileClick: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -134,7 +138,12 @@ private fun HomeContent(
             GreetingHeader(
                 onSignOut = onSignOut,
                 onShowChangelog = onShowChangelog,
+                onProfileClick = onProfileClick,
             )
+        }
+
+        item(key = "filter_chips") {
+            HomeFilterChips()
         }
 
         item(key = "anonymous_banner") {
@@ -165,7 +174,7 @@ private fun HomeContent(
 
         if (recents.isNotEmpty()) {
             item(key = "recent_title") {
-                SectionHeader(title ="Recently played")
+                SectionHeader(eyebrow = "Cronologia", title = "Riprodotti di recente")
             }
             item(key = "recent_row") {
                 RecentRow(recents = recents, onClick = onSongClick)
@@ -177,7 +186,7 @@ private fun HomeContent(
 
         if (autoPlaylists.isNotEmpty()) {
             item(key = "made_for_you_title") {
-                SectionHeader(title ="Made for you")
+                SectionHeader(eyebrow = "Generata per te", title = "Le tue playlist di oggi")
             }
             item(key = "made_for_you_row") {
                 PlaylistRow(playlists = autoPlaylists, onClick = onPlaylistClick)
@@ -186,11 +195,44 @@ private fun HomeContent(
 
         if (userPlaylists.isNotEmpty()) {
             item(key = "playlists_title") {
-                SectionHeader(title ="Your playlists")
+                SectionHeader(eyebrow = "Libreria", title = "Le tue playlist")
             }
             item(key = "playlists_row") {
                 PlaylistRow(playlists = userPlaylists, onClick = onPlaylistClick)
             }
+        }
+
+        item(key = "feed_end") {
+            Text(
+                text = "— FINE FEED —",
+                style = com.mediaplayer.android.ui.theme.LocalMHMono.current.duration.copy(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    letterSpacing = 1.sp,
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeFilterChips() {
+    var selected by remember { mutableStateOf("Tutto") }
+    val chips = listOf("Tutto", "Musica", "Playlist", "Artisti")
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items(chips) { c ->
+            com.mediaplayer.android.ui.common.PillChip(
+                label = c,
+                selected = c == selected,
+                onClick = { selected = c },
+            )
         }
     }
 }
@@ -205,26 +247,26 @@ private fun ColdStartCtas(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = "Let's get you started",
+            text = "Iniziamo",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
-            text = "Your library is empty — pick a way to fill it.",
+            text = "La tua libreria è vuota — scegli come riempirla.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ColdStartTile(
-                title = "Find new music",
-                subtitle = "Search YouTube and import",
+                title = "Scopri musica",
+                subtitle = "Cerca su YouTube e importa",
                 icon = Icons.Filled.Search,
                 onClick = onFindClick,
                 modifier = Modifier.weight(1f),
             )
             ColdStartTile(
-                title = "Import Spotify",
-                subtitle = "Bring a playlist over",
+                title = "Importa Spotify",
+                subtitle = "Porta una playlist qui",
                 icon = Icons.Filled.LibraryMusic,
                 onClick = onSpotifyImport,
                 modifier = Modifier.weight(1f),
@@ -271,75 +313,48 @@ private fun ColdStartTile(
 private fun GreetingHeader(
     onSignOut: () -> Unit,
     onShowChangelog: () -> Unit,
+    onProfileClick: () -> Unit,
 ) {
-    val isAnonymous = LocalCurrentUser.current?.user?.anonymous == true
-    var menuOpen by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = greetingForNow(),
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        Box {
-            IconButton(onClick = { menuOpen = true }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = greetingForNow(),
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onProfileClick) {
                 Icon(
                     imageVector = Icons.Filled.Settings,
-                    contentDescription = "Settings",
+                    contentDescription = "Profilo",
                     tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
-            DropdownMenu(
-                expanded = menuOpen,
-                onDismissRequest = { menuOpen = false },
-            ) {
-                DropdownMenuItem(
-                    text = { Text("What's new") },
-                    onClick = {
-                        menuOpen = false
-                        onShowChangelog()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("Check for updates") },
-                    onClick = {
-                        menuOpen = false
-                        scope.launch {
-                            // forceCheck publishes AppUpdateChecker.state on the
-                            // "Updated" branch, so the dialog pops automatically
-                            // via the AppScaffold collector. We just need to
-                            // surface the up-to-date / error case.
-                            when (val r = AppUpdateChecker.forceCheck(context)) {
-                                AppUpdateChecker.ManualResult.Updated -> Unit
-                                AppUpdateChecker.ManualResult.UpToDate ->
-                                    Toast.makeText(
-                                        context,
-                                        "You're on the latest version",
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                is AppUpdateChecker.ManualResult.Error ->
-                                    Toast.makeText(context, r.message, Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(if (isAnonymous) "Sign in" else "Sign out") },
-                    onClick = {
-                        menuOpen = false
-                        onSignOut()
-                    },
-                )
-            }
         }
+        Text(
+            text = currentDateLabel(),
+            style = com.mediaplayer.android.ui.theme.LocalMHMono.current.caption,
+            color = com.mediaplayer.android.ui.theme.MHColors.TextLo,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
+}
+
+private fun currentDateLabel(): String {
+    val cal = Calendar.getInstance()
+    val days = listOf("Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab")
+    val months = listOf(
+        "Gen", "Feb", "Mar", "Apr", "Mag", "Giu",
+        "Lug", "Ago", "Set", "Ott", "Nov", "Dic",
+    )
+    val day = days[cal.get(Calendar.DAY_OF_WEEK) - 1]
+    val month = months[cal.get(Calendar.MONTH)]
+    val date = cal.get(Calendar.DAY_OF_MONTH)
+    return "$day $date $month"
 }
 
 @Composable
@@ -601,8 +616,8 @@ private fun PlaylistCardSquare(playlist: PlaylistDto, onClick: () -> Unit) {
 private fun greetingForNow(): String {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     return when (hour) {
-        in 5..11 -> "Good morning"
-        in 12..17 -> "Good afternoon"
-        else -> "Good evening"
+        in 5..11 -> "Buongiorno"
+        in 12..17 -> "Buon pomeriggio"
+        else -> "Buonasera"
     }
 }

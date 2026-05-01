@@ -13,14 +13,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import com.mediaplayer.android.ui.theme.CoverShapes
-import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FileDownloadDone
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,19 +29,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
-import coil3.request.crossfade
-import com.mediaplayer.android.R
-import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.SongCover
-import java.util.Locale
+import com.mediaplayer.android.ui.theme.CoverShapes
+import com.mediaplayer.android.ui.theme.LocalMHMono
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -66,10 +58,10 @@ fun SongRow(
                 onClick = onClick,
                 onLongClick = onLongPress,
             )
-            .padding(horizontal = MediaPlayerSpacing.M, vertical = MediaPlayerSpacing.Xs + 2.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SongCover(song = song, size = 52.dp, shape = CoverShapes.SongRow)
+        SongCover(song = song, size = 44.dp, shape = CoverShapes.SongRow)
 
         Spacer(Modifier.width(12.dp))
 
@@ -79,7 +71,7 @@ fun SongRow(
         ) {
             Text(
                 text = song.title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -87,30 +79,46 @@ fun SongRow(
             SubtitleRow(song = song, onArtistClick = onArtistClick, onAlbumClick = onAlbumClick, isDownloaded = isDownloaded)
         }
 
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(6.dp))
 
         if (onToggleLike != null) {
             val haptics = LocalHapticFeedback.current
-            IconButton(onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                onToggleLike()
-            }) {
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onToggleLike()
+                    }
+                    .padding(4.dp),
+            ) {
                 Icon(
                     imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = if (isLiked) "Unlike" else "Like",
                     tint = if (isLiked) MaterialTheme.colorScheme.primary
                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(18.dp),
                 )
             }
         }
+
+        Spacer(Modifier.width(6.dp))
+
+        Text(
+            text = formatDuration(song.durationMs),
+            style = LocalMHMono.current.duration,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(36.dp),
+            maxLines = 1,
+        )
+
         if (onMore != null) {
-            IconButton(onClick = onMore) {
+            IconButton(onClick = onMore, modifier = Modifier.size(32.dp)) {
                 Icon(
                     imageVector = Icons.Filled.MoreVert,
                     contentDescription = "More options",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }
@@ -130,7 +138,7 @@ private fun SubtitleRow(
                 imageVector = Icons.Filled.FileDownloadDone,
                 contentDescription = "Downloaded",
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(14.dp),
+                modifier = Modifier.size(12.dp),
             )
             Spacer(Modifier.width(4.dp))
         }
@@ -164,3 +172,10 @@ private fun SubtitleRow(
     }
 }
 
+private fun formatDuration(ms: Long): String {
+    if (ms <= 0L) return ""
+    val total = ms / 1000
+    val m = total / 60
+    val s = total % 60
+    return "%d:%02d".format(m, s)
+}

@@ -6,6 +6,7 @@ import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.HistoryRepository
 import com.mediaplayer.android.data.LikedRepository
+import com.mediaplayer.android.data.SearchHistoryStore
 import com.mediaplayer.android.data.SongRepository
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.friendlyMessage
@@ -45,10 +46,14 @@ class SearchViewModel(
     private val repository: SongRepository = SongRepository(),
     private val likedRepository: LikedRepository = LikedRepository(),
     private val historyRepository: HistoryRepository = HistoryRepository(),
+    private val searchHistoryStore: SearchHistoryStore = SearchHistoryStore.instance,
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
+
+    private val _activeGenre = MutableStateFlow<String?>(null)
+    val activeGenre: StateFlow<String?> = _activeGenre.asStateFlow()
 
     private val _likedIds = MutableStateFlow<Set<Long>>(emptySet())
     val likedIds: StateFlow<Set<Long>> = _likedIds.asStateFlow()
@@ -57,6 +62,9 @@ class SearchViewModel(
 
     private val _recentSongs = MutableStateFlow<List<SongDto>>(emptyList())
     val recentSongs: StateFlow<List<SongDto>> = _recentSongs.asStateFlow()
+
+    val recentQueries: StateFlow<List<String>> = searchHistoryStore.recent
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
 
     /**
      * Retry trigger combined into the state pipeline. Bumping this re-runs
@@ -96,10 +104,38 @@ class SearchViewModel(
 
     fun onQueryChange(newQuery: String) {
         _query.value = newQuery
+        if (newQuery.isBlank()) _activeGenre.value = null
     }
 
     fun clearQuery() {
         _query.value = ""
+        _activeGenre.value = null
+    }
+
+    /** User-triggered commit (Enter / mic / history reuse / genre click). Persists query. */
+    fun commitQuery(text: String) {
+        val q = text.trim()
+        if (q.isEmpty()) return
+        _query.value = q
+        viewModelScope.launch { searchHistoryStore.add(q) }
+    }
+
+    fun selectGenre(name: String) {
+        _activeGenre.value = name
+        commitQuery(name)
+    }
+
+    fun clearGenre() {
+        _activeGenre.value = null
+        clearQuery()
+    }
+
+    fun removeRecent(query: String) {
+        viewModelScope.launch { searchHistoryStore.remove(query) }
+    }
+
+    fun clearRecents() {
+        viewModelScope.launch { searchHistoryStore.clear() }
     }
 
     fun toggleLike(songId: Long) {

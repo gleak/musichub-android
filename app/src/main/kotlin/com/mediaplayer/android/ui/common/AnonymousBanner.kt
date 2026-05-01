@@ -46,7 +46,7 @@ fun AnonymousBanner(modifier: Modifier = Modifier) {
             modifier = Modifier.size(28.dp),
         )
         Text(
-            text = "You're playing as a guest. Sign in to sync your library.",
+            text = "Stai ascoltando come ospite. Accedi per sincronizzare la libreria.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
@@ -55,7 +55,7 @@ fun AnonymousBanner(modifier: Modifier = Modifier) {
         )
         Icon(
             imageVector = Icons.Filled.ChevronRight,
-            contentDescription = "Sign in",
+            contentDescription = "Accedi",
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

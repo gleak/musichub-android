@@ -251,7 +251,7 @@ private fun NowPlayingContent(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text = "PLAYING FROM",
+                        text = "IN RIPRODUZIONE DA",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.85f),
                     )

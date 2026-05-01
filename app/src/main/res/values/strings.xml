@@ -1,33 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">MediaPlayer</string>
-    <string name="search_hint">Search songs, artists, albums</string>
-    <string name="search_empty">No results yet. Type to search.</string>
-    <string name="search_no_matches">No songs match that query.</string>
-    <string name="search_error">Couldn\'t load songs. Is the backend running?</string>
-    <string name="content_desc_cover_art">Album cover</string>
-    <string name="content_desc_clear_query">Clear query</string>
+    <string name="app_name">MusicHub</string>
+    <string name="search_hint">Cerca brani, artisti, album</string>
+    <string name="search_empty">Nessun risultato. Digita per cercare.</string>
+    <string name="search_no_matches">Nessun brano corrisponde alla ricerca.</string>
+    <string name="search_error">Impossibile caricare i brani. Il backend è attivo?</string>
+    <string name="content_desc_cover_art">Copertina album</string>
+    <string name="content_desc_clear_query">Cancella ricerca</string>
+    <string name="search_voice_prompt">Pronuncia il brano o l\'artista</string>
+    <string name="search_voice_unavailable">Riconoscimento vocale non disponibile</string>
+    <string name="search_recents_clear">Cancella</string>
+    <string name="search_section_recents">Recenti</string>
+    <string name="search_section_browse">Sfoglia</string>
+    <string name="search_browse_title">Tutti i generi</string>
+    <string name="search_genre_filter_clear">Esci dal filtro</string>
 
     <!-- Find new music -->
-    <string name="find_title">Find new music</string>
-    <string name="find_hint">Artist, album, or track</string>
-    <string name="find_button_search">Search</string>
-    <string name="find_empty">Search YouTube for a music video to download.</string>
-    <string name="find_no_candidates">No results. Try a broader query.</string>
-    <string name="find_error_prefix">Couldn\'t search:</string>
-    <string name="find_status_searching">Searching YouTube…</string>
-    <string name="find_status_awaiting">Pick a video below.</string>
-    <string name="find_status_downloading">Downloading &amp; importing…</string>
-    <string name="find_status_imported">Imported. Happy listening.</string>
-    <string name="find_status_imported_partial">Partially imported — check server logs.</string>
-    <string name="find_status_failed">Failed.</string>
-    <string name="find_status_canceled">Canceled.</string>
-    <string name="find_active_downloads">In Progress</string>
-    <string name="find_back">Back to Find</string>
-    <string name="content_desc_find">Find new music</string>
+    <string name="find_title">Scopri nuova musica</string>
+    <string name="find_hint">Artista, album o brano</string>
+    <string name="find_button_search">Cerca</string>
+    <string name="find_empty">Cerca un video musicale su YouTube da scaricare.</string>
+    <string name="find_no_candidates">Nessun risultato. Prova una query più ampia.</string>
+    <string name="find_error_prefix">Ricerca non riuscita:</string>
+    <string name="find_status_searching">Sto cercando su YouTube…</string>
+    <string name="find_status_awaiting">Scegli un video qui sotto.</string>
+    <string name="find_status_downloading">Scarico e importo…</string>
+    <string name="find_status_imported">Importato. Buon ascolto.</string>
+    <string name="find_status_imported_partial">Importato parzialmente — controlla i log del server.</string>
+    <string name="find_status_failed">Errore.</string>
+    <string name="find_status_canceled">Annullato.</string>
+    <string name="find_active_downloads">In corso</string>
+    <string name="find_back">Torna a Scopri</string>
+    <string name="content_desc_find">Scopri nuova musica</string>
 
     <!-- Downloads (M13) -->
-    <string name="download_channel_name">Downloads</string>
-    <string name="download_finishing">Finishing up…</string>
-    <string name="download_in_progress">Downloading…</string>
+    <string name="download_channel_name">Download</string>
+    <string name="download_finishing">Sto completando…</string>
+    <string name="download_in_progress">Sto scaricando…</string>
 </resources>

@@ -181,7 +181,7 @@ private fun AlbumBody(
         item(key = "header") {
             SpotifyHero(
                 title = detail.name,
-                subtitle = "Album • ${detail.artist}",
+                subtitle = "Album · ${detail.artist} · ${detail.songs.size} brani",
                 coverModel = coverModel,
                 onPlay = { if (detail.songs.isNotEmpty()) onPlayFromIndex(detail.songs, 0) },
                 onShuffle = { onShufflePlay(detail.songs) },

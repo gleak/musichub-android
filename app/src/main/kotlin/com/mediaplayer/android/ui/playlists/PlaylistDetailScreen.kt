@@ -298,11 +298,14 @@ private fun PlaylistDetailBody(
         item(key = "header") {
             val total = playlist.songs.size
             val allDownloaded = total > 0 && downloadedCount == total
+            val subtitleStr = if (playlist.isAuto) {
+                "${com.mediaplayer.android.ui.common.familyOf(playlist.kind).label} · ${pluralizeSongsDetail(total)}"
+            } else if (downloadedCount > 0 && !allDownloaded)
+                "Playlist · ${pluralizeSongsDetail(total)} · $downloadedCount scaricati"
+            else "Playlist · ${pluralizeSongsDetail(total)}"
             SpotifyHero(
                 title = playlist.name,
-                subtitle = if (downloadedCount > 0 && !allDownloaded)
-                    "Playlist • ${pluralizeSongsDetail(total)} • $downloadedCount downloaded"
-                else "Playlist • ${pluralizeSongsDetail(total)}",
+                subtitle = subtitleStr,
                 coverModel = null,
                 onPlay = { if (entries.isNotEmpty()) onPlayFromIndex(songsForPlayback, 0) },
                 onShuffle = { onShufflePlay(songsForPlayback) },
@@ -314,7 +317,7 @@ private fun PlaylistDetailBody(
                         ) {
                             Icon(
                                 imageVector = if (allDownloaded) Icons.Filled.CloudDone else Icons.Filled.CloudDownload,
-                                contentDescription = if (allDownloaded) "Remove downloads" else "Download",
+                                contentDescription = if (allDownloaded) "Rimuovi scaricati" else "Scarica",
                                 tint = if (allDownloaded) MaterialTheme.colorScheme.primary
                                        else MaterialTheme.colorScheme.onSurface,
                             )
@@ -322,6 +325,16 @@ private fun PlaylistDetailBody(
                     }
                 },
             )
+        }
+
+        if (playlist.isAuto) {
+            item(key = "auto_meta") {
+                AutoPlaylistMetaStrip(
+                    family = com.mediaplayer.android.ui.common.familyOf(playlist.kind),
+                    songCount = playlist.songs.size,
+                    lastRefreshedAt = playlist.lastRefreshedAt,
+                )
+            }
         }
 
         if (entries.isEmpty()) {
@@ -413,4 +426,83 @@ private fun PlaylistDetailBody(
 
 
 private fun pluralizeSongsDetail(count: Int): String =
-    if (count == 1) "1 song" else "$count songs"
+    if (count == 1) "1 brano" else "$count brani"
+
+@Composable
+private fun AutoPlaylistMetaStrip(
+    family: com.mediaplayer.android.ui.common.AutoPlaylistFamily,
+    songCount: Int,
+    lastRefreshedAt: String?,
+) {
+    val mono = com.mediaplayer.android.ui.theme.LocalMHMono.current
+    val refreshLabel = lastRefreshedAt?.let { stamp ->
+        runCatching { stamp.substring(0, 10) }.getOrNull()
+    } ?: "Oggi"
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MetaCard(
+                label = "AGGIORNATA",
+                value = refreshLabel,
+                modifier = Modifier.weight(1f),
+            )
+            MetaCard(
+                label = "BRANI",
+                value = "$songCount",
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(com.mediaplayer.android.ui.theme.MHColors.Lime.copy(alpha = 0.06f))
+                .padding(14.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = null,
+                    tint = com.mediaplayer.android.ui.theme.MHColors.Lime,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = "Aggiornata automaticamente — ${family.label}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = com.mediaplayer.android.ui.theme.MHColors.TextLo,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetaCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    val mono = com.mediaplayer.android.ui.theme.LocalMHMono.current
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.White.copy(alpha = 0.05f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Text(
+            text = label,
+            style = mono.eyebrow.copy(color = com.mediaplayer.android.ui.theme.MHColors.Lime),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall,
+            color = com.mediaplayer.android.ui.theme.MHColors.TextHi,
+            modifier = Modifier.padding(top = 3.dp),
+        )
+    }
+}

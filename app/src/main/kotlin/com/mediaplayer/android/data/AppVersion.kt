@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.9.2"
+    const val VERSION = "0.10.8"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,102 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.10.8",
+            title = "Search redesign — voice, history, genre tiles",
+            highlights = listOf(
+                "Search screen realigned to the mockup: lime mono \"Cerca\" header, rounded search field with the new mic icon trailing.",
+                "Voice search: tap the mic to launch the system speech recognizer; the spoken query auto-fills the field and runs immediately. Falls back to a toast if the device has no recognizer.",
+                "Recent queries saved per device — tap to re-run, swipe individual rows away with the X, or wipe the lot with \"Cancella\". Capped at 8.",
+                "Genre tiles (Sfoglia · Tutti i generi): 4×2 colored grid with rotated MHCover decoration; tap a genre to filter results, with a lime pill showing the active filter that's tap-to-clear.",
+                "Song row redesign: 44dp cover, mono duration on the right, smaller heart, tighter spacing — applied everywhere the SongRow is used (search, queue, history).",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.10.7",
+            title = "Library playlists in single column",
+            highlights = listOf(
+                "Library Playlist tab now lists items in a single column row layout — 52dp cover on the left, title + \"Playlist · N brani\" subtitle in the middle, chevron on the right — matching the mockup. The 2-col grid was producing card tiles that didn't match the design.",
+                "Auto-playlist rows show \"Per te · N brani\" subtitle.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.10.6",
+            title = "Theme paints app-wide, Home filter chips, Library 4 tabs",
+            highlights = listOf(
+                "Light theme now actually paints — MHGradient.screenBg() and the new MHTheme tokens read MaterialTheme.colorScheme so screens flip when you change Tema.",
+                "Home gains the mockup filter chip row (Tutto / Musica / Playlist / Artisti) above the content + a \"— FINE FEED —\" mono footer at the end.",
+                "Library tabs realigned to the mockup: Playlist / Album / Artisti / Scaricati. Album / Artisti / Scaricati show a placeholder until the full per-tab content lands.",
+                "Removed the orphan Notifiche, Lingua and Informazioni sub-screens (no longer in the Profile menu) — file cleanup.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.10.5",
+            title = "Profile cleanup — per-user stats endpoint, Theme apply",
+            highlights = listOf(
+                "Profile counters now come from a dedicated `/api/auth/stats` backend endpoint (single round-trip vs three list calls). Numbers are per-user: songs you listen to (liked + in your playlists), playlists you own, artists you follow.",
+                "Theme picker (Scuro / Chiaro / Sistema) now actually switches the app — the choice is persisted and applied via MaterialTheme. Lo schema chiaro è sperimentale; some hard-coded dark surfaces will follow up.",
+                "Profile menu pruned: Notifiche, Lingua and Informazioni rows removed. Tema label reflects the current selection live.",
+                "Versione row no longer shows a chevron — it isn't tappable.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.10.4",
+            title = "Settings now apply — Crossfade, Download offline, Profile stats",
+            highlights = listOf(
+                "Crossfade slider value is now persisted via DataStore and applied to playback — at the configured duration, the next track fades in smoothly when ExoPlayer auto-advances. Lascia a 0 per disattivare.",
+                "Download offline screen reads the actual cache size from the audio cache (1 GiB cap) and lets you wipe all cached spans. Solo Wi-Fi + Download automatico toggles are persisted.",
+                "Notifiche toggles persisted — read by future notification dispatchers.",
+                "Profile header counts (Brani / Playlist / Artisti) now query the backend and show real numbers, falling back to em dash on network errors.",
+                "Removed the Server / backend host setting — never going to be operator-configurable post-install.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.10.3",
+            title = "Settings sub-pages, Track action sheet, Share + Update banner",
+            highlights = listOf(
+                "7 new settings sub-pages reachable from Profile: Notifiche, Crossfade (slider), Download offline (gauge + manage), Lingua, Tema, Server, Informazioni — each in MusicHub style (lime accent, mono labels, eyebrow groups)",
+                "New Track action sheet: kebab on every song row opens a unified bottom sheet with Riproduci dopo, Aggiungi a coda/playlist, Preferiti, Scarica, Mostra testo, Apri video, Vai all'artista/album, Condividi, Timer di spegnimento",
+                "Playlist share dialog: generates the mediaplayer://share/<token> link with copy + system share — explains the one-shot copy semantics",
+                "App update banner on Home: lime card showing v<old> → v<new> with a one-tap install — used by AppUpdateChecker on the self-hosted update channel",
+                "Profile rows now navigate to the new sub-pages (Crossfade, Download, Lingua, Tema, Server, Informazioni)",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.10.2",
+            title = "MusicHub design — Login, Onboarding, Find, Spotify Import",
+            highlights = listOf(
+                "App label is now \"MusicHub\" — matches the new launcher icon",
+                "Login screen redesigned: lime monogram + \"Benvenuto\" eyebrow + Italian CTAs (\"Accedi con Google\" / \"Continua come ospite\")",
+                "Onboarding genre picker translated to Italian (\"Cosa ascolti?\") with the gradient background",
+                "Discover (Find) screen, search hints, and progress states translated to Italian",
+                "Spotify Import flow translated to Italian — steps, CSV picker, confirm dialog and result screen",
+                "Anonymous banner now reads \"Stai ascoltando come ospite. Accedi per sincronizzare la libreria.\"",
+                "Home cold-start tiles: \"Scopri musica\" / \"Importa Spotify\"",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.10.1",
+            title = "MusicHub design — Italian copy + auto-playlist detail",
+            highlights = listOf(
+                "Auto-playlist detail screen now shows the dedicated MusicHub layout — refresh strip with \"AGGIORNATA\" + \"BRANI\" cards and a lime banner indicating the cadence (Rotation, Mix giornaliero, Nuove uscite, …)",
+                "Search redesigned: \"Sfoglia · Tutti i generi\" eyebrow + Album / Artisti tiles with the new MusicHub palette",
+                "Library, Home, Search, Album, Artist headers and section labels translated to Italian (Libreria, Cerca, Brani preferiti, Riprodotti di recente, Più ascoltati, Discografia)",
+                "Now Playing pill now reads \"IN RIPRODUZIONE DA\" instead of the English caption",
+                "Android Auto browse tree localized: Per te / Brani preferiti / Ascoltati di recente / Tutti i brani — keeps consistent labels with the phone UI",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.10.0",
+            title = "MusicHub design system — lime accent + Per Te hub",
+            highlights = listOf(
+                "New launcher icon: \"Onda sonora\" — 8-bar geometric waveform on lime",
+                "Rebranded color palette to MusicHub lime (#A8E04E) + dark gradient backgrounds — Material You themed icon supported",
+                "New \"Per te\" tab in the bottom nav — hub for system-generated playlists with hero Rotation, daily mixes, weekly drops, and contextual rows",
+                "New Profile / Settings full screen replaces the old Home dropdown — avatar, stats placeholders, Account / Riproduzione / App sections",
+                "Italian copy on Home greeting + section headers (Buongiorno · Ven 1 Mag…)",
+            ),
+        ),
         ChangelogEntry(
             version = "0.9.2",
             title = "UI polish — empty states + clearer dialogs",

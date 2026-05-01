@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LibraryAdd
@@ -74,7 +75,7 @@ import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.common.displayInitial
 import com.mediaplayer.android.ui.theme.SpotifyColors
 
-private enum class LibraryFilter { All, Playlists, Liked }
+private enum class LibraryFilter { Playlists, Albums, Artisti, Scaricati }
 
 @Composable
 fun PlaylistsScreen(
@@ -89,7 +90,7 @@ fun PlaylistsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     var createOpen by remember { mutableStateOf(false) }
-    var filter by remember { mutableStateOf(LibraryFilter.All) }
+    var filter by remember { mutableStateOf(LibraryFilter.Playlists) }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -188,7 +189,7 @@ private fun LibraryTopBar(
         }
         Spacer(Modifier.width(12.dp))
         Text(
-            text = "Your Library",
+            text = "Libreria",
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
@@ -231,9 +232,10 @@ private fun FilterRow(filter: LibraryFilter, onChange: (LibraryFilter) -> Unit) 
                 label = {
                     Text(
                         text = when (f) {
-                            LibraryFilter.All -> "All"
-                            LibraryFilter.Playlists -> "Playlists"
-                            LibraryFilter.Liked -> "Liked"
+                            LibraryFilter.Playlists -> "Playlist"
+                            LibraryFilter.Albums -> "Album"
+                            LibraryFilter.Artisti -> "Artisti"
+                            LibraryFilter.Scaricati -> "Scaricati"
                         },
                     )
                 },
@@ -257,43 +259,66 @@ private fun LibraryList(
     onSpotifyImport: () -> Unit,
     onDelete: (Long) -> Unit,
 ) {
-    val showLiked = filter == LibraryFilter.All || filter == LibraryFilter.Liked
-    val showPlaylists = filter == LibraryFilter.All || filter == LibraryFilter.Playlists
-
     // 2-col grid for playlists (Spotify-tile style); Liked + Spotify-import
     // anchors span the full width via maxLineSpan. Mixing list-shaped rows
     // and grid tiles in one LazyVerticalGrid avoids the nested-scroll issues
     // a LazyColumn-wrapping-LazyVerticalGrid would create.
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = GridCells.Fixed(1),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        if (showLiked) {
-            item(key = "liked", span = { GridItemSpan(maxLineSpan) }) {
-                LikedSongsRow(onClick = onLikedSongsClick)
+        when (filter) {
+            LibraryFilter.Playlists -> {
+                item(key = "liked", span = { GridItemSpan(maxLineSpan) }) {
+                    LikedSongsRow(onClick = onLikedSongsClick)
+                }
+                if (playlists.isEmpty()) {
+                    item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
+                        EmptyPlaylistMessage()
+                    }
+                }
+                items(items = playlists, key = { it.id }) { p ->
+                    PlaylistTile(
+                        playlist = p,
+                        onClick = { onPlaylistClick(p) },
+                        onDelete = { onDelete(p.id) },
+                    )
+                }
+                item(key = "spotify_import", span = { GridItemSpan(maxLineSpan) }) {
+                    ImportFromSpotifyRow(onClick = onSpotifyImport)
+                }
             }
-        }
-        if (showPlaylists && playlists.isEmpty() && filter == LibraryFilter.Playlists) {
-            item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
-                EmptyPlaylistMessage()
+            LibraryFilter.Albums, LibraryFilter.Artisti, LibraryFilter.Scaricati -> {
+                item(key = "tab_placeholder", span = { GridItemSpan(maxLineSpan) }) {
+                    TabPlaceholder(filter)
+                }
             }
-        }
-        if (showPlaylists) {
-            items(items = playlists, key = { it.id }) { p ->
-                PlaylistTile(
-                    playlist = p,
-                    onClick = { onPlaylistClick(p) },
-                    onDelete = { onDelete(p.id) },
-                )
-            }
-        }
-        item(key = "spotify_import", span = { GridItemSpan(maxLineSpan) }) {
-            ImportFromSpotifyRow(onClick = onSpotifyImport)
         }
     }
+}
+
+@Composable
+private fun TabPlaceholder(filter: LibraryFilter) {
+    val title = when (filter) {
+        LibraryFilter.Albums -> "Album"
+        LibraryFilter.Artisti -> "Artisti"
+        LibraryFilter.Scaricati -> "Scaricati"
+        else -> ""
+    }
+    val sub = when (filter) {
+        LibraryFilter.Albums -> "Apri \"Album\" dal menu di ricerca per sfogliare la libreria completa."
+        LibraryFilter.Artisti -> "Apri \"Artisti\" dal menu di ricerca per vedere tutti gli artisti."
+        LibraryFilter.Scaricati -> "I brani scaricati per l'ascolto offline appariranno qui."
+        else -> ""
+    }
+    EmptyState(
+        icon = Icons.AutoMirrored.Filled.QueueMusic,
+        title = title,
+        subtitle = sub,
+    )
 }
 
 @Composable
@@ -338,7 +363,7 @@ private fun LikedSongsRow(onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column {
             Text(
-                text = "Liked Songs",
+                text = "Brani preferiti",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -492,23 +517,21 @@ private fun PlaylistTile(
     var confirmDelete by remember { mutableStateOf(false) }
     val cover = playlist.coverSongId
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(CoverShapes.Tile)
             .combinedClickable(
                 onClick = onClick,
                 // Auto-playlists are server-managed and can't be deleted; long-press
                 // only fires the confirm dialog for user playlists.
                 onLongClick = if (playlist.isAuto) null else { -> confirmDelete = true },
             )
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
+                .size(52.dp)
                 .clip(CoverShapes.SongRow)
                 .background(
                     if (playlist.isAuto) {
@@ -545,20 +568,30 @@ private fun PlaylistTile(
                 )
             }
         }
-        Text(
-            text = playlist.name,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = if (playlist.isAuto) "Made for you · ${pluralizeSongs(playlist.songCount)}"
-            else pluralizeSongs(playlist.songCount),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = playlist.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (playlist.isAuto) "Per te · ${pluralizeSongs(playlist.songCount)}"
+                else "Playlist · ${pluralizeSongs(playlist.songCount)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Icon(
+            imageVector = Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
         )
     }
 

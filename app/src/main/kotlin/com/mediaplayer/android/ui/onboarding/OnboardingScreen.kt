@@ -37,7 +37,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.mediaplayer.android.ui.common.EyebrowText
 import com.mediaplayer.android.ui.theme.CoverShapes
+import com.mediaplayer.android.ui.theme.MHColors
+import com.mediaplayer.android.ui.theme.MHGradient
 
 /**
  * M14e first-run tag picker. Shown on top of [com.mediaplayer.android.MainActivity.AuthGate]
@@ -63,21 +66,23 @@ fun OnboardingScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(MHGradient.screenBg())
             .safeDrawingPadding()
             .padding(horizontal = 20.dp),
     ) {
         Spacer(Modifier.height(24.dp))
+        EyebrowText(text = "Benvenuto")
+        Spacer(Modifier.height(4.dp))
         Text(
-            text = "What do you listen to?",
+            text = "Cosa ascolti?",
             style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = MHColors.TextHi,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "Pick at least $MIN_PICKS so we can suggest tracks you'll like.",
+            text = "Scegli almeno $MIN_PICKS generi per ricevere suggerimenti adatti.",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MHColors.TextLo,
         )
         Spacer(Modifier.height(20.dp))
 
@@ -123,8 +128,8 @@ fun OnboardingScreen(
             } else {
                 Text(
                     text = if (picked.size < MIN_PICKS)
-                        "Pick ${MIN_PICKS - picked.size} more"
-                    else "Continue",
+                        "Scegli ancora ${MIN_PICKS - picked.size}"
+                    else "Continua",
                 )
             }
         }
@@ -133,7 +138,7 @@ fun OnboardingScreen(
             enabled = !saving,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Skip for now", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Salta per ora", color = MHColors.TextLo)
         }
         Spacer(Modifier.height(12.dp))
     }
