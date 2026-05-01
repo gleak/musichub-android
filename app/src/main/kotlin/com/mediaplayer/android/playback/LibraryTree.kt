@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.AlbumDto
 import com.mediaplayer.android.data.dto.ArtistDto
@@ -56,6 +57,8 @@ internal object LibraryTree {
     const val RECENTS_ID = "recents"
     const val ALBUMS_ID = "albums"
     const val ARTISTS_ID = "artists"
+    /** M14f: server-curated auto-playlists (Discover Daily, On Repeat, …). */
+    const val MADE_FOR_YOU_ID = "made-for-you"
 
     private const val PLAYLIST_PREFIX = "playlist:"
     private const val SONG_PREFIX = "song:"
@@ -112,6 +115,7 @@ internal object LibraryTree {
         parentId == ROOT_ID -> rootChildren()
         parentId == ALL_SONGS_ID -> allSongs(page, pageSize)
         parentId == PLAYLISTS_ID -> playlists()
+        parentId == MADE_FOR_YOU_ID -> madeForYou()
         parentId == LIKED_ID -> liked()
         parentId == RECENTS_ID -> recents()
         parentId == ALBUMS_ID -> albums(page, pageSize)
@@ -132,6 +136,7 @@ internal object LibraryTree {
         mediaId == ROOT_ID -> root()
         mediaId == ALL_SONGS_ID -> sectionFolder(ALL_SONGS_ID, "All songs", grid = false)
         mediaId == PLAYLISTS_ID -> sectionFolder(PLAYLISTS_ID, "Playlists", grid = true)
+        mediaId == MADE_FOR_YOU_ID -> sectionFolder(MADE_FOR_YOU_ID, "Made for you", grid = true)
         mediaId == LIKED_ID -> sectionFolder(LIKED_ID, "Liked Songs", grid = false)
         mediaId == RECENTS_ID -> sectionFolder(RECENTS_ID, "Recently Played", grid = false)
         mediaId == ALBUMS_ID -> sectionFolder(ALBUMS_ID, "Albums", grid = true)
@@ -145,7 +150,7 @@ internal object LibraryTree {
                 folderTile(mediaId, detail.name,
                     subtitle = "${detail.songs.size} songs",
                     type = MediaMetadata.MEDIA_TYPE_PLAYLIST,
-                    artworkSongId = detail.songs.firstOrNull()?.id,
+                    artworkSongId = detail.songs.firstOrNull()?.song?.id,
                     grid = false)
             }
         }
@@ -179,10 +184,30 @@ internal object LibraryTree {
         else -> null
     }
 
-    /** Voice-search proxy against the backend `/api/songs?q=` endpoint. */
+    /**
+     * Voice-search proxy against the backend `/api/songs?q=` endpoint.
+     *
+     * Tiny single-entry cache: AA's `onSearch` then `onGetSearchResult`
+     * dance fires page=0 twice in a row for the same query — once to learn
+     * the result count, then to fetch the items. Memoising the most recent
+     * (query, page=0) skips the second round-trip. Cache invalidates on the
+     * next non-matching call; thread-safety is per-coroutine since LibraryTree
+     * is a singleton accessed from `serviceScope.future`.
+     */
+    @Volatile private var lastSearchQuery: String? = null
+    @Volatile private var lastSearchPage0: List<MediaItem> = emptyList()
+
     suspend fun search(query: String, page: Int = 0, pageSize: Int = PAGE_SIZE): List<MediaItem> {
+        if (page == 0 && pageSize == PAGE_SIZE && query == lastSearchQuery) {
+            return lastSearchPage0
+        }
         val resp = Network.api.listSongs(query = query, page = page, size = pageSize)
-        return resp.items.map { songLeaf(it) }
+        val items = resp.items.map { songLeaf(it) }
+        if (page == 0 && pageSize == PAGE_SIZE) {
+            lastSearchQuery = query
+            lastSearchPage0 = items
+        }
+        return items
     }
 
     // --- mediaId parsers -----------------------------------------------------
@@ -232,7 +257,7 @@ internal object LibraryTree {
 
     suspend fun playlistQueue(playlistId: Long): List<MediaItem> {
         val detail = Network.api.getPlaylist(playlistId)
-        return detail.songs.map { playableSong(it) }
+        return detail.songs.map { playableSong(it.song) }
     }
 
     suspend fun albumQueue(name: String, artist: String): List<MediaItem> {
@@ -275,7 +300,7 @@ internal object LibraryTree {
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                    .setArtworkUri(Uri.parse(Network.coverUrl(songId)))
+                    .setArtworkUri(aaArtworkUri(songId))
                     .build()
             )
             .build()
@@ -283,6 +308,8 @@ internal object LibraryTree {
     // --- internals -----------------------------------------------------------
 
     private fun rootChildren(): List<MediaItem> = listOf(
+        sectionFolder(MADE_FOR_YOU_ID, "Made for you", grid = true,
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS),
         sectionFolder(RECENTS_ID, "Recently Played", grid = false,
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
         sectionFolder(LIKED_ID, "Liked Songs", grid = false,
@@ -314,9 +341,34 @@ internal object LibraryTree {
             )
         }
 
+    /**
+     * M14f: server-curated playlists (Discover Daily, On Repeat). Backend
+     * filters by `kind` query param; we render them with the same
+     * `playlist:{id}` leaf scheme as user playlists since they are real
+     * playlist rows server-side. The "Made for you" subtitle distinguishes
+     * them in the AA list.
+     */
+    private suspend fun madeForYou(): List<MediaItem> {
+        val list = Network.api.listPlaylists(kind = "auto")
+        if (list.isEmpty()) {
+            return listOf(infoItem("Nothing here yet — check back tomorrow"))
+        }
+        return list.map { pl ->
+            folderTile(
+                mediaId = "$PLAYLIST_PREFIX${pl.id}",
+                title = pl.name,
+                subtitle = "Made for you · ${pl.songCount} song${if (pl.songCount == 1) "" else "s"}",
+                type = MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                artworkSongId = pl.coverSongId,
+                grid = true,
+            )
+        }
+    }
+
     private suspend fun playlistSongs(playlistId: Long): List<MediaItem> {
         val detail = Network.api.getPlaylist(playlistId)
-        return detail.songs.mapIndexed { index, song ->
+        return detail.songs.mapIndexed { index, entry ->
+            val song = entry.song
             MediaItem.Builder()
                 .setMediaId("$PL_LEAF_PREFIX$playlistId:$index:${song.id}")
                 .setMediaMetadata(song.asBrowseMetadata(
@@ -409,7 +461,7 @@ internal object LibraryTree {
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                    .setArtworkUri(Uri.parse(Network.coverUrl(songId)))
+                    .setArtworkUri(aaArtworkUri(songId))
                     .build()
             )
             .build()
@@ -492,7 +544,7 @@ internal object LibraryTree {
                     .apply {
                         if (subtitle != null) setSubtitle(subtitle)
                         if (artworkSongId != null) {
-                            setArtworkUri(Uri.parse(Network.coverUrl(artworkSongId)))
+                            aaArtworkUri(artworkSongId)?.let { setArtworkUri(it) }
                         }
                     }
                     .setExtras(extras)
@@ -537,8 +589,19 @@ internal object LibraryTree {
                 if (trackNumber != null) setTrackNumber(trackNumber)
                 if (totalTrackCount != null) setTotalTrackCount(totalTrackCount)
             }
-            .setArtworkUri(Uri.parse(Network.coverUrl(id)))
+            .setArtworkUri(aaArtworkUri(id))
             .build()
+
+    /**
+     * Cover URLs are LAN-only (`http://192.168…/api/songs/{id}/cover`). On a
+     * real Android Auto session over a head unit that's not on the LAN, the
+     * fetch silently fails and the slot flashes empty. Skip artworkUri while
+     * the network signal says the backend is unreachable so AA falls back to
+     * its own generic placeholder instead. The check is best-effort —
+     * `networkAvailable` flips true on the next successful HTTP call.
+     */
+    private fun aaArtworkUri(songId: Long): Uri? =
+        if (ConnectivityObserver.networkAvailable.value) Uri.parse(Network.coverUrl(songId)) else null
 
     // --- encoding helpers ----------------------------------------------------
 

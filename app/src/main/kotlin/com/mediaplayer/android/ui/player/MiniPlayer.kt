@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -44,6 +45,7 @@ import coil3.request.crossfade
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.playback.PlaybackViewModel
+import com.mediaplayer.android.ui.common.SongCover
 
 /**
  * Compact, always-visible bar pinned above the main content whenever a
@@ -55,6 +57,13 @@ fun MiniPlayer(
     viewModel: PlaybackViewModel,
     onExpand: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Optional modifier applied to the cover Box only. AppScaffold injects a
+     * `Modifier.sharedBounds(...)` here so the cover participates in the
+     * MiniPlayer ↔ NowPlayingSheet shared-element transition. Empty by
+     * default keeps standalone use (preview, tests) trivial.
+     */
+    coverModifier: Modifier = Modifier,
 ) {
     val song by viewModel.currentSong.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
@@ -80,7 +89,12 @@ fun MiniPlayer(
                 .padding(horizontal = MediaPlayerSpacing.S, vertical = MediaPlayerSpacing.S),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Cover(song = current, size = 44.dp)
+            SongCover(
+                song = current,
+                size = 44.dp,
+                shape = CoverShapes.MiniPlayer,
+                modifier = coverModifier,
+            )
             Spacer(Modifier.width(MediaPlayerSpacing.Xs + MediaPlayerSpacing.S))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -123,36 +137,22 @@ fun MiniPlayer(
                 .fillMaxWidth()
                 .height(2.dp),
             color = MaterialTheme.colorScheme.onSurface,
-            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            // surfaceContainerHighest (0xFF3E3E3E) reads as nearly the same
+            // grey as the mini-player's surfaceContainerHigh background
+            // (0xFF282828) — the inactive track all but vanished. A flat
+            // white-with-alpha gives consistent contrast against any
+            // background colour the mini-player ever sits on.
+            trackColor = Color.White.copy(alpha = 0.18f),
         )
     }
 }
 
+/**
+ * Kept as a thin alias so NowPlayingSheet (which imports `Cover` from this
+ * package) doesn't need to know about the new shared composable. New code
+ * should call [SongCover] directly.
+ */
 @Composable
 internal fun Cover(song: SongDto, size: androidx.compose.ui.unit.Dp) {
-    val shape = CoverShapes.MiniPlayer
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (song.hasCoverArt) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(Network.coverUrl(song.id))
-                    .crossfade(true)
-                    .build(),
-                contentDescription = null,
-                modifier = Modifier.size(size),
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Filled.MusicNote,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
+    SongCover(song = song, size = size, shape = CoverShapes.MiniPlayer)
 }

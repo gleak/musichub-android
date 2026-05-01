@@ -1,5 +1,6 @@
 package com.mediaplayer.android.ui.common
 
+import com.mediaplayer.android.ui.theme.HeroCoverSize
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.background
@@ -25,6 +26,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -82,7 +89,7 @@ fun SpotifyHero(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-            val artSize: Dp = (maxWidth * 0.6f).coerceAtMost(280.dp)
+            val artSize: Dp = (maxWidth * HeroCoverSize.DetailFraction).coerceAtMost(HeroCoverSize.DetailMax)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -145,10 +152,25 @@ fun SpotifyHero(
                                else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                // Spotify-style scale-on-press feedback. Tracks the
+                // press interaction directly rather than the toggleable
+                // selection state — single tap should give a brief 0.92→1
+                // springback so the button feels alive instead of static.
+                val playInteraction = remember { MutableInteractionSource() }
+                val pressed by playInteraction.collectIsPressedAsState()
+                val playScale by animateFloatAsState(
+                    targetValue = if (pressed) 0.92f else 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                    label = "play-press-scale",
+                )
                 FilledIconButton(
                     onClick = onPlay,
                     enabled = playEnabled,
-                    modifier = Modifier.size(56.dp),
+                    interactionSource = playInteraction,
+                    modifier = Modifier.size(56.dp).scale(playScale),
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,

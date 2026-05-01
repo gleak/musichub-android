@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.3.2"
+    const val VERSION = "0.4.3"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,45 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.4.3",
+            title = "Library grid + cover transition + reorder polish",
+            highlights = listOf(
+                "Your Library now shows playlists as a 2-column grid of tiles, Spotify-style",
+                "Tapping the mini-player expands its cover into the Now Playing screen with a smooth shared-element transition",
+                "Reordering songs inside a playlist now animates instead of snapping",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.4.2",
+            title = "Polish pass — covers, motion, contrast",
+            highlights = listOf(
+                "Song titles in lists are easier to read at a glance — lighter, larger weight",
+                "Now Playing slides up with a soft spring instead of a hard pop",
+                "Play button on detail screens responds to your tap with a quick scale",
+                "Now Playing controls stay readable on light album covers",
+                "Mini-player progress bar finally visible against the dark background",
+                "Retry button added on Liked, Album, Artist and Playlist load failures",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.4.1",
+            title = "Cold-start CTAs + Search/Find retry",
+            highlights = listOf(
+                "Empty Home now offers Find new music and Import Spotify shortcuts instead of leaving you at a wall",
+                "Search and Find errors finally show a Retry button",
+                "Android Auto stops flashing broken cover slots when the head unit can't reach the home network",
+                "Shuffle and Repeat advertised explicitly to Android Auto so the car overlay buttons appear reliably",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.4.0",
+            title = "Tag picker + Made for you in the car",
+            highlights = listOf(
+                "First-run tag picker — pick the genres you listen to so we can suggest tracks you'll like",
+                "Made for you tile in Android Auto's browse — Discover Daily and On Repeat reachable from the car",
+            ),
+        ),
         ChangelogEntry(
             version = "0.3.2",
             title = "Bug fixes — like, video download, offline flag",

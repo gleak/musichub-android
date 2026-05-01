@@ -48,6 +48,7 @@ import com.mediaplayer.android.data.dto.RequestStatus
 import com.mediaplayer.android.data.dto.RequestSummaryDto
 import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.CenteredSpinner
+import com.mediaplayer.android.ui.common.ErrorWithRetry
 
 @Composable
 fun FindScreen(
@@ -84,10 +85,10 @@ fun FindScreen(
 
                 FindUiState.Searching -> CenteredSpinner()
 
-                is FindUiState.Error ->
-                    CenteredMessage(
-                        stringResource(R.string.find_error_prefix) + "\n" + s.message,
-                    )
+                is FindUiState.Error -> ErrorWithRetry(
+                    message = stringResource(R.string.find_error_prefix) + "\n" + s.message,
+                    onRetry = viewModel::submit,
+                )
 
                 is FindUiState.Tracking -> TrackingBody(
                     request = s.request,

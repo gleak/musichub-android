@@ -2,6 +2,7 @@ package com.mediaplayer.android.ui.playlists
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,8 +15,14 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -252,31 +259,37 @@ private fun LibraryList(
     val showLiked = filter == LibraryFilter.All || filter == LibraryFilter.Liked
     val showPlaylists = filter == LibraryFilter.All || filter == LibraryFilter.Playlists
 
-    LazyColumn(
+    // 2-col grid for playlists (Spotify-tile style); Liked + Spotify-import
+    // anchors span the full width via maxLineSpan. Mixing list-shaped rows
+    // and grid tiles in one LazyVerticalGrid avoids the nested-scroll issues
+    // a LazyColumn-wrapping-LazyVerticalGrid would create.
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (showLiked) {
-            item(key = "liked") {
+            item(key = "liked", span = { GridItemSpan(maxLineSpan) }) {
                 LikedSongsRow(onClick = onLikedSongsClick)
             }
         }
         if (showPlaylists && playlists.isEmpty() && filter == LibraryFilter.Playlists) {
-            item(key = "empty") {
+            item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                 EmptyPlaylistMessage()
             }
         }
         if (showPlaylists) {
             items(items = playlists, key = { it.id }) { p ->
-                PlaylistRow(
+                PlaylistTile(
                     playlist = p,
                     onClick = { onPlaylistClick(p) },
                     onDelete = { onDelete(p.id) },
                 )
             }
         }
-        item(key = "spotify_import") {
+        item(key = "spotify_import", span = { GridItemSpan(maxLineSpan) }) {
             ImportFromSpotifyRow(onClick = onSpotifyImport)
         }
     }
@@ -453,6 +466,104 @@ private fun PlaylistRow(
                 )
             }
         }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete playlist?") },
+            text = { Text("\"${playlist.name}\" will be permanently removed.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    onDelete()
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun PlaylistTile(
+    playlist: PlaylistDto,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    var confirmDelete by remember { mutableStateOf(false) }
+    val cover = playlist.coverSongId
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .combinedClickable(
+                onClick = onClick,
+                // Auto-playlists are server-managed and can't be deleted; long-press
+                // only fires the confirm dialog for user playlists.
+                onLongClick = if (playlist.isAuto) null else { -> confirmDelete = true },
+            )
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(6.dp))
+                .background(
+                    if (playlist.isAuto) {
+                        Brush.linearGradient(
+                            listOf(
+                                SpotifyColors.LikedGradientStart,
+                                SpotifyColors.LikedGradientEnd,
+                            )
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                MaterialTheme.colorScheme.surfaceVariant,
+                            )
+                        )
+                    }
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (cover != null && !playlist.isAuto) {
+                coil3.compose.AsyncImage(
+                    model = com.mediaplayer.android.data.Network.coverUrl(cover),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Icon(
+                    imageVector = if (playlist.isAuto) Icons.Filled.AutoAwesome
+                    else Icons.AutoMirrored.Filled.QueueMusic,
+                    contentDescription = null,
+                    tint = if (playlist.isAuto) Color.White
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Text(
+            text = playlist.name,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = if (playlist.isAuto) "Made for you · ${pluralizeSongs(playlist.songCount)}"
+            else pluralizeSongs(playlist.songCount),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 
     if (confirmDelete) {

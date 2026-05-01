@@ -32,6 +32,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.CenteredSpinner
+import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.search.SongRow
 import com.mediaplayer.android.ui.theme.SpotifyColors
@@ -70,7 +71,10 @@ fun LikedScreen(
         ) {
             when (val s = state) {
                 LikedUiState.Loading -> CenteredSpinner()
-                is LikedUiState.Error -> CenteredMessage("Couldn't load liked songs.\n${s.message}")
+                is LikedUiState.Error -> ErrorWithRetry(
+                    message = "Couldn't load liked songs.\n${s.message}",
+                    onRetry = viewModel::refresh,
+                )
                 is LikedUiState.Success -> LikedBody(
                     songs = s.songs,
                     downloadedIds = downloadedIds,

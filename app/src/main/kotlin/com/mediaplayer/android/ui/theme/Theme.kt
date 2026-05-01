@@ -24,6 +24,10 @@ object SpotifyColors {
     val OutlineVariant = Color(0xFF2A2A2A)
     val LikedGradientStart = Color(0xFF4F1AAF)
     val LikedGradientEnd = Color(0xFF8A8FFF)
+
+    // "Browse all" tiles — Spotify's pink/purple accent pair.
+    val BrowseAlbumsTile = Color(0xFFE8115B)
+    val BrowseArtistsTile = Color(0xFF8400E7)
 }
 
 private val SpotifyDark = darkColorScheme(

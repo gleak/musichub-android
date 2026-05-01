@@ -10,6 +10,7 @@ import com.mediaplayer.android.data.dto.ArtistDetailDto
 import com.mediaplayer.android.data.dto.ArtistDto
 import com.mediaplayer.android.data.dto.CreatePlaylistRequest
 import com.mediaplayer.android.data.dto.CreateRequestBody
+import com.mediaplayer.android.data.dto.GenreSeedRequest
 import com.mediaplayer.android.data.dto.PageResponse
 import com.mediaplayer.android.data.dto.PlaylistDetailDto
 import com.mediaplayer.android.data.dto.PlaylistDto
@@ -46,6 +47,12 @@ interface MediaPlayerApi {
 
     @GET("api/auth/me")
     suspend fun getMe(): UserDto
+
+    // ---------- Taste / Onboarding (M14e) ----------
+
+    /** Seeds GENRE rows in user_taste so the recommender's cold-start path has signal. */
+    @POST("api/taste/genres")
+    suspend fun seedGenres(@Body body: GenreSeedRequest)
 
     // ---------- Songs (M1/M4) ----------
 

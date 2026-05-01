@@ -12,5 +12,5 @@ data class PlaylistDetailDto(
     val name: String,
     val createdAt: String,
     val updatedAt: String,
-    val songs: List<SongDto>,
+    val songs: List<PlaylistSongEntryDto>,
 )

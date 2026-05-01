@@ -42,10 +42,45 @@ Surfaces: Smartphone (Compose) + Android Auto (MediaLibraryService)
 - ✅ NowPlayingSheet central play/pause `contentDescription` (Finding 6.6) — toggles "Play"/"Pause" with the icon.
 - ✅ Cover `contentDescription` on carousel tiles (Finding 6.1, partial) — HomeScreen `ShortcutTile` + `SongCardSquare`, SearchScreen `RecentSongCard` now pass `"${title}, ${artist}"`. Row-with-text covers (MiniPlayer, SongRow, AddSongsToPlaylistSheet) intentionally left decorative since the title/artist text alongside is read by TalkBack.
 
-**Skipped/blocked:**
-- ⏸ 1.7 phone playlist grid vs AA grid — design decision pending
-- ⏸ 5.2 *true* `SharedTransitionLayout` mini ↔ sheet shared element — `ModalBottomSheet`'s Popup host fights cross-tree shared elements. Lifting the sheet content out of the popup is a larger refactor; the spring entry above is the pragmatic substitute.
-- ⏸ 5.4 `animateItemPlacement` on PlaylistDetailScreen reorder — blocked. The LazyColumn key is `"${song.id}_$idx"` because playlists allow duplicate songs (commit `086751f`); changing keys when idx shifts means Compose remounts items rather than animating. Real fix needs a per-occurrence id on `PlaylistDetailDto.songs` from the backend (e.g. join-table id).
+**Shipped in v0.4.0:**
+- ✅ M14e Onboarding tag picker (out-of-audit-scope but part of the Discover landing) — `OnboardingScreen` (3-of-20 genres) routed via AuthGate when `getMe().onboardingComplete == false`; backend `POST /api/taste/genres` seeds GENRE rows.
+- ✅ M14f AA "Made for you" root section — `LibraryTree` filters `kind != USER`, reuses existing `playlist:{id}` leaf scheme.
+
+**Shipped in v0.4.1:**
+- ✅ 2.1 — Dead `Header` composable in `PlaylistDetailScreen` deleted; `SpotifyHero` is now the sole detail-screen header.
+- ✅ 3.7 — Shared `ui/common/SectionHeader` extracted; HomeScreen + ArtistScreen rewired off the inline `Text` pattern.
+- ✅ 4.1 — `SearchScreen` + `FindScreen` errors switched to `ErrorWithRetry`. `SearchViewModel` gains a `retry()` channel that re-runs the current query (combined into the state pipeline so `distinctUntilChanged` doesn't swallow it).
+- ✅ 4.3 — `HomeScreen` cold-start (zero recents + zero playlists) now shows a "Find new music" + "Import Spotify" CTA pair instead of empty space.
+- ✅ 8.3 — `MediaPlaybackService.onConnect` now explicitly grants `COMMAND_SET_SHUFFLE_MODE` + `COMMAND_SET_REPEAT_MODE`. Defaults usually include them, but DHU has been flaky — explicit beats relying-on-defaults.
+- ✅ 10.2 — AA cover URLs gated by `ConnectivityObserver.networkAvailable`. When the head unit is off-LAN we skip `setArtworkUri` so AA renders its generic placeholder instead of flashing empty/broken slots.
+
+**Shipped in v0.4.2 (MINOR/NIT polish pass):**
+- ✅ 1.6 — `Routes` promoted from `private` to `internal` so module-local tests can assert on route shapes.
+- ✅ 2.2 — Section title scale already normalised by 3.7 (HomeScreen + ArtistScreen on shared `SectionHeader`); `SearchScreen.BrowseSections` keeps `titleLarge` deliberately for the "Browse all" anchor.
+- ✅ 2.3 — Cover corner radii consolidated through `CoverShapes` tokens via the new shared `SongCover` composable.
+- ✅ 2.5 — Hero magic numbers hoisted to `theme/Shapes.kt::HeroCoverSize` (`DetailFraction/DetailMax`, `NowPlayingFraction/NowPlayingMax`).
+- ✅ 2.6 — `SongRow` title bumped to `titleMedium` Normal weight (Spotify-style 16sp Regular).
+- ✅ 3.6 — Shared `ui/common/SongCover` composable created; `SongRow.CoverArt`, `MiniPlayer.Cover`, `HomeScreen.SongCardSquare`, `HomeScreen.ShortcutTile`, `SearchScreen.RecentSongCard` all use it.
+- ✅ 4.2 — `LikedScreen`, `AlbumScreen`, `ArtistScreen`, `PlaylistDetailScreen` errors switched to `ErrorWithRetry`. `AlbumViewModel` + `ArtistViewModel` gained `retry()` hooks.
+- ✅ 5.3 — `NowPlayingSheet` content gets a slide-up + fade entry (low-bouncy spring + 220ms tween fade) layered over `ModalBottomSheet`'s default rise.
+- ✅ 5.5 — `SpotifyHero` Play button springs to 0.92 on press via `MutableInteractionSource` + `collectIsPressedAsState`.
+- ✅ 6.3 — Playback `Slider` carries `Modifier.semantics { contentDescription = "Playback position" }`.
+- ✅ 6.4 — `BottomNav` icons now pass the destination label as `contentDescription` instead of `null`.
+- ✅ 6.7 — Verified `FilterChip` default semantics announce "Selected, …" — no override needed; closed as accepted.
+- ✅ 6.8 — Slider time-label alpha bumped from 0.7 → 0.85 across NowPlayingSheet for WCAG-AA contrast on bright covers.
+- ✅ 7.4 — `MiniPlayer` `LinearProgressIndicator.trackColor` switched from `surfaceContainerHighest` to `Color.White.copy(alpha=0.18f)` so the track is visible against the dark mini-player background.
+- ✅ 7.5 — Inline `Color(0xFFE8115B)` / `Color(0xFF8400E7)` literals in `SearchScreen.BrowseSections` moved to `SpotifyColors.BrowseAlbumsTile` / `BrowseArtistsTile`.
+- ✅ 8.7 — `NowPlayingSheet` overlays a vertical darken gradient (transparent → 45% black at the bottom) so white control tints stay readable on light-dominant covers.
+- ✅ 9.7 — `LibraryTree.search` memoises the most recent (query, page=0, default size) so the `onSearch` → `onGetSearchResult` round-trip skips the duplicate fetch.
+- ✅ 1.5, 4.5, 8.5, 10.4 — verified shipped in earlier milestones; closed as already-done.
+- ✅ 4.4, 7.2, 7.3, 9.4 — accepted as-designed (no PTR on Search/NowPlaying; no dynamic colour; status bar stays black per user; manifest service intent already correct).
+
+**Shipped in v0.4.3 (previously-blocked design calls):**
+- ✅ 1.7 — `PlaylistsScreen` switched to `LazyVerticalGrid(2 cols)` Spotify-tile style; Liked + Spotify-import anchors span both columns. `PlaylistTile` composable replaces the old `PlaylistRow`. Auto-playlists keep their gradient + `AutoAwesome` glyph.
+- ✅ 5.2 — Real shared-element transition wired. `MainActivity.AppScaffold` now wraps everything in `SharedTransitionLayout`; `NowPlayingSheet` no longer uses `ModalBottomSheet` (which lived in a Popup outside the composition tree). The sheet is a fullscreen `AnimatedVisibility`-driven Composable; both the MiniPlayer cover and the NowPlayingSheet hero cover apply `Modifier.sharedBounds(rememberSharedContentState(NOW_PLAYING_COVER_KEY), animatedVisibilityScope)`. `BackHandler` covers system back.
+- ✅ 5.4 — Backend `PlaylistDetailDto.songs` now returns `List<PlaylistSongEntryDto>` with a stable per-occurrence `playlistSongId` (the existing `playlist_songs.id` surrogate). Android `PlaylistDetailScreen` keys its LazyColumn by `entry.playlistSongId`, so reorders animate via `Modifier.animateItem()` even when the same song appears twice in a playlist.
+
+**Nothing left blocked.** All 50 audit findings are closed (shipped, accepted-as-designed, or verified already done in an earlier milestone).
 
 ## Executive summary
 

@@ -38,6 +38,7 @@ import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.AlbumDetailDto
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.CenteredMessage
+import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.search.SongRow
@@ -67,6 +68,8 @@ class AlbumViewModel(
     val downloadedIds: StateFlow<Set<Long>> = DownloadRepository.downloadedIds
 
     init { load() }
+
+    fun retry() { load() }
 
     private fun load() {
         viewModelScope.launch {
@@ -132,7 +135,10 @@ fun AlbumScreen(
         ) {
             when (val s = state) {
                 AlbumUiState.Loading -> CenteredSpinner()
-                is AlbumUiState.Error -> CenteredMessage("Couldn't load album.\n${s.message}")
+                is AlbumUiState.Error -> ErrorWithRetry(
+                    message = "Couldn't load album.\n${s.message}",
+                    onRetry = viewModel::retry,
+                )
                 is AlbumUiState.Success -> AlbumBody(
                     detail = s.detail,
                     downloadedIds = downloadedIds,

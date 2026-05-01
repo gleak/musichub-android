@@ -335,9 +335,18 @@ class MediaPlaybackService : MediaLibraryService() {
                 .add(toggleLikeCommand)
                 .add(sleepTimerCommand)
                 .build()
+            // Explicitly grant shuffle + repeat to all connected controllers.
+            // Media3's defaults usually include them, but Android Auto only shows
+            // its shuffle/repeat overlay buttons when the controller advertises
+            // these commands — relying on defaults has bitten us in DHU before.
+            val availablePlayerCommands = connectionResult.availablePlayerCommands
+                .buildUpon()
+                .add(androidx.media3.common.Player.COMMAND_SET_SHUFFLE_MODE)
+                .add(androidx.media3.common.Player.COMMAND_SET_REPEAT_MODE)
+                .build()
             return MediaSession.ConnectionResult.accept(
                 availableSessionCommands,
-                connectionResult.availablePlayerCommands
+                availablePlayerCommands,
             )
         }
 

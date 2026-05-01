@@ -56,6 +56,9 @@ import androidx.navigation.navArgument
 import com.mediaplayer.android.data.AppVersion
 import com.mediaplayer.android.data.ChangelogPreferences
 import com.mediaplayer.android.data.ConnectivityObserver
+import com.mediaplayer.android.data.OnboardingPreferences
+import com.mediaplayer.android.ui.onboarding.OnboardingScreen
+import com.mediaplayer.android.ui.onboarding.OnboardingViewModel
 import com.mediaplayer.android.playback.PlaybackViewModel
 import com.mediaplayer.android.ui.changelog.ChangelogSheet
 import com.mediaplayer.android.ui.onboarding.OnboardingSheet
@@ -102,13 +105,44 @@ private fun AuthGate() {
 
     when (val s = authState) {
         is AuthViewModel.State.SignedIn -> {
-            val currentUser = CurrentUser(
-                user = s.user,
-                onSignIn = authVm::signOut, // upgrading from anon → drop anon state, return to LoginScreen
-                onSignOut = authVm::signOut,
-            )
-            CompositionLocalProvider(LocalCurrentUser provides currentUser) {
-                AppScaffold(onSignOut = authVm::signOut)
+            // M14e: route fresh sign-ins through the tag picker before AppScaffold
+            // so the recommender's cold-start path has GENRE seeds. The local
+            // "dismissed" flag lets a user opt out without re-prompting on
+            // every cold launch — backend onboardingComplete only flips when
+            // GENRE rows actually land in user_taste.
+            var localDismissed by remember { mutableStateOf<Boolean?>(null) }
+            LaunchedEffect(s.user.id) {
+                localDismissed = OnboardingPreferences.instance.isDismissed()
+            }
+            val needsOnboarding = !s.user.onboardingComplete && localDismissed == false
+            when {
+                localDismissed == null -> Unit // gate decision pending — render nothing for one frame
+                needsOnboarding -> {
+                    val onboardingVm = remember {
+                        OnboardingViewModel(onResolved = { authVm.refreshMe() })
+                    }
+                    val saving by onboardingVm.saving.collectAsStateWithLifecycle()
+                    val error by onboardingVm.error.collectAsStateWithLifecycle()
+                    OnboardingScreen(
+                        saving = saving,
+                        error = error,
+                        onContinue = onboardingVm::submit,
+                        onSkip = {
+                            onboardingVm.skip()
+                            localDismissed = true
+                        },
+                    )
+                }
+                else -> {
+                    val currentUser = CurrentUser(
+                        user = s.user,
+                        onSignIn = authVm::signOut, // upgrading from anon → drop anon state, return to LoginScreen
+                        onSignOut = authVm::signOut,
+                    )
+                    CompositionLocalProvider(LocalCurrentUser provides currentUser) {
+                        AppScaffold(onSignOut = authVm::signOut)
+                    }
+                }
             }
         }
         else -> LoginScreen(
@@ -119,7 +153,9 @@ private fun AuthGate() {
     }
 }
 
-private object Routes {
+// `internal` (was `private`) so future tests in the same module can assert on
+// route shapes / deep-link patterns without copying the constants.
+internal object Routes {
     const val HOME = "home"
     const val SEARCH = "search"
     const val FIND = "find"
@@ -208,40 +244,73 @@ private fun AppScaffold(onSignOut: () -> Unit) {
         }
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        bottomBar = {
-            BottomRegion(
-                navController = navController,
-                miniPlayerVisible = currentSong != null,
-                onExpandMiniPlayer = { sheetOpen = true },
-                playbackVm = playbackVm,
-            )
-        },
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            NavHostBody(
-                navController = navController,
-                playbackVm = playbackVm,
-                onSignOut = onSignOut,
-                onShowChangelog = { changelogOpen = true },
-            )
-            if (!networkAvailable) {
-                OfflineBadge(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .statusBarsPadding()
-                        .padding(8.dp),
+    // Wrap the whole Scaffold + the NowPlaying overlay in one
+    // `SharedTransitionLayout` so the MiniPlayer cover and the
+    // NowPlayingSheet hero cover share an animation surface. The cover
+    // physically slides + scales between the two positions on open/close —
+    // see `NOW_PLAYING_COVER_KEY`.
+    androidx.compose.animation.SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                bottomBar = {
+                    // Mini-player rides inside an AnimatedVisibility so it can
+                    // (a) hand a sharedBounds modifier off to its cover and
+                    // (b) hide cleanly while the NowPlayingSheet takes over.
+                    val miniVisible = currentSong != null && !sheetOpen
+                    BottomRegion(
+                        navController = navController,
+                        miniPlayerVisible = miniVisible,
+                        onExpandMiniPlayer = { sheetOpen = true },
+                        playbackVm = playbackVm,
+                        sharedTransitionScope = this@SharedTransitionLayout,
+                    )
+                },
+            ) { padding ->
+                Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                    NavHostBody(
+                        navController = navController,
+                        playbackVm = playbackVm,
+                        onSignOut = onSignOut,
+                        onShowChangelog = { changelogOpen = true },
+                    )
+                    if (!networkAvailable) {
+                        OfflineBadge(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .statusBarsPadding()
+                                .padding(8.dp),
+                        )
+                    }
+                }
+            }
+
+            androidx.compose.animation.AnimatedVisibility(
+                visible = sheetOpen,
+                enter = androidx.compose.animation.slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = androidx.compose.animation.core.spring(
+                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
+                        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+                    ),
+                ) + androidx.compose.animation.fadeIn(
+                    animationSpec = androidx.compose.animation.core.tween(220),
+                ),
+                exit = androidx.compose.animation.slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = androidx.compose.animation.core.tween(280),
+                ) + androidx.compose.animation.fadeOut(
+                    animationSpec = androidx.compose.animation.core.tween(180),
+                ),
+            ) {
+                NowPlayingSheet(
+                    viewModel = playbackVm,
+                    onDismiss = { sheetOpen = false },
+                    sharedTransitionScope = this@SharedTransitionLayout,
+                    animatedVisibilityScope = this,
                 )
             }
         }
-    }
-
-    if (sheetOpen) {
-        NowPlayingSheet(
-            viewModel = playbackVm,
-            onDismiss = { sheetOpen = false },
-        )
     }
 
     if (changelogOpen) {
@@ -301,6 +370,8 @@ private fun NavHostBody(
                         navController.navigate(Routes.playlistDetail(p.id))
                     },
                     onLikedClick = { navController.navigate(Routes.LIKED) },
+                    onFindClick = { navController.navigate(Routes.FIND) },
+                    onSpotifyImport = { navController.navigate(Routes.SPOTIFY_IMPORT) },
                     onSignOut = onSignOut,
                     onShowChangelog = onShowChangelog,
                 )
@@ -424,6 +495,7 @@ private fun NavHostBody(
         }
 }
 
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @UnstableApi
 @Composable
 private fun BottomRegion(
@@ -431,13 +503,29 @@ private fun BottomRegion(
     miniPlayerVisible: Boolean,
     onExpandMiniPlayer: () -> Unit,
     playbackVm: PlaybackViewModel,
+    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope,
 ) {
     Column {
-        if (miniPlayerVisible) {
-            MiniPlayer(
-                viewModel = playbackVm,
-                onExpand = onExpandMiniPlayer,
-            )
+        // AnimatedVisibility wraps MiniPlayer so its cover gets an
+        // `AnimatedVisibilityScope` to feed into `Modifier.sharedBounds(...)`,
+        // and so the mini fades out smoothly as the NowPlayingSheet rises in.
+        androidx.compose.animation.AnimatedVisibility(
+            visible = miniPlayerVisible,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut(),
+        ) {
+            with(sharedTransitionScope) {
+                MiniPlayer(
+                    viewModel = playbackVm,
+                    onExpand = onExpandMiniPlayer,
+                    coverModifier = Modifier.sharedBounds(
+                        sharedContentState = rememberSharedContentState(
+                            com.mediaplayer.android.ui.player.NOW_PLAYING_COVER_KEY
+                        ),
+                        animatedVisibilityScope = this@AnimatedVisibility,
+                    ),
+                )
+            }
         }
         BottomNav(navController = navController)
     }
@@ -446,21 +534,25 @@ private fun BottomRegion(
 @Composable
 private fun BottomNav(navController: NavHostController) {
     val destinations = listOf(
+        // Pass the label as cd so TalkBack always reads the destination
+        // even when the NavigationBarItem label is hidden (showLabels=false
+        // states or animation transitions). Material3 reads the item label
+        // by default — this is belt-and-suspenders for safety.
         BottomDestination(
             route = Routes.HOME,
             label = "Home",
-            icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+            icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
         ),
         BottomDestination(
             route = Routes.SEARCH,
             label = "Search",
-            icon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
         ),
         BottomDestination(
             route = Routes.LIBRARY,
             label = "Your Library",
             icon = {
-                Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = "Your Library")
             },
         ),
     )

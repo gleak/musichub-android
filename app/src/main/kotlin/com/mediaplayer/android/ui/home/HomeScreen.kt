@@ -24,7 +24,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -61,6 +63,9 @@ import com.mediaplayer.android.ui.common.AnonymousBanner
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.LocalCurrentUser
+import com.mediaplayer.android.ui.common.SectionHeader
+import com.mediaplayer.android.ui.common.SongCover
+import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.theme.SpotifyColors
 import java.util.Calendar
 
@@ -70,6 +75,8 @@ fun HomeScreen(
     onSongClick: (SongDto) -> Unit = {},
     onPlaylistClick: (PlaylistDto) -> Unit = {},
     onLikedClick: () -> Unit = {},
+    onFindClick: () -> Unit = {},
+    onSpotifyImport: () -> Unit = {},
     onSignOut: () -> Unit = {},
     onShowChangelog: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -92,6 +99,8 @@ fun HomeScreen(
                 onSongClick = onSongClick,
                 onPlaylistClick = onPlaylistClick,
                 onLikedClick = onLikedClick,
+                onFindClick = onFindClick,
+                onSpotifyImport = onSpotifyImport,
                 onSignOut = onSignOut,
                 onShowChangelog = onShowChangelog,
             )
@@ -106,6 +115,8 @@ private fun HomeContent(
     onSongClick: (SongDto) -> Unit,
     onPlaylistClick: (PlaylistDto) -> Unit,
     onLikedClick: () -> Unit,
+    onFindClick: () -> Unit,
+    onSpotifyImport: () -> Unit,
     onSignOut: () -> Unit,
     onShowChangelog: () -> Unit,
 ) {
@@ -135,11 +146,21 @@ private fun HomeContent(
                     playlists = playlists,
                 )
             }
+        } else {
+            // Cold-start (zero recents AND zero playlists). Default Home is
+            // otherwise empty under the greeting — surface CTAs that move the
+            // user toward content instead of leaving them at a wall.
+            item(key = "cold_start") {
+                ColdStartCtas(
+                    onFindClick = onFindClick,
+                    onSpotifyImport = onSpotifyImport,
+                )
+            }
         }
 
         if (recents.isNotEmpty()) {
             item(key = "recent_title") {
-                SectionTitle("Recently played")
+                SectionHeader(title ="Recently played")
             }
             item(key = "recent_row") {
                 RecentRow(recents = recents, onClick = onSongClick)
@@ -151,7 +172,7 @@ private fun HomeContent(
 
         if (autoPlaylists.isNotEmpty()) {
             item(key = "made_for_you_title") {
-                SectionTitle("Made for you")
+                SectionHeader(title ="Made for you")
             }
             item(key = "made_for_you_row") {
                 PlaylistRow(playlists = autoPlaylists, onClick = onPlaylistClick)
@@ -160,12 +181,84 @@ private fun HomeContent(
 
         if (userPlaylists.isNotEmpty()) {
             item(key = "playlists_title") {
-                SectionTitle("Your playlists")
+                SectionHeader(title ="Your playlists")
             }
             item(key = "playlists_row") {
                 PlaylistRow(playlists = userPlaylists, onClick = onPlaylistClick)
             }
         }
+    }
+}
+
+@Composable
+private fun ColdStartCtas(
+    onFindClick: () -> Unit,
+    onSpotifyImport: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = "Let's get you started",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = "Your library is empty — pick a way to fill it.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ColdStartTile(
+                title = "Find new music",
+                subtitle = "Search YouTube and import",
+                icon = Icons.Filled.Search,
+                onClick = onFindClick,
+                modifier = Modifier.weight(1f),
+            )
+            ColdStartTile(
+                title = "Import Spotify",
+                subtitle = "Bring a playlist over",
+                icon = Icons.Filled.LibraryMusic,
+                onClick = onSpotifyImport,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ColdStartTile(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -334,31 +427,12 @@ private fun ShortcutIcon(item: ShortcutItem) {
                     )
                 }
             }
-            is ShortcutItem.Song -> {
-                if (item.song.hasCoverArt) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(Network.coverUrl(item.song.id))
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "${item.song.title}, ${item.song.artist}",
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MusicNote,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
+            is ShortcutItem.Song -> SongCover(
+                song = item.song,
+                size = 56.dp,
+                shape = RoundedCornerShape(0.dp),
+                contentDescription = "${item.song.title}, ${item.song.artist}",
+            )
             is ShortcutItem.Playlist -> {
                 Box(
                     modifier = Modifier
@@ -377,15 +451,6 @@ private fun ShortcutIcon(item: ShortcutItem) {
     }
 }
 
-@Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleLarge,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(horizontal = 16.dp),
-    )
-}
 
 @Composable
 private fun RecentRow(recents: List<SongDto>, onClick: (SongDto) -> Unit) {
@@ -407,31 +472,13 @@ private fun SongCardSquare(song: SongDto, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (song.hasCoverArt) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(Network.coverUrl(song.id))
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = "${song.title}, ${song.artist}",
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Filled.MusicNote,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        SongCover(
+            song = song,
+            size = 140.dp,
+            shape = CoverShapes.MiniPlayer,
+            contentDescription = "${song.title}, ${song.artist}",
+            modifier = Modifier.fillMaxWidth(),
+        )
         Text(
             text = song.title,
             style = MaterialTheme.typography.titleSmall,

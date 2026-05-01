@@ -56,7 +56,10 @@ import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.CenteredSpinner
+import com.mediaplayer.android.ui.common.ErrorWithRetry
+import com.mediaplayer.android.ui.common.SongCover
 import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
+import com.mediaplayer.android.ui.theme.SpotifyColors
 
 @Composable
 fun SearchScreen(
@@ -129,8 +132,9 @@ fun SearchScreen(
                         }
                     }
                 }
-                is SearchUiState.Error -> CenteredMessage(
-                    stringResource(R.string.search_error) + "\n" + s.message
+                is SearchUiState.Error -> ErrorWithRetry(
+                    message = stringResource(R.string.search_error) + "\n" + s.message,
+                    onRetry = viewModel::retry,
                 )
             }
 
@@ -190,30 +194,12 @@ private fun RecentSongCard(song: SongDto, onClick: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .clip(shape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (song.hasCoverArt) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(Network.coverUrl(song.id))
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = "${song.title}, ${song.artist}",
-                    modifier = Modifier.size(80.dp),
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Filled.MusicNote,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        SongCover(
+            song = song,
+            size = 80.dp,
+            shape = shape,
+            contentDescription = "${song.title}, ${song.artist}",
+        )
         Text(
             text = song.title,
             style = MaterialTheme.typography.bodySmall,
@@ -241,7 +227,7 @@ private fun BrowseSections(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             BrowseTile(
                 label = "Albums",
-                color = androidx.compose.ui.graphics.Color(0xFFE8115B),
+                color = SpotifyColors.BrowseAlbumsTile,
                 icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null,
                     tint = androidx.compose.ui.graphics.Color.White) },
                 onClick = onAlbumListClick,
@@ -249,7 +235,7 @@ private fun BrowseSections(
             )
             BrowseTile(
                 label = "Artists",
-                color = androidx.compose.ui.graphics.Color(0xFF8400E7),
+                color = SpotifyColors.BrowseArtistsTile,
                 icon = { Icon(Icons.Filled.Person, contentDescription = null,
                     tint = androidx.compose.ui.graphics.Color.White) },
                 onClick = onArtistListClick,

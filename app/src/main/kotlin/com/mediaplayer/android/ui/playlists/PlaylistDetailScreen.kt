@@ -66,6 +66,7 @@ import com.mediaplayer.android.data.dto.PlaylistDetailDto
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.CenteredSpinner
+import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.search.SongRow
 import androidx.compose.material3.TopAppBarDefaults
@@ -143,11 +144,12 @@ fun PlaylistDetailScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when (val s = state) {
                 PlaylistDetailUiState.Loading -> CenteredSpinner()
-                is PlaylistDetailUiState.Error -> CenteredMessage(
-                    "Couldn't load playlist.\n${s.message}"
+                is PlaylistDetailUiState.Error -> ErrorWithRetry(
+                    message = "Couldn't load playlist.\n${s.message}",
+                    onRetry = viewModel::refresh,
                 )
                 is PlaylistDetailUiState.Success -> {
-                    val songIds = s.playlist.songs.map { it.id }
+                    val songIds = s.playlist.songs.map { it.song.id }
                     val downloadedCount = songIds.count { it in downloadedIds }
                     PlaylistDetailBody(
                         playlist = s.playlist,
@@ -188,7 +190,7 @@ fun PlaylistDetailScreen(
     if (addSongsOpen && successState != null) {
         AddSongsToPlaylistSheet(
             playlistId = playlistId,
-            existingSongIds = successState.playlist.songs.map { it.id }.toSet(),
+            existingSongIds = successState.playlist.songs.map { it.song.id }.toSet(),
             onDismiss = { addSongsOpen = false },
             onSongAdded = viewModel::refresh,
         )
@@ -210,21 +212,25 @@ private fun PlaylistDetailBody(
     onRemoveDownloads: () -> Unit,
 ) {
     val lazyListState = rememberLazyListState()
-    var songs by remember { mutableStateOf(playlist.songs) }
+    // `entries` holds PlaylistSongEntryDto so each row carries its
+    // playlist_songs.id — that's the stable per-occurrence key the
+    // LazyColumn needs for `Modifier.animateItem()` to fire on reorder
+    // (song.id alone collides on duplicate songs).
+    var entries by remember { mutableStateOf(playlist.songs) }
+    val songsForPlayback: List<SongDto> = entries.map { it.song }
 
     val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
         // Subtract 1 to account for the header item at LazyColumn index 0.
         val fromIndex = from.index - 1
         val toIndex = to.index - 1
-        if (fromIndex !in songs.indices || toIndex !in songs.indices) return@rememberReorderableLazyListState
-        songs = songs.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+        if (fromIndex !in entries.indices || toIndex !in entries.indices) return@rememberReorderableLazyListState
+        entries = entries.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
     }
 
-    // Use reorderState.isAnyItemDragging directly (synchronous gesture state) to avoid
-    // a race where the snapshotFlow collector hasn't fired yet and a playlist refresh
-    // resets songs mid-drag, causing duplicate keys in the LazyColumn.
+    // Sync from server only when no drag is in flight. Without the guard a
+    // mid-drag refresh would yank the local list out from under the gesture.
     LaunchedEffect(playlist.songs) {
-        if (!reorderState.isAnyItemDragging) songs = playlist.songs
+        if (!reorderState.isAnyItemDragging) entries = playlist.songs
     }
 
     LaunchedEffect(reorderState) {
@@ -233,7 +239,7 @@ private fun PlaylistDetailBody(
             if (dragging) {
                 wasEverDragging = true
             } else if (wasEverDragging) {
-                onReorderSongs(songs.map { it.id })
+                onReorderSongs(entries.map { it.song.id })
                 wasEverDragging = false
             }
         }
@@ -249,9 +255,9 @@ private fun PlaylistDetailBody(
                     "Playlist • ${pluralizeSongsDetail(total)} • $downloadedCount downloaded"
                 else "Playlist • ${pluralizeSongsDetail(total)}",
                 coverModel = null,
-                onPlay = { if (songs.isNotEmpty()) onPlayFromIndex(songs, 0) },
-                onShuffle = { onShufflePlay(songs) },
-                playEnabled = songs.isNotEmpty(),
+                onPlay = { if (entries.isNotEmpty()) onPlayFromIndex(songsForPlayback, 0) },
+                onShuffle = { onShufflePlay(songsForPlayback) },
+                playEnabled = entries.isNotEmpty(),
                 extraActions = {
                     if (playlist.songs.isNotEmpty()) {
                         IconButton(
@@ -269,7 +275,7 @@ private fun PlaylistDetailBody(
             )
         }
 
-        if (songs.isEmpty()) {
+        if (entries.isEmpty()) {
             item(key = "empty") {
                 Box(
                     modifier = Modifier
@@ -286,10 +292,11 @@ private fun PlaylistDetailBody(
             }
         } else {
             itemsIndexed(
-                items = songs,
-                key = { idx, song -> "${song.id}_$idx" },
-            ) { idx, song ->
-                ReorderableItem(reorderState, key = "${song.id}_$idx") {
+                items = entries,
+                key = { _, entry -> entry.playlistSongId },
+            ) { idx, entry ->
+                val song = entry.song
+                ReorderableItem(reorderState, key = entry.playlistSongId) {
                     val dismissState = rememberSwipeToDismissBoxState(
                         confirmValueChange = { value ->
                             if (value == SwipeToDismissBoxValue.EndToStart) {
@@ -336,100 +343,13 @@ private fun PlaylistDetailBody(
                             SongRow(
                                 song = song,
                                 isDownloaded = song.id in downloadedIds,
-                                onClick = { onPlayFromIndex(songs, idx) },
+                                onClick = { onPlayFromIndex(songsForPlayback, idx) },
                                 onLongPress = { onLongPressSong(song) },
                                 modifier = Modifier.weight(1f),
                             )
                         }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Header(
-    playlist: PlaylistDetailDto,
-    downloadedCount: Int,
-    onPlayAll: () -> Unit,
-    onShufflePlay: () -> Unit,
-    onDownload: () -> Unit,
-    onRemoveDownloads: () -> Unit,
-) {
-    val total = playlist.songs.size
-    val allDownloaded = total > 0 && downloadedCount == total
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = playlist.name,
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = if (downloadedCount > 0 && !allDownloaded)
-                    "${pluralizeSongsDetail(total)} · $downloadedCount downloaded"
-                else
-                    pluralizeSongsDetail(total),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            val buttonPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-            Button(
-                onClick = onPlayAll,
-                enabled = playlist.songs.isNotEmpty(),
-                modifier = Modifier.weight(1f),
-                contentPadding = buttonPadding,
-            ) {
-                Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
-                Spacer(Modifier.width(4.dp))
-                Text("Play", maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            OutlinedButton(
-                onClick = onShufflePlay,
-                enabled = playlist.songs.isNotEmpty(),
-                modifier = Modifier.weight(1f),
-                contentPadding = buttonPadding,
-            ) {
-                Icon(imageVector = Icons.Filled.Shuffle, contentDescription = null)
-                Spacer(Modifier.width(4.dp))
-                Text("Shuffle", maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (playlist.songs.isNotEmpty()) {
-                OutlinedButton(
-                    onClick = if (allDownloaded) onRemoveDownloads else onDownload,
-                    modifier = Modifier.weight(1f),
-                    contentPadding = buttonPadding,
-                ) {
-                    val isDownloaded = allDownloaded
-                    Icon(
-                        imageVector = if (isDownloaded) Icons.Filled.CloudDone else Icons.Filled.CloudDownload,
-                        contentDescription = if (isDownloaded) "Remove downloads" else "Download",
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = if (isDownloaded) "Done" else "Download",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
                 }
             }
         }

@@ -61,9 +61,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -77,33 +81,59 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.mediaplayer.android.data.Network
+import com.mediaplayer.android.ui.theme.HeroCoverSize
 import com.mediaplayer.android.playback.PlaybackViewModel
+import com.mediaplayer.android.ui.common.SongCover
 import com.mediaplayer.android.ui.common.rememberCoverDominantColor
+import com.mediaplayer.android.ui.theme.CoverShapes
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Fullscreen now-playing surface. Replaces the original `ModalBottomSheet`
+ * implementation so the cover can participate in a `SharedTransitionLayout`
+ * with the MiniPlayer — `ModalBottomSheet` lives in its own Popup window,
+ * which sits outside the caller's composition tree and breaks shared-element
+ * lookup. Caller (AppScaffold) wraps this in an `AnimatedVisibility` and
+ * passes the shared-element scopes down so the cover animates from
+ * MiniPlayer position to hero position on open.
+ *
+ * `sharedTransitionScope` + `animatedVisibilityScope` are nullable so
+ * standalone callers (previews, tests) can drop them and fall back to a
+ * plain hero render.
+ */
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @UnstableApi
 @Composable
 fun NowPlayingSheet(
     viewModel: PlaybackViewModel,
     onDismiss: () -> Unit,
+    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
+    animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = Color.Transparent,
-        dragHandle = null,
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        NowPlayingContent(viewModel = viewModel, onDismiss = onDismiss)
-    }
+    androidx.activity.compose.BackHandler(onBack = onDismiss)
+    NowPlayingContent(
+        viewModel = viewModel,
+        onDismiss = onDismiss,
+        sharedTransitionScope = sharedTransitionScope,
+        animatedVisibilityScope = animatedVisibilityScope,
+    )
 }
 
+/** Plan-locked shared-element key for the MiniPlayer ↔ NowPlayingSheet cover. */
+const val NOW_PLAYING_COVER_KEY = "now-playing-cover"
+
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @UnstableApi
 @Composable
-private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Unit) {
+private fun NowPlayingContent(
+    viewModel: PlaybackViewModel,
+    onDismiss: () -> Unit,
+    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
+    animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null,
+) {
     val song by viewModel.currentSong.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val position by viewModel.positionMs.collectAsStateWithLifecycle()
@@ -163,6 +193,12 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
         modifier = Modifier
             .fillMaxSize()
             .background(
+                // Cover-derived gradient. The dominant colour bleeds in at the
+                // top so the hero artwork blends into the backdrop; we then
+                // fade through a midtone so transport controls (white icons +
+                // text) keep contrast even when the cover is light-dominant
+                // (white classical sleeves, pastel covers). See the second
+                // black overlay below the gradient for the same reason.
                 Brush.verticalGradient(
                     0f to dominant,
                     0.55f to dominant.copy(alpha = 0.55f),
@@ -170,6 +206,21 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
                 )
             ),
     ) {
+        // Darken overlay for the bottom half. Light-dominant covers
+        // (white classical sleeves, pastel pop) bleach out the white
+        // transport icons + slider time labels below; this gradient pulls
+        // them back to readable contrast without dimming the hero art.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        0.45f to Color.Transparent,
+                        1f to Color.Black.copy(alpha = 0.45f),
+                    )
+                ),
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -231,7 +282,7 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
             Spacer(Modifier.height(24.dp))
 
             BoxWithConstraints {
-                val artSize = (maxWidth * 0.92f).coerceAtMost(360.dp)
+                val artSize = (maxWidth * HeroCoverSize.NowPlayingFraction).coerceAtMost(HeroCoverSize.NowPlayingMax)
                 if (showVideo) {
                     val videoWidth = maxWidth * 0.96f
                     Box(
@@ -247,28 +298,29 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
                         )
                     }
                 } else {
-                    // Approximate a shared-element rise from the mini-player by scaling
-                    // the hero cover up from a quarter size on first composition. True
-                    // SharedTransitionLayout would require lifting the modal sheet out
-                    // of its Popup host — deferred. The spring keeps the entry feeling
-                    // material rather than mechanical.
-                    var heroSettled by remember(current.id) { mutableStateOf(false) }
-                    LaunchedEffect(current.id) { heroSettled = true }
-                    val scale by animateFloatAsState(
-                        targetValue = if (heroSettled) 1f else 0.25f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessLow,
-                        ),
-                        label = "hero-cover-scale",
-                    )
+                    // Hero cover. When the caller wired up SharedTransitionLayout
+                    // scopes, the cover animates from the MiniPlayer's small
+                    // tile position into this hero size on open via sharedBounds.
+                    // Without the scopes (preview/test), falls back to a plain
+                    // sized Cover with no entrance animation.
+                    val heroModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                        with(sharedTransitionScope) {
+                            Modifier.sharedBounds(
+                                sharedContentState = rememberSharedContentState(NOW_PLAYING_COVER_KEY),
+                                animatedVisibilityScope = animatedVisibilityScope,
+                            )
+                        }
+                    } else Modifier
                     Box(
-                        modifier = Modifier
-                            .size(artSize)
-                            .scale(scale),
+                        modifier = Modifier.size(artSize),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Cover(song = current, size = artSize)
+                        SongCover(
+                            song = current,
+                            size = artSize,
+                            shape = CoverShapes.MiniPlayer,
+                            modifier = heroModifier,
+                        )
                     }
                 }
             }
@@ -325,6 +377,7 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
                     activeTrackColor = Color.White,
                     inactiveTrackColor = Color.White.copy(alpha = 0.3f),
                 ),
+                modifier = Modifier.semantics { contentDescription = "Playback position" },
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -333,12 +386,12 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
                 Text(
                     text = formatMs(sliderValue.toLong()),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = Color.White.copy(alpha = 0.85f),
                 )
                 Text(
                     text = formatMs(duration.coerceAtLeast(0)),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = Color.White.copy(alpha = 0.85f),
                 )
             }
 

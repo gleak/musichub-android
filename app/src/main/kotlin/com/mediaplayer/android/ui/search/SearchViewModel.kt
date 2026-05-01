@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -57,9 +58,18 @@ class SearchViewModel(
     private val _recentSongs = MutableStateFlow<List<SongDto>>(emptyList())
     val recentSongs: StateFlow<List<SongDto>> = _recentSongs.asStateFlow()
 
-    val state: StateFlow<SearchUiState> = _query
-        .debounce(DEBOUNCE_MS)
-        .distinctUntilChanged()
+    /**
+     * Retry trigger combined into the state pipeline. Bumping this re-runs
+     * the current query without typing into the field — `combine` makes the
+     * downstream flow re-emit even when the query string itself hasn't
+     * changed (which `distinctUntilChanged` would otherwise swallow).
+     */
+    private val _retryTick = MutableStateFlow(0)
+
+    val state: StateFlow<SearchUiState> = combine(
+        _query.debounce(DEBOUNCE_MS).distinctUntilChanged(),
+        _retryTick,
+    ) { q, _ -> q }
         .flatMapLatest { q ->
             flow {
                 if (q.isBlank()) {
@@ -75,6 +85,8 @@ class SearchViewModel(
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
             initialValue = SearchUiState.Idle,
         )
+
+    fun retry() { _retryTick.value++ }
 
     init {
         viewModelScope.launch {

@@ -41,6 +41,7 @@ import coil3.request.crossfade
 import com.mediaplayer.android.R
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.SongCover
 import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -66,7 +67,7 @@ fun SongRow(
             .padding(horizontal = MediaPlayerSpacing.M, vertical = MediaPlayerSpacing.Xs + 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CoverArt(song = song)
+        SongCover(song = song, size = 52.dp, shape = CoverShapes.SongRow)
 
         Spacer(Modifier.width(12.dp))
 
@@ -76,7 +77,11 @@ fun SongRow(
         ) {
             Text(
                 text = song.title,
-                style = MaterialTheme.typography.titleSmall,
+                // Spotify-style row title — 16sp Regular, lighter than the
+                // previous titleSmall (14sp Bold) that read as too heavy in
+                // dense list scrolls.
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -100,36 +105,6 @@ fun SongRow(
                     modifier = Modifier.size(22.dp),
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun CoverArt(song: SongDto) {
-    val size = 52.dp
-    val shape = CoverShapes.SongRow
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (song.hasCoverArt) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(Network.coverUrl(song.id))
-                    .crossfade(true)
-                    .build(),
-                contentDescription = stringResource(R.string.content_desc_cover_art),
-                modifier = Modifier.size(size),
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Filled.MusicNote,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

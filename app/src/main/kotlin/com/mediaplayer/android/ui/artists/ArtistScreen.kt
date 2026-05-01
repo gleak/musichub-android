@@ -55,8 +55,10 @@ import com.mediaplayer.android.data.dto.AlbumDto
 import com.mediaplayer.android.data.dto.ArtistDetailDto
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.CenteredMessage
+import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.CoverShape
+import com.mediaplayer.android.ui.common.SectionHeader
 import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.search.SongRow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,6 +86,8 @@ class ArtistViewModel(
     val downloadedIds: StateFlow<Set<Long>> = DownloadRepository.downloadedIds
 
     init { load() }
+
+    fun retry() { load() }
 
     private fun load() {
         viewModelScope.launch {
@@ -148,7 +152,10 @@ fun ArtistScreen(
         ) {
             when (val s = state) {
                 ArtistUiState.Loading -> CenteredSpinner()
-                is ArtistUiState.Error -> CenteredMessage("Couldn't load artist.\n${s.message}")
+                is ArtistUiState.Error -> ErrorWithRetry(
+                    message = "Couldn't load artist.\n${s.message}",
+                    onRetry = viewModel::retry,
+                )
                 is ArtistUiState.Success -> ArtistBody(
                     detail = s.detail,
                     downloadedIds = downloadedIds,
@@ -185,11 +192,9 @@ private fun ArtistBody(
 
         if (detail.albums.isNotEmpty()) {
             item(key = "albums-header") {
-                Text(
-                    text = "Albums",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                SectionHeader(
+                    title = "Albums",
+                    modifier = Modifier.padding(vertical = 12.dp),
                 )
             }
             items(items = detail.albums, key = { "album-${it.name}" }) { album ->
@@ -199,11 +204,9 @@ private fun ArtistBody(
 
         if (detail.songs.isNotEmpty()) {
             item(key = "songs-header") {
-                Text(
-                    text = "Popular",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                SectionHeader(
+                    title = "Popular",
+                    modifier = Modifier.padding(vertical = 12.dp),
                 )
             }
             itemsIndexed(items = detail.songs, key = { _, song -> "song-${song.id}" }) { idx, song ->

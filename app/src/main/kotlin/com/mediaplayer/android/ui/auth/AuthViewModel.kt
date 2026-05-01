@@ -95,6 +95,20 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
         }
     }
 
+    /**
+     * Re-fetches `/api/auth/me` and replaces the current `SignedIn` user
+     * in place. Called after onboarding flips `onboardingComplete=true`
+     * server-side so the gate routes the user into AppScaffold.
+     */
+    fun refreshMe() {
+        viewModelScope.launch {
+            try {
+                val user = Network.api.getMe()
+                _state.value = State.SignedIn(user)
+            } catch (_: Exception) { /* keep current state on transient failure */ }
+        }
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer { AuthViewModel(AuthRepository.instance) }

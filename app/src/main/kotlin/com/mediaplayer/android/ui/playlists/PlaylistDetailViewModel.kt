@@ -89,13 +89,13 @@ class PlaylistDetailViewModel(
     }
 
     fun downloadPlaylist() {
-        val songs = (state.value as? PlaylistDetailUiState.Success)?.playlist?.songs ?: return
-        val missing = songs.map { it.id }.filterNot { DownloadRepository.isDownloaded(it) }
+        val entries = (state.value as? PlaylistDetailUiState.Success)?.playlist?.songs ?: return
+        val missing = entries.map { it.song.id }.filterNot { DownloadRepository.isDownloaded(it) }
         DownloadRepository.downloadAll(missing)
     }
 
     fun removePlaylistDownloads() {
-        val songs = (state.value as? PlaylistDetailUiState.Success)?.playlist?.songs ?: return
-        DownloadRepository.removeAll(songs.map { it.id })
+        val entries = (state.value as? PlaylistDetailUiState.Success)?.playlist?.songs ?: return
+        DownloadRepository.removeAll(entries.map { it.song.id })
     }
 }
