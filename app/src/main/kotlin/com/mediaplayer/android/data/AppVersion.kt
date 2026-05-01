@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.8.0"
+    const val VERSION = "0.8.2"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,20 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.8.2",
+            title = "Tap artist in Now Playing",
+            highlights = listOf(
+                "Tap the artist name on the Now Playing screen to jump straight to the artist's page",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.8.1",
+            title = "Artists + Albums no longer cap at 100",
+            highlights = listOf(
+                "Artists and Albums lists now scroll to load more — large catalogs are no longer truncated",
+            ),
+        ),
         ChangelogEntry(
             version = "0.8.0",
             title = "Daily Mix — six mood-themed playlists",

@@ -1,6 +1,7 @@
 package com.mediaplayer.android.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -110,6 +111,7 @@ import java.util.Locale
 fun NowPlayingSheet(
     viewModel: PlaybackViewModel,
     onDismiss: () -> Unit,
+    onArtistClick: ((String) -> Unit)? = null,
     sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
     animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null,
 ) {
@@ -117,6 +119,7 @@ fun NowPlayingSheet(
     NowPlayingContent(
         viewModel = viewModel,
         onDismiss = onDismiss,
+        onArtistClick = onArtistClick,
         sharedTransitionScope = sharedTransitionScope,
         animatedVisibilityScope = animatedVisibilityScope,
     )
@@ -131,6 +134,7 @@ const val NOW_PLAYING_COVER_KEY = "now-playing-cover"
 private fun NowPlayingContent(
     viewModel: PlaybackViewModel,
     onDismiss: () -> Unit,
+    onArtistClick: ((String) -> Unit)? = null,
     sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
     animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null,
 ) {
@@ -345,6 +349,12 @@ private fun NowPlayingContent(
                         color = Color.White.copy(alpha = 0.85f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = if (onArtistClick != null) {
+                            Modifier.clickable {
+                                onDismiss()
+                                onArtistClick(current.artist)
+                            }
+                        } else Modifier,
                     )
                 }
                 IconButton(onClick = {

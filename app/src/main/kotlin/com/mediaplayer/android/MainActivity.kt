@@ -342,6 +342,9 @@ private fun AppScaffold(
                 NowPlayingSheet(
                     viewModel = playbackVm,
                     onDismiss = { sheetOpen = false },
+                    onArtistClick = { name ->
+                        navController.navigate(Routes.artistDetail(name))
+                    },
                     sharedTransitionScope = this@SharedTransitionLayout,
                     animatedVisibilityScope = this,
                 )

@@ -356,6 +356,12 @@ private fun PlaylistDetailBody(
                     LaunchedEffect(dismissState.currentValue) {
                         if (!removed && dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
                             removed = true
+                            // Drop the row locally first so the LazyColumn unmounts
+                            // it instead of leaving the SwipeToDismissBox stuck in
+                            // its dismissed (background-only) state while the server
+                            // round-trip is in flight. On API failure the VM's
+                            // refresh() path re-syncs and the row reappears.
+                            entries = entries.filterNot { it.playlistSongId == entry.playlistSongId }
                             onRemoveSong(song.id)
                         }
                     }

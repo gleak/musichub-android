@@ -14,6 +14,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -51,7 +56,12 @@ import kotlinx.coroutines.launch
 
 sealed interface ArtistListUiState {
     data object Loading : ArtistListUiState
-    data class Success(val artists: List<ArtistDto>) : ArtistListUiState
+    data class Success(
+        val artists: List<ArtistDto>,
+        val totalItems: Long,
+        val loadingMore: Boolean = false,
+        val endReached: Boolean = false,
+    ) : ArtistListUiState
     data class Error(val message: String) : ArtistListUiState
 }
 
@@ -64,31 +74,65 @@ class ArtistListViewModel(
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
-    init { load() }
+    private var nextPage: Int = 0
 
-    fun refresh() = load()
+    init { refresh() }
 
-    private fun load() {
+    fun refresh() {
         viewModelScope.launch {
             _state.value = ArtistListUiState.Loading
-            _state.value = try {
-                ArtistListUiState.Success(repository.listArtists(size = 100).items)
-            } catch (t: Throwable) {
-                ArtistListUiState.Error(t.message ?: "Unknown error")
-            }
+            loadFirstPage()
         }
     }
 
     fun pullRefresh() {
         viewModelScope.launch {
             _isRefreshing.value = true
-            _state.value = try {
-                ArtistListUiState.Success(repository.listArtists(size = 100).items)
-            } catch (t: Throwable) {
-                ArtistListUiState.Error(t.message ?: "Unknown error")
-            }
+            loadFirstPage()
             _isRefreshing.value = false
         }
+    }
+
+    private suspend fun loadFirstPage() {
+        nextPage = 0
+        _state.value = try {
+            val page = repository.listArtists(page = 0, size = PAGE_SIZE)
+            nextPage = 1
+            ArtistListUiState.Success(
+                artists = page.items,
+                totalItems = page.totalItems,
+                endReached = page.items.size >= page.totalItems || page.items.isEmpty(),
+            )
+        } catch (t: Throwable) {
+            ArtistListUiState.Error(t.message ?: "Unknown error")
+        }
+    }
+
+    fun loadMore() {
+        val current = _state.value as? ArtistListUiState.Success ?: return
+        if (current.loadingMore || current.endReached) return
+        _state.value = current.copy(loadingMore = true)
+        val pageToLoad = nextPage
+        viewModelScope.launch {
+            try {
+                val page = repository.listArtists(page = pageToLoad, size = PAGE_SIZE)
+                val merged = current.artists + page.items
+                nextPage = pageToLoad + 1
+                _state.value = ArtistListUiState.Success(
+                    artists = merged,
+                    totalItems = page.totalItems,
+                    loadingMore = false,
+                    endReached = merged.size.toLong() >= page.totalItems || page.items.isEmpty(),
+                )
+            } catch (_: Throwable) {
+                // Silent: keep what we have, user can pull-to-refresh.
+                _state.value = current.copy(loadingMore = false)
+            }
+        }
+    }
+
+    private companion object {
+        const val PAGE_SIZE = 30
     }
 }
 
@@ -128,9 +172,35 @@ fun ArtistListScreen(
                     if (s.artists.isEmpty()) {
                         CenteredMessage("No artists in catalog.")
                     } else {
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        val listState = rememberLazyListState()
+                        LaunchedEffect(listState, s.artists.size, s.endReached) {
+                            if (s.endReached) return@LaunchedEffect
+                            snapshotFlow {
+                                val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
+                                    ?: return@snapshotFlow false
+                                val total = listState.layoutInfo.totalItemsCount
+                                total > 0 && last >= total - 5
+                            }
+                                .distinctUntilChanged()
+                                .filter { it }
+                                .collect { viewModel.loadMore() }
+                        }
+                        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                             items(items = s.artists, key = { it.name }) { artist ->
                                 ArtistRow(artist = artist, onClick = { onArtistClick(artist.name) })
+                            }
+                            if (s.loadingMore) {
+                                item(key = "loading-more") {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            strokeWidth = 2.dp,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
