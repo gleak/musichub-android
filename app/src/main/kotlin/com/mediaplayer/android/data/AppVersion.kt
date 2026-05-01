@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.7.0"
+    const val VERSION = "0.8.0"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,15 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.8.0",
+            title = "Daily Mix — six mood-themed playlists",
+            highlights = listOf(
+                "Six Daily Mix playlists, each themed by a genre/mood drawn from your listening history",
+                "Catalog songs are now classified by genre tag in the background, with backfill for older tracks",
+                "Each Daily Mix is named after its theme (Daily Mix 2 — Hip-hop, etc.) and refreshes once a day",
+            ),
+        ),
         ChangelogEntry(
             version = "0.7.0",
             title = "Follow artists + Release Radar",
