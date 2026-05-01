@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
@@ -37,8 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.mediaplayer.android.ui.theme.CoverShapes
 
 /**
  * M14e first-run tag picker. Shown on top of [com.mediaplayer.android.MainActivity.AuthGate]
@@ -72,7 +71,6 @@ fun OnboardingScreen(
         Text(
             text = "What do you listen to?",
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(8.dp))
@@ -143,7 +141,7 @@ fun OnboardingScreen(
 
 @Composable
 private fun GenreTile(genre: String, selected: Boolean, onToggle: () -> Unit) {
-    val shape = RoundedCornerShape(10.dp)
+    val shape = CoverShapes.Card
     val bg = if (selected) MaterialTheme.colorScheme.primary
     else MaterialTheme.colorScheme.surfaceContainerHigh
     val fg = if (selected) MaterialTheme.colorScheme.onPrimary

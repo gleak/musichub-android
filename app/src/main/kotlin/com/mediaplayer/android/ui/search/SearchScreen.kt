@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Close
@@ -55,10 +54,11 @@ import com.mediaplayer.android.R
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.CenteredMessage
-import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.SongCover
+import com.mediaplayer.android.ui.common.SongListShimmer
 import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
+import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.theme.SpotifyColors
 
 @Composable
@@ -103,7 +103,7 @@ fun SearchScreen(
                     onAlbumListClick = onAlbumListClick,
                     onArtistListClick = onArtistListClick,
                 )
-                SearchUiState.Loading -> CenteredSpinner()
+                SearchUiState.Loading -> SongListShimmer()
                 is SearchUiState.Success -> {
                     if (s.songs.isEmpty()) {
                         CenteredMessage(stringResource(R.string.search_no_matches))
@@ -186,7 +186,7 @@ private fun RecentlyPlayedCarousel(
 
 @Composable
 private fun RecentSongCard(song: SongDto, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(8.dp)
+    val shape = CoverShapes.Tile
     Column(
         modifier = Modifier
             .width(96.dp)
@@ -257,7 +257,7 @@ private fun BrowseTile(
     Box(
         modifier = modifier
             .height(96.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(CoverShapes.Tile)
             .background(color)
             .clickable(onClick = onClick)
             .padding(12.dp),

@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
@@ -62,8 +61,9 @@ import com.mediaplayer.android.data.dto.ArtistDetailDto
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.ErrorWithRetry
-import com.mediaplayer.android.ui.common.CenteredSpinner
+import com.mediaplayer.android.ui.common.SongListShimmer
 import com.mediaplayer.android.ui.common.CoverShape
+import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.common.SectionHeader
 import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
@@ -208,7 +208,7 @@ fun ArtistScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             when (val s = state) {
-                ArtistUiState.Loading -> CenteredSpinner()
+                ArtistUiState.Loading -> SongListShimmer()
                 is ArtistUiState.Error -> ErrorWithRetry(
                     message = "Couldn't load artist.\n${s.message}",
                     onRetry = viewModel::retry,
@@ -300,7 +300,7 @@ private fun AlbumTile(album: AlbumDto, onClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(CoverShapes.SongRow)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {

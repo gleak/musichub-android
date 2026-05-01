@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -50,6 +49,9 @@ import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.PlaylistRepository
 import com.mediaplayer.android.data.SongRepository
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.EmptyState
+import com.mediaplayer.android.ui.common.friendlyMessage
+import com.mediaplayer.android.ui.theme.CoverShapes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -82,7 +84,7 @@ fun AddSongsToPlaylistSheet(
                 size = 50,
             ).items
         } catch (t: Throwable) {
-            errorMessage = t.message ?: "Unknown error"
+            errorMessage = friendlyMessage(t)
         } finally {
             loading = false
         }
@@ -135,16 +137,11 @@ fun AddSongsToPlaylistSheet(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-                songs.isEmpty() -> Box(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "No songs found.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                songs.isEmpty() -> EmptyState(
+                    icon = Icons.Filled.MusicNote,
+                    title = if (query.isBlank()) "Your library is empty" else "No songs match \"$query\"",
+                    subtitle = if (query.isBlank()) "Add tracks to your catalog to see them here." else null,
+                )
                 else -> LazyColumn {
                     items(items = songs, key = { it.id }) { song ->
                         SongPickerRow(
@@ -187,7 +184,7 @@ private fun SongPickerRow(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(CoverShapes.SongRow)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {

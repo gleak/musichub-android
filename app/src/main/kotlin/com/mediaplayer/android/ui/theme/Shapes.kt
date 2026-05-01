@@ -4,19 +4,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
 /**
- * Cover-art corner radii used across rows, tiles, mini-player, hero. Replaces
- * the 4/6/8/10dp values that previously lived as literals on each screen.
+ * Cover-art and surface corner radii. Replaces the 4/6/8/10/12dp literals
+ * that previously lived per-screen.
  *
- *  - [SongRow]      — small list row covers (~48dp art)
- *  - [Tile]         — grid tile / playlist row / hero (~80–280dp art)
- *  - [MiniPlayer]   — mini-player chip cover
- *  - [Card]         — promo cards / shortcut grid items
+ *  - [Skeleton]   — shimmer placeholder bars (~12–14dp tall)
+ *  - [SongRow]    — small list row covers / playlist tile inner cover (~48–180dp art)
+ *  - [Tile]       — grid tile container / browse tiles (~120dp+)
+ *  - [MiniPlayer] — mini-player chip cover (alias of SongRow radius — kept for semantic clarity)
+ *  - [Card]       — promo cards / onboarding pick tiles
+ *  - [Banner]     — full-width inline banners (anonymous, etc.)
  */
 object CoverShapes {
+    val Skeleton = RoundedCornerShape(4.dp)
     val SongRow = RoundedCornerShape(6.dp)
     val Tile = RoundedCornerShape(8.dp)
     val MiniPlayer = RoundedCornerShape(6.dp)
     val Card = RoundedCornerShape(10.dp)
+    val Banner = RoundedCornerShape(12.dp)
 }
 
 /**

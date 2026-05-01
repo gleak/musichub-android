@@ -42,7 +42,7 @@ import com.mediaplayer.android.data.dto.AlbumDetailDto
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.ErrorWithRetry
-import com.mediaplayer.android.ui.common.CenteredSpinner
+import com.mediaplayer.android.ui.common.SongListShimmer
 import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
 import com.mediaplayer.android.ui.search.SongRow
@@ -140,7 +140,7 @@ fun AlbumScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             when (val s = state) {
-                AlbumUiState.Loading -> CenteredSpinner()
+                AlbumUiState.Loading -> SongListShimmer()
                 is AlbumUiState.Error -> ErrorWithRetry(
                     message = "Couldn't load album.\n${s.message}",
                     onRetry = viewModel::retry,

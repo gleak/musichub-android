@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -41,9 +42,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mediaplayer.android.data.dto.SongDto
-import com.mediaplayer.android.ui.common.CenteredMessage
-import com.mediaplayer.android.ui.common.CenteredSpinner
+import com.mediaplayer.android.ui.common.EmptyState
 import com.mediaplayer.android.ui.common.ErrorWithRetry
+import com.mediaplayer.android.ui.common.SongListShimmer
 import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
 import com.mediaplayer.android.ui.search.SongRow
@@ -96,7 +97,7 @@ fun LikedScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             when (val s = state) {
-                LikedUiState.Loading -> CenteredSpinner()
+                LikedUiState.Loading -> SongListShimmer()
                 is LikedUiState.Error -> ErrorWithRetry(
                     message = "Couldn't load liked songs.\n${s.message}",
                     onRetry = viewModel::refresh,
@@ -176,16 +177,11 @@ private fun LikedBody(
 
         if (songs.isEmpty()) {
             item(key = "empty") {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "No liked songs yet. Heart tracks from the Search tab.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                EmptyState(
+                    icon = Icons.Filled.FavoriteBorder,
+                    title = "No liked songs yet",
+                    subtitle = "Heart tracks from the Search tab to find them here.",
+                )
             }
         } else {
             itemsIndexed(items = songs, key = { _, song -> song.id }) { idx, song ->

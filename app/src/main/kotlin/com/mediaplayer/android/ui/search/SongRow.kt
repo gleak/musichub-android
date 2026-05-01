@@ -79,11 +79,7 @@ fun SongRow(
         ) {
             Text(
                 text = song.title,
-                // Spotify-style row title — 16sp Regular, lighter than the
-                // previous titleSmall (14sp Bold) that read as too heavy in
-                // dense list scrolls.
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Normal,
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

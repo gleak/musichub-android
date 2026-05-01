@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
@@ -45,6 +44,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mediaplayer.android.data.PlaylistRepository
 import com.mediaplayer.android.data.dto.PlaylistDto
+import com.mediaplayer.android.ui.common.EmptyState
+import com.mediaplayer.android.ui.theme.CoverShapes
 import kotlinx.coroutines.launch
 
 /**
@@ -180,18 +181,11 @@ fun AddToPlaylistSheet(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-                playlists.isEmpty() -> Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "No playlists yet. Create one above.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                playlists.isEmpty() -> EmptyState(
+                    icon = Icons.AutoMirrored.Filled.QueueMusic,
+                    title = "No playlists yet",
+                    subtitle = "Tap + New playlist to create one.",
+                )
                 else -> LazyColumn {
                     items(items = playlists, key = { it.id }) { p ->
                         PlaylistPickerRow(
@@ -253,7 +247,7 @@ private fun PlaylistPickerRow(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .clip(CoverShapes.SongRow)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
@@ -300,7 +294,7 @@ private fun QueueActionRow(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .clip(CoverShapes.SongRow)
                 .background(MaterialTheme.colorScheme.secondaryContainer),
             contentAlignment = Alignment.Center,
         ) {
@@ -327,7 +321,7 @@ private fun NewPlaylistRow(onClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .clip(CoverShapes.SongRow)
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {

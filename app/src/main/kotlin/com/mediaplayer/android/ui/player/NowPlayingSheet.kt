@@ -90,6 +90,7 @@ import com.mediaplayer.android.playback.PlaybackViewModel
 import com.mediaplayer.android.ui.common.SongCover
 import com.mediaplayer.android.ui.common.rememberCoverDominantColor
 import com.mediaplayer.android.ui.theme.CoverShapes
+import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 import java.util.Locale
 
 /**
@@ -283,7 +284,7 @@ private fun NowPlayingContent(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(MediaPlayerSpacing.L))
 
             BoxWithConstraints {
                 val artSize = (maxWidth * HeroCoverSize.NowPlayingFraction).coerceAtMost(HeroCoverSize.NowPlayingMax)
@@ -329,7 +330,7 @@ private fun NowPlayingContent(
                 }
             }
 
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(MediaPlayerSpacing.Xl + MediaPlayerSpacing.Xs))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -369,7 +370,7 @@ private fun NowPlayingContent(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(MediaPlayerSpacing.M))
 
             val sliderMax = duration.takeIf { it > 0 }?.toFloat() ?: 1f
             val sliderValue = scrubValue ?: position.toFloat().coerceIn(0f, sliderMax)
@@ -470,7 +471,7 @@ private fun NowPlayingContent(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(MediaPlayerSpacing.M))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -559,7 +560,7 @@ private fun NowPlayingContent(
                         onDismissRequest = { overflowOpen = false },
                     ) {
                         DropdownMenuItem(
-                            text = { Text(if (redownloading) "Re-downloading…" else "Re-download song") },
+                            text = { Text(if (redownloading) "Re-downloading…" else "Re-download from source") },
                             enabled = !redownloading,
                             onClick = {
                                 overflowOpen = false
@@ -567,7 +568,7 @@ private fun NowPlayingContent(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Mark song as broken") },
+                            text = { Text("Refresh local copy") },
                             enabled = !redownloading,
                             onClick = {
                                 overflowOpen = false
@@ -600,7 +601,7 @@ private fun NowPlayingContent(
                 )
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(MediaPlayerSpacing.L))
         }
     }
 
@@ -615,7 +616,7 @@ private fun NowPlayingContent(
     if (confirmRedownload) {
         AlertDialog(
             onDismissRequest = { confirmRedownload = false },
-            title = { Text("Re-download song?") },
+            title = { Text("Re-download from source?") },
             text = {
                 Text(
                     "Delete the current audio and cover for \"${current.title}\" and " +
@@ -638,7 +639,7 @@ private fun NowPlayingContent(
     if (confirmMarkBroken) {
         AlertDialog(
             onDismissRequest = { confirmMarkBroken = false },
-            title = { Text("Re-download song to device?") },
+            title = { Text("Refresh local copy?") },
             text = {
                 Text(
                     "Drop the local cache, offline copy and cover for \"${current.title}\" " +
@@ -650,7 +651,7 @@ private fun NowPlayingContent(
                 TextButton(onClick = {
                     confirmMarkBroken = false
                     viewModel.refreshLocalDownload()
-                }) { Text("Re-download") }
+                }) { Text("Refresh") }
             },
             dismissButton = {
                 TextButton(onClick = { confirmMarkBroken = false }) { Text("Cancel") }

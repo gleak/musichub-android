@@ -70,8 +70,9 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mediaplayer.android.data.dto.PlaylistDetailDto
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.CenteredMessage
-import com.mediaplayer.android.ui.common.CenteredSpinner
+import com.mediaplayer.android.ui.common.EmptyState
 import com.mediaplayer.android.ui.common.ErrorWithRetry
+import com.mediaplayer.android.ui.common.SongListShimmer
 import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.search.SongRow
 import androidx.compose.material3.TopAppBarDefaults
@@ -188,7 +189,7 @@ fun PlaylistDetailScreen(
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when (val s = state) {
-                PlaylistDetailUiState.Loading -> CenteredSpinner()
+                PlaylistDetailUiState.Loading -> SongListShimmer()
                 is PlaylistDetailUiState.Error -> ErrorWithRetry(
                     message = "Couldn't load playlist.\n${s.message}",
                     onRetry = viewModel::refresh,
@@ -325,18 +326,11 @@ private fun PlaylistDetailBody(
 
         if (entries.isEmpty()) {
             item(key = "empty") {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "No songs yet. Add some from the Search tab or tap +.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                EmptyState(
+                    icon = Icons.AutoMirrored.Filled.QueueMusic,
+                    title = "No songs yet",
+                    subtitle = "Add some from the Search tab or tap +.",
+                )
             }
         } else {
             itemsIndexed(

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -31,6 +32,7 @@ import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.playback.PlaybackViewModel
 import com.mediaplayer.android.playback.QueueEntry
+import com.mediaplayer.android.ui.common.EmptyState
 import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
 import com.mediaplayer.android.ui.search.SongRow
 
@@ -66,16 +68,11 @@ fun QueueSheet(
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             if (queue.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(32.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "Queue is empty",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                EmptyState(
+                    icon = Icons.AutoMirrored.Filled.QueueMusic,
+                    title = "Queue is empty",
+                    subtitle = "Tap a song to start playback.",
+                )
             } else {
                 LazyColumn {
                     if (current != null) {

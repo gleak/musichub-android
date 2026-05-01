@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -68,8 +67,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.ui.common.AnonymousBanner
 import com.mediaplayer.android.ui.common.CenteredSpinner
+import com.mediaplayer.android.ui.common.EmptyState
 import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.LocalCurrentUser
+import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.common.displayInitial
 import com.mediaplayer.android.ui.theme.SpotifyColors
 
@@ -297,16 +298,11 @@ private fun LibraryList(
 
 @Composable
 private fun EmptyPlaylistMessage() {
-    Box(
-        modifier = Modifier.fillMaxWidth().padding(24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            "No playlists yet. Tap + to create one.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+    EmptyState(
+        icon = Icons.AutoMirrored.Filled.QueueMusic,
+        title = "No playlists yet",
+        subtitle = "Tap + to create your first one.",
+    )
 }
 
 @Composable
@@ -321,7 +317,7 @@ private fun LikedSongsRow(onClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(CoverShapes.SongRow)
                 .background(
                     Brush.linearGradient(
                         listOf(
@@ -367,7 +363,7 @@ private fun ImportFromSpotifyRow(onClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(CoverShapes.SongRow)
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh),
             contentAlignment = Alignment.Center,
         ) {
@@ -411,7 +407,7 @@ private fun PlaylistRow(
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(CoverShapes.SongRow)
                 .background(
                     if (playlist.isAuto) {
                         Brush.linearGradient(
@@ -499,7 +495,7 @@ private fun PlaylistTile(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(CoverShapes.Tile)
             .combinedClickable(
                 onClick = onClick,
                 // Auto-playlists are server-managed and can't be deleted; long-press
@@ -513,7 +509,7 @@ private fun PlaylistTile(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(6.dp))
+                .clip(CoverShapes.SongRow)
                 .background(
                     if (playlist.isAuto) {
                         Brush.linearGradient(

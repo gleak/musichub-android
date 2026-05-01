@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
@@ -35,7 +34,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,6 +47,7 @@ import com.mediaplayer.android.data.dto.RequestSummaryDto
 import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.ErrorWithRetry
+import com.mediaplayer.android.ui.theme.CoverShapes
 
 @Composable
 fun FindScreen(
@@ -177,8 +176,7 @@ private fun ActiveRequestRow(request: RequestSummaryDto) {
     ) {
         Text(
             text = "\"${request.query}\"",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -268,7 +266,6 @@ private fun StatusHeader(request: RequestDto, onBack: () -> Unit) {
             Text(
                 text = "\"${request.query}\"",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
             )
             Text(
                 text = label,
@@ -325,8 +322,7 @@ private fun CandidateRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = candidate.title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleSmall,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -353,7 +349,7 @@ private fun CandidateRow(
 
 @Composable
 private fun Thumbnail(url: String?) {
-    val shape = RoundedCornerShape(4.dp)
+    val shape = CoverShapes.SongRow
     if (url != null) {
         AsyncImage(
             model = url,
