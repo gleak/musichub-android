@@ -60,9 +60,17 @@ interface MediaPlayerApi {
     @POST("api/songs/{id}/redownload")
     suspend fun redownloadSong(@Path("id") id: Long): SongDto
 
-    /** Download the MP4 video for a YouTube-sourced song that has no video yet. */
+    /**
+     * Kick off async MP4 video download. Backend returns 202 immediately and
+     * runs yt-dlp on a virtual thread; clients poll
+     * {@link #getDownloadVideoStatus} until DONE/ERROR. Replaces the prior
+     * blocking call which would time out client-side and spawn duplicates.
+     */
     @POST("api/songs/{id}/download-video")
-    suspend fun downloadVideo(@Path("id") id: Long): SongDto
+    suspend fun downloadVideo(@Path("id") id: Long)
+
+    @GET("api/songs/{id}/download-video/status")
+    suspend fun getDownloadVideoStatus(@Path("id") id: Long): ReinitStatusDto
 
     /** Re-mux existing MP4 with -movflags faststart for instant seek support. Starts async job, returns 202. */
     @POST("api/songs/{id}/video/reinitialize")
@@ -84,7 +92,9 @@ interface MediaPlayerApi {
     // ---------- Playlists (M6) ----------
 
     @GET("api/playlists")
-    suspend fun listPlaylists(): List<PlaylistDto>
+    suspend fun listPlaylists(
+        @Query("kind") kind: String? = null,
+    ): List<PlaylistDto>
 
     @POST("api/playlists")
     suspend fun createPlaylist(@Body body: CreatePlaylistRequest): PlaylistDto

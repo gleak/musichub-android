@@ -15,7 +15,17 @@ class PlaylistRepository(
     private val api: MediaPlayerApi = Network.api,
 ) {
 
-    suspend fun list(): List<PlaylistDto> = api.listPlaylists()
+    /**
+     * Returns auto-playlists (Discover Daily / On Repeat) first, then the
+     * user's hand-curated playlists. Backend's `GET /api/playlists` defaults
+     * to `kind=USER`, so we hit it twice and merge — auto rows would be
+     * invisible otherwise.
+     */
+    suspend fun list(): List<PlaylistDto> {
+        val auto = runCatching { api.listPlaylists(kind = "auto") }.getOrDefault(emptyList())
+        val user = api.listPlaylists()
+        return auto + user
+    }
 
     suspend fun detail(id: Long): PlaylistDetailDto = api.getPlaylist(id)
 

@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
@@ -145,12 +146,24 @@ private fun HomeContent(
             }
         }
 
-        if (playlists.isNotEmpty()) {
+        val autoPlaylists = playlists.filter { it.isAuto }
+        val userPlaylists = playlists.filter { !it.isAuto }
+
+        if (autoPlaylists.isNotEmpty()) {
+            item(key = "made_for_you_title") {
+                SectionTitle("Made for you")
+            }
+            item(key = "made_for_you_row") {
+                PlaylistRow(playlists = autoPlaylists, onClick = onPlaylistClick)
+            }
+        }
+
+        if (userPlaylists.isNotEmpty()) {
             item(key = "playlists_title") {
                 SectionTitle("Your playlists")
             }
             item(key = "playlists_row") {
-                PlaylistRow(playlists = playlists, onClick = onPlaylistClick)
+                PlaylistRow(playlists = userPlaylists, onClick = onPlaylistClick)
             }
         }
     }
@@ -461,13 +474,31 @@ private fun PlaylistCardSquare(playlist: PlaylistDto, onClick: () -> Unit) {
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(
+                    if (playlist.isAuto) {
+                        Brush.linearGradient(
+                            listOf(
+                                SpotifyColors.LikedGradientStart,
+                                SpotifyColors.LikedGradientEnd,
+                            )
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                MaterialTheme.colorScheme.surfaceVariant,
+                            )
+                        )
+                    }
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                imageVector = if (playlist.isAuto) Icons.Filled.AutoAwesome
+                else Icons.AutoMirrored.Filled.QueueMusic,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (playlist.isAuto) Color.White
+                else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(48.dp),
             )
         }
@@ -479,7 +510,9 @@ private fun PlaylistCardSquare(playlist: PlaylistDto, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = if (playlist.songCount == 1) "1 song" else "${playlist.songCount} songs",
+            text = if (playlist.isAuto) "Made for you"
+            else if (playlist.songCount == 1) "1 song"
+            else "${playlist.songCount} songs",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

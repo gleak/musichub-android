@@ -337,6 +337,15 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     fun consumeRedownloadError() { _redownloadError.value = null }
 
+    /**
+     * Kick off the backend's async video download and poll for completion.
+     *
+     * The backend hands back 202 immediately and runs yt-dlp on a virtual
+     * thread, so we never sit on a single HTTP request long enough to hit
+     * OkHttp's 30s read timeout. Polling avoids the prior failure mode where
+     * a timed-out POST left the user re-tapping and spawning duplicate
+     * yt-dlp processes — the backend now de-dupes by song id.
+     */
     @Suppress("TooGenericExceptionCaught")
     fun downloadVideoForCurrent() {
         val current = _currentSong.value ?: return
@@ -345,8 +354,21 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         _videoDownloadError.value = null
         viewModelScope.launch {
             try {
-                val fresh = songRepository.downloadVideo(current.id)
-                _currentSong.value = current.copy(hasVideo = fresh.hasVideo)
+                songRepository.downloadVideo(current.id)
+                while (true) {
+                    delay(2_000)
+                    val s = songRepository.getDownloadVideoStatus(current.id)
+                    when (s.status) {
+                        "DONE" -> {
+                            _currentSong.value = current.copy(hasVideo = true)
+                            break
+                        }
+                        "ERROR" -> {
+                            _videoDownloadError.value = s.error.ifBlank { "Video download failed" }
+                            break
+                        }
+                    }
+                }
             } catch (t: Throwable) {
                 _videoDownloadError.value = t.message ?: "Video download failed"
             } finally {
@@ -487,9 +509,19 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         )
     }
 
-    /** Toggles the like state of the currently playing track via the service. */
+    /**
+     * Toggles the like state of the currently playing track via the service.
+     *
+     * Optimistically flips the local flag so the heart icon updates immediately —
+     * in-process MediaController instances do not reliably receive
+     * {@code onExtrasChanged} callbacks, so we cannot wait for the service to
+     * publish the new extras. The service still owns the persisted truth: the
+     * next {@code onMediaItemTransition} re-reads liked status from the server
+     * and corrects any divergence.
+     */
     fun toggleCurrentLike() {
         val c = controller ?: return
+        _currentLiked.value = !_currentLiked.value
         c.sendCustomCommand(
             SessionCommand(MediaPlaybackService.ACTION_TOGGLE_LIKE, android.os.Bundle.EMPTY),
             android.os.Bundle.EMPTY,

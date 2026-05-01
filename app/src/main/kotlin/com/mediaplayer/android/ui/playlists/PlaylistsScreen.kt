@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LibraryAdd
@@ -398,13 +399,31 @@ private fun PlaylistRow(
             modifier = Modifier
                 .size(56.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(
+                    if (playlist.isAuto) {
+                        Brush.linearGradient(
+                            listOf(
+                                SpotifyColors.LikedGradientStart,
+                                SpotifyColors.LikedGradientEnd,
+                            )
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                MaterialTheme.colorScheme.surfaceVariant,
+                            )
+                        )
+                    }
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                imageVector = if (playlist.isAuto) Icons.Filled.AutoAwesome
+                else Icons.AutoMirrored.Filled.QueueMusic,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (playlist.isAuto) Color.White
+                else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(Modifier.width(12.dp))
@@ -417,19 +436,22 @@ private fun PlaylistRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = "Playlist • ${pluralizeSongs(playlist.songCount)}",
+                text = if (playlist.isAuto) "Made for you • ${pluralizeSongs(playlist.songCount)}"
+                else "Playlist • ${pluralizeSongs(playlist.songCount)}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(onClick = { confirmDelete = true }) {
-            Icon(
-                imageVector = Icons.Filled.Delete,
-                contentDescription = "Delete playlist",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        if (!playlist.isAuto) {
+            IconButton(onClick = { confirmDelete = true }) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = "Delete playlist",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 

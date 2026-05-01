@@ -58,8 +58,11 @@ object ConnectivityObserver {
     private fun updateFromCm(cm: ConnectivityManager) {
         val active = cm.activeNetwork
         val caps = active?.let(cm::getNetworkCapabilities)
-        val online = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        // INTERNET capability only — NET_CAPABILITY_VALIDATED is too strict:
+        // captive-portal-free Wi-Fi, hotspots and corporate networks routinely
+        // omit it even when the connection actually works. The OkHttp
+        // interceptor is the authoritative signal via `_backendReachable`.
+        val online = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
         _deviceOnline.value = online
         recompute()
     }

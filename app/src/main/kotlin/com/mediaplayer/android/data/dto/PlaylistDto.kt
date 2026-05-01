@@ -18,4 +18,8 @@ data class PlaylistDto(
     val createdAt: String,
     val updatedAt: String,
     val coverSongId: Long? = null,
-)
+    val kind: String = "USER",
+    val lastRefreshedAt: String? = null,
+) {
+    val isAuto: Boolean get() = kind != "USER"
+}

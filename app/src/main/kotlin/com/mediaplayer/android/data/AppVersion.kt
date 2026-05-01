@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.3.0"
+    const val VERSION = "0.3.2"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,24 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.3.2",
+            title = "Bug fixes — like, video download, offline flag",
+            highlights = listOf(
+                "Like button responds instantly when tapped instead of looking stuck",
+                "Video downloads run in the background and finish reliably — no more duplicate downloads when the request times out",
+                "Offline icon stops showing while the network actually works",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.3.1",
+            title = "Made for you — Discover Daily + On Repeat",
+            highlights = listOf(
+                "Server-curated Discover Daily and On Repeat playlists now appear on Home and in Your Library",
+                "Distinct gradient cover so auto-playlists stand out from your hand-curated ones",
+                "Auto-playlists can't be deleted from the library list (they're managed by the server)",
+            ),
+        ),
         ChangelogEntry(
             version = "0.3.0",
             title = "Welcome sheet + cover rise + design tokens",
