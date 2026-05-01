@@ -71,6 +71,12 @@ function HomeScreen() {
           </div>
         ))}
       </div>
+      <MHSectionHeader eyebrow="// Generata per te" title="Le tue playlist di oggi" action="Per te →"/>
+      <div style={{ display: 'flex', gap: 10, padding: '4px 16px 4px', overflowX: 'auto' }}>
+        {(window.MHGenerated.GEN_PLAYLISTS.filter(p => p.id === 'rotation' || p.family === 'daily' || p.id === 'releases')).slice(0, 6).map(p => (
+          <window.MHGenerated.GenCardLarge key={p.id} pl={p}/>
+        ))}
+      </div>
       <MHSectionHeader eyebrow="// Per te" title="Brani consigliati"/>
       <div style={{ padding: '4px 0 12px' }}>
         {TRACKS.map((t, i) => (

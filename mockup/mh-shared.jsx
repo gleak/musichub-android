@@ -72,6 +72,12 @@ const I = {
       <path d="M16.5 16.5L21 21" stroke={color} strokeWidth={active ? 2.2 : 1.7} strokeLinecap="round"/>
     </svg>
   ),
+  ForYou: ({ size = 22, color = T.TEXT_LO, active }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={active ? color : 'none'}>
+      <path d="M12 3l1.8 5.4L19 10l-5.2 1.6L12 17l-1.8-5.4L5 10l5.2-1.6L12 3z" stroke={color} strokeWidth={active ? 1.5 : 1.7} strokeLinejoin="round"/>
+      <circle cx="19" cy="5" r="1.4" fill={color}/>
+    </svg>
+  ),
   Library: ({ size = 22, color = T.TEXT_LO, active }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <path d="M4 4v16M9 4v16M14 5l5 14" stroke={color} strokeWidth={active ? 2.2 : 1.7} strokeLinecap="round"/>
@@ -365,6 +371,7 @@ function MHBottomNav({ active = 'home' }) {
       backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
       {item('home', I.Home, 'Home')}
       {item('search', I.Search, 'Cerca')}
+      {item('foryou', I.ForYou, 'Per te')}
       {item('library', I.Library, 'Libreria')}
     </div>
   );
