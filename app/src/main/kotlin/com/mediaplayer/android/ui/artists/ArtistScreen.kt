@@ -19,6 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
@@ -51,6 +53,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.CatalogRepository
 import com.mediaplayer.android.data.DownloadRepository
+import com.mediaplayer.android.data.FollowRepository
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.graphics.Color
 import com.mediaplayer.android.data.Network
@@ -80,6 +83,7 @@ sealed interface ArtistUiState {
 class ArtistViewModel(
     private val name: String,
     private val repository: CatalogRepository = CatalogRepository(),
+    private val followRepository: FollowRepository = FollowRepository(),
 ) : ViewModel() {
     private val _state = MutableStateFlow<ArtistUiState>(ArtistUiState.Loading)
     val state: StateFlow<ArtistUiState> = _state.asStateFlow()
@@ -89,9 +93,15 @@ class ArtistViewModel(
 
     val downloadedIds: StateFlow<Set<Long>> = DownloadRepository.downloadedIds
 
-    init { load() }
+    private val _isFollowing = MutableStateFlow(false)
+    val isFollowing: StateFlow<Boolean> = _isFollowing.asStateFlow()
 
-    fun retry() { load() }
+    init {
+        load()
+        loadFollowStatus()
+    }
+
+    fun retry() { load(); loadFollowStatus() }
 
     private fun load() {
         viewModelScope.launch {
@@ -99,6 +109,30 @@ class ArtistViewModel(
                 ArtistUiState.Success(repository.getArtist(name))
             } catch (t: Throwable) {
                 ArtistUiState.Error(t.message ?: "Unknown error")
+            }
+        }
+    }
+
+    private fun loadFollowStatus() {
+        viewModelScope.launch {
+            try {
+                val followed = followRepository.status(listOf(name))
+                _isFollowing.value = followed.contains(name.lowercase())
+            } catch (_: Throwable) {
+                // Leave default false; user can still tap to retry the toggle.
+            }
+        }
+    }
+
+    fun toggleFollow() {
+        val target = !_isFollowing.value
+        // Optimistic flip — corrects on failure.
+        _isFollowing.value = target
+        viewModelScope.launch {
+            try {
+                if (target) followRepository.follow(name) else followRepository.unfollow(name)
+            } catch (_: Throwable) {
+                _isFollowing.value = !target
             }
         }
     }
@@ -112,6 +146,7 @@ class ArtistViewModel(
                 ArtistUiState.Error(t.message ?: "Unknown error")
             }
             _isRefreshing.value = false
+            loadFollowStatus()
         }
     }
 }
@@ -134,6 +169,7 @@ fun ArtistScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val downloadedIds by viewModel.downloadedIds.collectAsStateWithLifecycle()
+    val isFollowing by viewModel.isFollowing.collectAsStateWithLifecycle()
 
     var sheetSong by remember { mutableStateOf<SongDto?>(null) }
 
@@ -146,6 +182,21 @@ fun ArtistScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    // Follow toggle: filled bell when following, outline when
+                    // not. Following an artist seeds them into Release Radar
+                    // for fresh-tracks surfacing on the next refresh tick.
+                    IconButton(onClick = viewModel::toggleFollow) {
+                        Icon(
+                            imageVector = if (isFollowing) Icons.Filled.NotificationsActive
+                                          else Icons.Filled.Notifications,
+                            contentDescription = if (isFollowing) "Unfollow artist"
+                                                 else "Follow artist",
+                            tint = if (isFollowing) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 },
             )

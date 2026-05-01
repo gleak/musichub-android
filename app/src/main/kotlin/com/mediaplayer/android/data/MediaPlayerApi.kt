@@ -153,6 +153,22 @@ interface MediaPlayerApi {
         @Path("token") token: String,
     ): PlaylistDetailDto
 
+    // ---------- Followed artists / Release Radar (M15b) ----------
+
+    @GET("api/follow")
+    suspend fun listFollowedArtists(): List<String>
+
+    @POST("api/follow/{artist}")
+    suspend fun followArtist(@Path("artist") artist: String)
+
+    @DELETE("api/follow/{artist}")
+    suspend fun unfollowArtist(@Path("artist") artist: String)
+
+    @GET("api/follow/status")
+    suspend fun followStatus(
+        @Query("artists") artists: List<String>,
+    ): Set<String>
+
     // ---------- Find new music (M9) ----------
 
     /** Kicks off a Prowlarr search; server blocks briefly while the indexer answers. */

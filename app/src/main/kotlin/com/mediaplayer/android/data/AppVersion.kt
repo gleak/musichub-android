@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.6.0"
+    const val VERSION = "0.7.0"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,14 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.7.0",
+            title = "Follow artists + Release Radar",
+            highlights = listOf(
+                "Tap the bell on any artist page to follow them",
+                "Release Radar auto-playlist surfaces new tracks from the artists you follow — refreshes daily and immediately when you follow someone new",
+            ),
+        ),
         ChangelogEntry(
             version = "0.6.0",
             title = "Share playlists",
