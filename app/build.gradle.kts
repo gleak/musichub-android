@@ -53,8 +53,8 @@ android {
         applicationId = "com.mediaplayer.android"
         minSdk = 24
         targetSdk = 35
-        versionCode = 27
-        versionName = "0.8.2"
+        versionCode = 29
+        versionName = "0.9.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -107,6 +107,17 @@ android {
     sourceSets {
         named("main") {
             java.srcDirs("src/main/kotlin")
+        }
+    }
+
+    // Build outputs name themselves `mediaplayer-<versionCode>-<versionName>.apk`
+    // so the backend's update scanner can parse + sort filenames directly.
+    // Drop the produced file into the server's app-update directory and
+    // it surfaces as the latest manifest automatically.
+    applicationVariants.all {
+        outputs.all {
+            val out = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            out.outputFileName = "mediaplayer-${defaultConfig.versionCode}-${defaultConfig.versionName}.apk"
         }
     }
 }

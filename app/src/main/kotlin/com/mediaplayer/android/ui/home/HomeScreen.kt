@@ -42,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,8 +57,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import android.widget.Toast
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.PlaylistDto
+import com.mediaplayer.android.update.AppUpdateChecker
+import kotlinx.coroutines.launch
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.AnonymousBanner
 import com.mediaplayer.android.ui.common.CenteredSpinner
@@ -269,6 +273,8 @@ private fun GreetingHeader(
 ) {
     val isAnonymous = LocalCurrentUser.current?.user?.anonymous == true
     var menuOpen by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -298,6 +304,29 @@ private fun GreetingHeader(
                     onClick = {
                         menuOpen = false
                         onShowChangelog()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Check for updates") },
+                    onClick = {
+                        menuOpen = false
+                        scope.launch {
+                            // forceCheck publishes AppUpdateChecker.state on the
+                            // "Updated" branch, so the dialog pops automatically
+                            // via the AppScaffold collector. We just need to
+                            // surface the up-to-date / error case.
+                            when (val r = AppUpdateChecker.forceCheck(context)) {
+                                AppUpdateChecker.ManualResult.Updated -> Unit
+                                AppUpdateChecker.ManualResult.UpToDate ->
+                                    Toast.makeText(
+                                        context,
+                                        "You're on the latest version",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                is AppUpdateChecker.ManualResult.Error ->
+                                    Toast.makeText(context, r.message, Toast.LENGTH_LONG).show()
+                            }
+                        }
                     },
                 )
                 DropdownMenuItem(

@@ -169,6 +169,11 @@ interface MediaPlayerApi {
         @Query("artists") artists: List<String>,
     ): Set<String>
 
+    // ---------- Self-hosted update channel (M16) ----------
+
+    @GET("api/updates/latest")
+    suspend fun latestAppUpdate(): retrofit2.Response<com.mediaplayer.android.data.dto.AppUpdateDto>
+
     // ---------- Find new music (M9) ----------
 
     /** Kicks off a Prowlarr search; server blocks briefly while the indexer answers. */

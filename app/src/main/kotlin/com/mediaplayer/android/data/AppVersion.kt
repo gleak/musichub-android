@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.8.2"
+    const val VERSION = "0.9.1"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,22 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.9.1",
+            title = "Update channel + manual check",
+            highlights = listOf(
+                "The server now hosts a folder of APKs and surfaces the highest version automatically — no operator restart needed when shipping a new build",
+                "Settings menu has a new \"Check for updates\" entry for an on-demand check",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.9.0",
+            title = "In-app updates",
+            highlights = listOf(
+                "MediaPlayer now updates itself — when a new build is published to the server, the app prompts you to download and install on next launch",
+                "No Play Store needed; integrity check via SHA-256 keeps the update tamper-proof",
+            ),
+        ),
         ChangelogEntry(
             version = "0.8.2",
             title = "Tap artist in Now Playing",

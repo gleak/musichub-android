@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Downloaded APK lives under the app's external-files dir, scoped to
+         this app, so the FileProvider can hand it to the package installer
+         without storage permissions. Path matches AppUpdateInstaller. -->
+    <external-files-path
+        name="updates"
+        path="updates/" />
+</paths>

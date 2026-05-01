@@ -82,6 +82,8 @@ import com.mediaplayer.android.ui.playlists.PlaylistsScreen
 import com.mediaplayer.android.ui.playlists.SpotifyImportScreen
 import com.mediaplayer.android.ui.search.SearchScreen
 import com.mediaplayer.android.ui.theme.MediaPlayerTheme
+import com.mediaplayer.android.update.AppUpdateChecker
+import com.mediaplayer.android.update.AppUpdateDialog
 import kotlinx.coroutines.launch
 
 @UnstableApi
@@ -280,6 +282,11 @@ private fun AppScaffold(
         }
     }
 
+    // Self-hosted update channel — checks the backend manifest on cold
+    // launch (rate-limited to once per 6h via SharedPreferences).
+    val pendingUpdate by AppUpdateChecker.state.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { AppUpdateChecker.check(ctx) }
+
     // Wrap the whole Scaffold + the NowPlaying overlay in one
     // `SharedTransitionLayout` so the MiniPlayer cover and the
     // NowPlayingSheet hero cover share an animation surface. The cover
@@ -379,6 +386,13 @@ private fun AppScaffold(
                 onShareConsumed()
                 navController.navigate(Routes.playlistDetail(playlistId))
             },
+        )
+    }
+
+    pendingUpdate?.let { manifest ->
+        AppUpdateDialog(
+            manifest = manifest,
+            onDismiss = { AppUpdateChecker.dismiss(ctx, manifest) },
         )
     }
 }
