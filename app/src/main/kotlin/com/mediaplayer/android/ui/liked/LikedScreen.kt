@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
@@ -18,11 +22,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,6 +45,7 @@ import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.SpotifyHero
+import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
 import com.mediaplayer.android.ui.search.SongRow
 import com.mediaplayer.android.ui.theme.SpotifyColors
 
@@ -50,6 +62,17 @@ fun LikedScreen(
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val downloadedIds by viewModel.downloadedIds.collectAsStateWithLifecycle()
 
+    var sheetSong by remember { mutableStateOf<SongDto?>(null) }
+    var addedToast by remember { mutableStateOf<String?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+
+    LaunchedEffect(addedToast) {
+        addedToast?.let {
+            snackbar.showSnackbar(it)
+            addedToast = null
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -62,6 +85,9 @@ fun LikedScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbar) { data -> Snackbar(snackbarData = data) }
         },
     ) { padding ->
         PullToRefreshBox(
@@ -77,29 +103,69 @@ fun LikedScreen(
                 )
                 is LikedUiState.Success -> LikedBody(
                     songs = s.songs,
+                    totalItems = s.totalItems,
+                    loadingMore = s.loadingMore,
+                    endReached = s.endReached,
                     downloadedIds = downloadedIds,
                     onPlayFromIndex = onPlayFromIndex,
                     onShufflePlay = onShufflePlay,
                     onUnlike = viewModel::unlike,
+                    onLongPress = { song -> sheetSong = song },
+                    onLoadMore = viewModel::loadMore,
                 )
             }
         }
+    }
+
+    sheetSong?.let { song ->
+        AddToPlaylistSheet(
+            songTitle = song.title,
+            songId = song.id,
+            onDismiss = { sheetSong = null },
+            onAdded = { playlistName ->
+                addedToast = "Added to $playlistName"
+            },
+        )
     }
 }
 
 @Composable
 private fun LikedBody(
     songs: List<SongDto>,
+    totalItems: Long,
+    loadingMore: Boolean,
+    endReached: Boolean,
     downloadedIds: Set<Long>,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
     onShufflePlay: (List<SongDto>) -> Unit,
     onUnlike: (Long) -> Unit,
+    onLongPress: (SongDto) -> Unit,
+    onLoadMore: () -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    val listState = rememberLazyListState()
+
+    // Trigger when the user scrolls within PREFETCH_THRESHOLD rows of the
+    // bottom. derivedStateOf keeps the recomputation cheap as the user
+    // scrolls; snapshotFlow + filter ensures we fire only when crossing
+    // the threshold, not on every visible-item delta.
+    LaunchedEffect(listState, songs.size, endReached) {
+        if (endReached) return@LaunchedEffect
+        snapshotFlow {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
+                ?: return@snapshotFlow false
+            val total = listState.layoutInfo.totalItemsCount
+            total > 0 && last >= total - PREFETCH_THRESHOLD
+        }
+            .distinctUntilChanged()
+            .filter { it }
+            .collect { onLoadMore() }
+    }
+
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         item(key = "header") {
             SpotifyHero(
                 title = "Liked Songs",
-                subtitle = "Playlist • ${if (songs.size == 1) "1 song" else "${songs.size} songs"}",
+                subtitle = "Playlist • ${pluralizeSongs(totalItems)}",
                 coverModel = null,
                 fallbackGradient = SpotifyColors.LikedGradientStart to SpotifyColors.LikedGradientEnd,
                 onPlay = { if (songs.isNotEmpty()) onPlayFromIndex(songs, 0) },
@@ -128,10 +194,30 @@ private fun LikedBody(
                     isLiked = true,
                     isDownloaded = song.id in downloadedIds,
                     onClick = { onPlayFromIndex(songs, idx) },
+                    onLongPress = { onLongPress(song) },
                     onToggleLike = { onUnlike(song.id) },
+                    onMore = { onLongPress(song) },
                 )
+            }
+            if (loadingMore) {
+                item(key = "loading-more") {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                }
             }
         }
     }
 }
+
+private fun pluralizeSongs(count: Long): String =
+    if (count == 1L) "1 song" else "$count songs"
+
+private const val PREFETCH_THRESHOLD = 5
 

@@ -34,6 +34,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,6 +63,7 @@ import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.CoverShape
 import com.mediaplayer.android.ui.common.SectionHeader
 import com.mediaplayer.android.ui.common.SpotifyHero
+import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
 import com.mediaplayer.android.ui.search.SongRow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -131,6 +135,8 @@ fun ArtistScreen(
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val downloadedIds by viewModel.downloadedIds.collectAsStateWithLifecycle()
 
+    var sheetSong by remember { mutableStateOf<SongDto?>(null) }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -161,9 +167,18 @@ fun ArtistScreen(
                     downloadedIds = downloadedIds,
                     onPlayFromIndex = onPlayFromIndex,
                     onAlbumClick = onAlbumClick,
+                    onMoreSong = { song -> sheetSong = song },
                 )
             }
         }
+    }
+
+    sheetSong?.let { song ->
+        AddToPlaylistSheet(
+            songTitle = song.title,
+            songId = song.id,
+            onDismiss = { sheetSong = null },
+        )
     }
 }
 
@@ -173,6 +188,7 @@ private fun ArtistBody(
     downloadedIds: Set<Long>,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
     onAlbumClick: (name: String, artist: String) -> Unit,
+    onMoreSong: (SongDto) -> Unit,
 ) {
     val coverModel = detail.songs.firstOrNull { it.hasCoverArt }?.let { Network.coverUrl(it.id) }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -214,6 +230,7 @@ private fun ArtistBody(
                     song = song,
                     isDownloaded = song.id in downloadedIds,
                     onClick = { onPlayFromIndex(detail.songs, idx) },
+                    onMore = { onMoreSong(song) },
                 )
             }
         }

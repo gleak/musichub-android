@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.4.3"
+    const val VERSION = "0.6.0"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,91 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.6.0",
+            title = "Share playlists",
+            highlights = listOf(
+                "Tap the share icon on any playlist to mint a link and send it through any app on your phone",
+                "Recipients tap the link to land directly in MediaPlayer with a one-tap import preview",
+                "Imported playlists are independent copies — the sender's edits don't change yours",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.5.3",
+            title = "True fullscreen video",
+            highlights = listOf(
+                "Fullscreen video now hides the status + navigation bars — swipe from the edge to reveal them",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.5.2",
+            title = "Equalizer actually works",
+            highlights = listOf(
+                "Equalizer presets and band sliders now affect playback — fixed an audio-session binding issue that left the effect silently disabled",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.5.1",
+            title = "Queue holds order under shuffle",
+            highlights = listOf(
+                "Songs you Add to queue / Play next now keep their insertion order even when shuffle is on",
+                "Toggling shuffle reorders only the upcoming source — your queue and listening history stay put",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.5.0",
+            title = "Spotify-style queue",
+            highlights = listOf(
+                "Up next sheet now splits into Now playing / Next in queue / Next up — manually-queued songs are tracked separately from the source",
+                "Add to queue and Play next add to the user queue and play before the source resumes",
+                "User-queued songs are consumed once played — they don't linger in the source list",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.4.9",
+            title = "Row menu everywhere",
+            highlights = listOf(
+                "⋮ menu now appears on every song row — Search, Liked, Album, Artist, Playlist, and the Up next queue all open Add to playlist / Play next / queue / Download from one place",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.4.8",
+            title = "Visible row menu in Liked Songs",
+            highlights = listOf(
+                "Each row in Liked Songs now has a visible ⋮ button that opens Add to playlist / Play next / queue (long-press still works too)",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.4.7",
+            title = "Liked Songs — full library + real count",
+            highlights = listOf(
+                "Liked Songs no longer caps at 20 — scroll to load more, all the way down",
+                "Header now shows the real total count instead of just what's loaded",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.4.6",
+            title = "Remove from queue",
+            highlights = listOf(
+                "Up next sheet now has a remove (×) button on every queued track",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.4.5",
+            title = "Swipe-to-remove fix + remove confirmation",
+            highlights = listOf(
+                "Swipe-to-remove inside a playlist now reliably commits — no more silent no-ops on partial swipes",
+                "A snackbar now confirms when a song is removed from a playlist",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.4.4",
+            title = "Add to playlist from Liked + safe-area onboarding",
+            highlights = listOf(
+                "Long-press a song in Liked Songs to add it to a playlist (or queue / play next via the same sheet)",
+                "Onboarding tag picker no longer hides its Skip / Continue buttons under the gesture nav bar",
+            ),
+        ),
         ChangelogEntry(
             version = "0.4.3",
             title = "Library grid + cover transition + reorder polish",

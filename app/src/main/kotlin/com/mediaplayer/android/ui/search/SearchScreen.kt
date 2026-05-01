@@ -127,6 +127,7 @@ fun SearchScreen(
                                     isDownloaded = song.id in downloadedIds,
                                     onArtistClick = onArtistClick,
                                     onAlbumClick = onAlbumClick,
+                                    onMore = { sheetSong = song },
                                 )
                             }
                         }

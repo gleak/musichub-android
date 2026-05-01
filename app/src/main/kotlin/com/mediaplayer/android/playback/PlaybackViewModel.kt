@@ -54,8 +54,8 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
     val repeatMode: StateFlow<Int> = _repeatMode.asStateFlow()
 
-    private val _queue = MutableStateFlow<List<SongDto>>(emptyList())
-    val queue: StateFlow<List<SongDto>> = _queue.asStateFlow()
+    private val _queue = MutableStateFlow<List<QueueEntry>>(emptyList())
+    val queue: StateFlow<List<QueueEntry>> = _queue.asStateFlow()
 
     // Sleep timer state mirrored from MediaPlaybackService — the service owns the
     // authoritative timer so phone + AA stay in sync. We seed from the controller's
@@ -103,6 +103,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     private var controller: MediaController? = null
 
+    // Original (un-shuffled) order of the active source's song IDs. We own
+    // shuffle at the app level (controller.shuffleModeEnabled is forced
+    // off) so that the user queue can sit at currentIndex+1 and play
+    // before any source item under any shuffle state. Spotify-equivalent.
+    private var originalSourceOrder: List<Long> = emptyList()
+
     private val prefs = application.getSharedPreferences("playback", android.content.Context.MODE_PRIVATE)
 
     private val listener = object : Player.Listener {
@@ -134,14 +140,43 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             pushDuration()
         }
 
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int,
+        ) {
+            // Spotify-queue contract: a user-queued item is consumed the
+            // moment we leave it (auto-advance or manual skip). The new
+            // item is already prepared and playing, so removing the old
+            // index is a safe timeline mutation that just shifts indices.
+            val oldIdx = oldPosition.mediaItemIndex
+            val newIdx = newPosition.mediaItemIndex
+            if (oldIdx == newIdx) return
+            val c = controller ?: return
+            if (oldIdx < 0 || oldIdx >= c.mediaItemCount) return
+            if (c.getMediaItemAt(oldIdx).isUserQueued()) {
+                c.removeMediaItem(oldIdx)
+            }
+        }
+
         override fun onTimelineChanged(timeline: Timeline, reason: Int) {
             pushQueueAvailability()
             pushQueue()
         }
 
         override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
-            _shuffleEnabled.value = shuffleModeEnabled
-            prefs.edit().putBoolean(PREF_SHUFFLE, shuffleModeEnabled).apply()
+            // App owns shuffle so the user queue can occupy a fixed slot.
+            // If anything (Android Auto, system controllers, etc.) toggles
+            // the controller's shuffle flag, adopt the change at the app
+            // level and immediately force the controller flag back off.
+            controller?.let { c ->
+                if (c.shuffleModeEnabled) c.shuffleModeEnabled = false
+            }
+            if (shuffleModeEnabled != _shuffleEnabled.value) {
+                _shuffleEnabled.value = shuffleModeEnabled
+                prefs.edit().putBoolean(PREF_SHUFFLE, shuffleModeEnabled).apply()
+                rearrangeSourceItems(toShuffled = shuffleModeEnabled)
+            }
         }
 
         override fun onRepeatModeChanged(repeatMode: Int) {
@@ -159,7 +194,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     c.addListener(listener)
                     val savedShuffle = prefs.getBoolean(PREF_SHUFFLE, false)
                     val savedRepeat = prefs.getInt(PREF_REPEAT, Player.REPEAT_MODE_OFF)
-                    c.shuffleModeEnabled = savedShuffle
+                    // Force the controller's shuffle off — app owns shuffle
+                    // semantics now, layered on top of the timeline so the
+                    // user queue stays at currentIndex+1 under any state.
+                    c.shuffleModeEnabled = false
                     c.repeatMode = savedRepeat
                     _shuffleEnabled.value = savedShuffle
                     _repeatMode.value = savedRepeat
@@ -195,6 +233,8 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     fun play(song: SongDto) {
         val c = controller ?: return
+        originalSourceOrder = listOf(song.id)
+        c.shuffleModeEnabled = false
         c.setMediaItem(song.toMediaItem())
         c.prepare()
         c.playWhenReady = true
@@ -203,9 +243,19 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     fun playPlaylist(songs: List<SongDto>, startIndex: Int = 0) {
         if (songs.isEmpty()) return
         val c = controller ?: return
-        val items = songs.map { it.toMediaItem() }
-        val clamped = startIndex.coerceIn(0, items.lastIndex)
-        c.setMediaItems(items, clamped, 0L)
+        originalSourceOrder = songs.map { it.id }
+        // Honour the existing app-level shuffle flag: if shuffle is on,
+        // hand the player a pre-shuffled timeline. The player itself stays
+        // un-shuffled so the user queue's slot stays predictable.
+        val ordered = if (_shuffleEnabled.value) songs.shuffled() else songs
+        val items = ordered.map { it.toMediaItem() }
+        val clampedSongIndex = startIndex.coerceIn(0, songs.lastIndex)
+        // After a shuffle, find where the originally-requested startIndex
+        // landed so playback still begins on the song the user tapped.
+        val startSongId = songs[clampedSongIndex].id
+        val playIndex = ordered.indexOfFirst { it.id == startSongId }.coerceAtLeast(0)
+        c.shuffleModeEnabled = false
+        c.setMediaItems(items, playIndex, 0L)
         c.prepare()
         c.playWhenReady = true
     }
@@ -213,9 +263,14 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     fun playPlaylistShuffled(songs: List<SongDto>) {
         if (songs.isEmpty()) return
         val c = controller ?: return
+        originalSourceOrder = songs.map { it.id }
+        if (!_shuffleEnabled.value) {
+            _shuffleEnabled.value = true
+            prefs.edit().putBoolean(PREF_SHUFFLE, true).apply()
+        }
         val items = songs.shuffled().map { it.toMediaItem() }
+        c.shuffleModeEnabled = false
         c.setMediaItems(items, 0, 0L)
-        c.shuffleModeEnabled = true
         c.prepare()
         c.playWhenReady = true
     }
@@ -242,8 +297,49 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun toggleShuffle() {
+        val newShuffle = !_shuffleEnabled.value
+        _shuffleEnabled.value = newShuffle
+        prefs.edit().putBoolean(PREF_SHUFFLE, newShuffle).apply()
+        rearrangeSourceItems(toShuffled = newShuffle)
+    }
+
+    /**
+     * Reorder the source-only portion of the timeline that's still ahead
+     * of playback. Items already played stay in place (history); the user
+     * queue between current and the first source item is preserved so its
+     * insertion order survives a shuffle toggle.
+     */
+    private fun rearrangeSourceItems(toShuffled: Boolean) {
         val c = controller ?: return
-        c.shuffleModeEnabled = !c.shuffleModeEnabled
+        if (originalSourceOrder.isEmpty()) return
+        val total = c.mediaItemCount
+        val currentIdx = c.currentMediaItemIndex
+        if (currentIdx < 0 || total <= currentIdx + 1) return
+
+        // Skip past the user-queue block immediately after the current item.
+        var keepEnd = currentIdx + 1
+        while (keepEnd < total && c.getMediaItemAt(keepEnd).isUserQueued()) keepEnd++
+        if (keepEnd >= total) return
+
+        val futureItems = (keepEnd until total).map { c.getMediaItemAt(it) }
+        val byId = futureItems.associateBy { it.mediaId.toLongOrNull() }
+        val futureIds = byId.keys.filterNotNull().toSet()
+
+        val targetIds = if (toShuffled) {
+            futureIds.shuffled()
+        } else {
+            // Restore by original order, filtering to whatever's still ahead
+            // (items already played stay where they are).
+            originalSourceOrder.filter { it in futureIds }
+        }
+        val targetItems = targetIds.mapNotNull { byId[it] }
+        if (targetItems.isEmpty()) return
+
+        // remove + add (rather than replaceMediaItems) keeps this working
+        // on older MediaController surfaces and avoids an in-place mutation
+        // glitch we saw under quick shuffle-toggles.
+        c.removeMediaItems(keepEnd, total)
+        c.addMediaItems(keepEnd, targetItems)
     }
 
     fun cycleRepeat() {
@@ -255,19 +351,44 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * Insert [song] at the head of the user queue (right after the
+     * currently-playing item), marked with the user-queue flag so it
+     * gets consumed once played. Spotify-style "Play next".
+     */
     fun playNext(song: SongDto) {
         val c = controller ?: return
         val insertIndex = (c.currentMediaItemIndex + 1).coerceAtMost(c.mediaItemCount)
-        c.addMediaItem(insertIndex, song.toMediaItem())
+        c.addMediaItem(insertIndex, song.toMediaItem(userQueued = true))
     }
 
+    /**
+     * Append [song] to the tail of the user queue (after any existing
+     * user-queued items, before the auto-queue from the current source).
+     * Spotify-style "Add to queue".
+     */
     fun addToQueue(song: SongDto) {
         val c = controller ?: return
-        c.addMediaItem(song.toMediaItem())
+        var i = c.currentMediaItemIndex + 1
+        while (i < c.mediaItemCount && c.getMediaItemAt(i).isUserQueued()) i++
+        c.addMediaItem(i.coerceAtMost(c.mediaItemCount), song.toMediaItem(userQueued = true))
     }
 
     fun skipToQueueItem(index: Int) {
         controller?.seekTo(index, 0L)
+    }
+
+    /**
+     * Remove the queue item at [index]. No-op for the currently playing
+     * item — Media3 would silently advance to the next track, which is
+     * never what a user means when they tap "remove" on a row that's
+     * actively playing.
+     */
+    fun removeFromQueue(index: Int) {
+        val c = controller ?: return
+        if (index < 0 || index >= c.mediaItemCount) return
+        if (index == c.currentMediaItemIndex) return
+        c.removeMediaItem(index)
     }
 
     /**
@@ -545,20 +666,52 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     private fun pushQueue() {
         val c = controller ?: run { _queue.value = emptyList(); return }
-        _queue.value = (0 until c.mediaItemCount).mapNotNull { i -> c.getMediaItemAt(i).toSongDto() }
+        val current = c.currentMediaItemIndex
+        _queue.value = (0 until c.mediaItemCount).mapNotNull { i ->
+            val item = c.getMediaItemAt(i)
+            val song = item.toSongDto() ?: return@mapNotNull null
+            QueueEntry(
+                song = song,
+                index = i,
+                isCurrent = i == current,
+                userQueued = item.isUserQueued(),
+            )
+        }
     }
 
     private fun maybeRecordPlay() {
         val id = trackedSongId ?: return
         val listened = listenedMs
         val duration = trackedDurationMs
-        if (listened >= LISTEN_THRESHOLD_MS || (duration > 0 && listened * 2 >= duration)) {
-            viewModelScope.launch {
-                try { historyRepository.record(id, listened) } catch (_: Throwable) {}
-            }
-            if (!DownloadRepository.isDownloaded(id)) {
-                DownloadRepository.download(id)
-            }
+        // Drop pure no-ops: queue advanced past this item before playback
+        // ever started (listenedMs == 0). Anything with even a moment of
+        // playback is worth telling the recommender about — either as a
+        // real play or as a skip signal.
+        if (listened <= 0L) return
+
+        val countsAsFullPlay = listened >= LISTEN_THRESHOLD_MS ||
+            (duration > 0 && listened * 2 >= duration)
+        // `completion_ratio` is the per-play listened/total ratio, capped
+        // at 1.0 (replay past the end via seek-back is possible). Null
+        // when duration is unknown (live streams / pre-prepare) so the
+        // backend can distinguish "no signal" from "0% played".
+        val ratio = if (duration > 0)
+            (listened.toDouble() / duration).coerceAtMost(1.0)
+        else null
+        viewModelScope.launch {
+            try {
+                historyRepository.record(
+                    songId = id,
+                    durationListenedMs = listened,
+                    completionRatio = ratio,
+                    wasSkipped = !countsAsFullPlay,
+                )
+            } catch (_: Throwable) {}
+        }
+        // Auto-download only triggers on a real play — a skip shouldn't
+        // commit the user to caching the file.
+        if (countsAsFullPlay && !DownloadRepository.isDownloaded(id)) {
+            DownloadRepository.download(id)
         }
     }
 
@@ -581,22 +734,47 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     }
 }
 
+/**
+ * One row in the playback timeline as exposed to the UI. Splits the queue
+ * into two semantic groups via [userQueued]: items the user explicitly
+ * dropped via "Add to queue" / "Play next" (true) versus auto-queued
+ * tracks coming from the playing source — album, playlist, etc. (false).
+ * Mirrors Spotify's "Next in queue" / "Next from <source>" split.
+ */
 @UnstableApi
-private fun SongDto.toMediaItem(): MediaItem =
-    MediaItem.Builder()
+data class QueueEntry(
+    val song: SongDto,
+    val index: Int,
+    val isCurrent: Boolean,
+    val userQueued: Boolean,
+)
+
+private const val KEY_USER_QUEUED = "user_queued"
+
+@UnstableApi
+private fun SongDto.toMediaItem(userQueued: Boolean = false): MediaItem {
+    val extras = if (userQueued) {
+        android.os.Bundle().apply { putBoolean(KEY_USER_QUEUED, true) }
+    } else null
+    val metadata = MediaMetadata.Builder()
+        .setTitle(title)
+        .setArtist(artist)
+        .setAlbumTitle(album)
+        .setArtworkUri(
+            if (hasCoverArt) android.net.Uri.parse(Network.coverUrl(id)) else null
+        )
+        .apply { if (extras != null) setExtras(extras) }
+        .build()
+    return MediaItem.Builder()
         .setMediaId(id.toString())
         .setUri(Network.streamUrl(id))
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(title)
-                .setArtist(artist)
-                .setAlbumTitle(album)
-                .setArtworkUri(
-                    if (hasCoverArt) android.net.Uri.parse(Network.coverUrl(id)) else null
-                )
-                .build()
-        )
+        .setMediaMetadata(metadata)
         .build()
+}
+
+@UnstableApi
+private fun MediaItem.isUserQueued(): Boolean =
+    mediaMetadata.extras?.getBoolean(KEY_USER_QUEUED, false) == true
 
 @UnstableApi
 private fun MediaItem.toSongDto(): SongDto? {

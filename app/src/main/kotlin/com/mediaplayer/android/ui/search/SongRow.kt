@@ -19,6 +19,7 @@ import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FileDownloadDone
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
@@ -55,6 +56,7 @@ fun SongRow(
     isDownloaded: Boolean = false,
     onArtistClick: ((String) -> Unit)? = null,
     onAlbumClick: ((String, String) -> Unit)? = null,
+    onMore: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -102,6 +104,16 @@ fun SongRow(
                     contentDescription = if (isLiked) "Unlike" else "Like",
                     tint = if (isLiked) MaterialTheme.colorScheme.primary
                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+        if (onMore != null) {
+            IconButton(onClick = onMore) {
+                Icon(
+                    imageVector = Icons.Filled.MoreVert,
+                    contentDescription = "More options",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(22.dp),
                 )
             }

@@ -1,7 +1,9 @@
 package com.mediaplayer.android.playback
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.os.Bundle
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -162,6 +164,18 @@ class MediaPlaybackService : MediaLibraryService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
+        // Pin a fresh audio-session id BEFORE the equalizer attaches.
+        // ExoPlayer otherwise allocates the id lazily on first AudioTrack
+        // creation, so `player.audioSessionId` is 0 here and the equalizer
+        // would silently no-op for the lifetime of the service. Generating
+        // and assigning explicitly guarantees a stable id the Equalizer
+        // hardware effect can bind to from the first frame onwards.
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val audioSessionId = audioManager.generateAudioSessionId()
+        if (audioSessionId != AudioManager.ERROR) {
+            player.audioSessionId = audioSessionId
+        }
+
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = android.app.PendingIntent.getActivity(
             this,
@@ -186,9 +200,11 @@ class MediaPlaybackService : MediaLibraryService() {
             }
         }
 
-        // M13: bind the hardware Equalizer to this player's audio session.
-        // audioSessionId is allocated at build time; 0 means unsupported.
-        EqualizerController.init(this, player.audioSessionId)
+        // M13: bind the hardware Equalizer to the audio session we pinned
+        // above. Using the locally-generated id (rather than re-reading
+        // `player.audioSessionId`) protects against drivers that report
+        // 0 until the first AudioTrack is built.
+        EqualizerController.init(this, audioSessionId)
 
         // Checkpoint the queue + position so Android Auto can show a
         // "resume" chip on cold car connect. See onPlaybackResumption.

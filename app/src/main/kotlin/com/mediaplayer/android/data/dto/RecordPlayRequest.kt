@@ -6,4 +6,6 @@ import kotlinx.serialization.Serializable
 data class RecordPlayRequest(
     val songId: Long,
     val durationListenedMs: Long,
+    val completionRatio: Double? = null,
+    val wasSkipped: Boolean? = null,
 )

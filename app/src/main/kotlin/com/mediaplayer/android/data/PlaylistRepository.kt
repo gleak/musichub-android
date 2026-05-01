@@ -6,6 +6,8 @@ import com.mediaplayer.android.data.dto.PlaylistDetailDto
 import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.data.dto.RenamePlaylistRequest
 import com.mediaplayer.android.data.dto.ReorderSongsRequest
+import com.mediaplayer.android.data.dto.ShareLinkDto
+import com.mediaplayer.android.data.dto.SharePreviewDto
 
 /**
  * Thin wrapper over [MediaPlayerApi]'s playlist endpoints. Exists so
@@ -47,4 +49,13 @@ class PlaylistRepository(
 
     suspend fun reorder(playlistId: Long, songIds: List<Long>): PlaylistDetailDto =
         api.reorderPlaylistSongs(playlistId, ReorderSongsRequest(songIds))
+
+    suspend fun createShare(playlistId: Long): ShareLinkDto =
+        api.createPlaylistShare(playlistId)
+
+    suspend fun previewShare(token: String): SharePreviewDto =
+        api.previewPlaylistShare(token)
+
+    suspend fun acceptShare(token: String): PlaylistDetailDto =
+        api.acceptPlaylistShare(token)
 }

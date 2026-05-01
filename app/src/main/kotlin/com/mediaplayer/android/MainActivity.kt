@@ -1,6 +1,7 @@
 package com.mediaplayer.android
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -76,6 +77,7 @@ import com.mediaplayer.android.ui.liked.LikedScreen
 import com.mediaplayer.android.ui.player.MiniPlayer
 import com.mediaplayer.android.ui.player.NowPlayingSheet
 import com.mediaplayer.android.ui.playlists.PlaylistDetailScreen
+import com.mediaplayer.android.ui.playlists.PlaylistShareImporter
 import com.mediaplayer.android.ui.playlists.PlaylistsScreen
 import com.mediaplayer.android.ui.playlists.SpotifyImportScreen
 import com.mediaplayer.android.ui.search.SearchScreen
@@ -84,22 +86,48 @@ import kotlinx.coroutines.launch
 
 @UnstableApi
 class MainActivity : ComponentActivity() {
+    // Pending share token from a `mediaplayer://share/<token>` deep link.
+    // Held as Compose state so the AppScaffold can pop the import dialog
+    // as soon as it lands. `singleTask` launchMode means a deep link
+    // tapped while the app is alive routes through onNewIntent — both
+    // entry points feed this same state.
+    private val pendingShareToken = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        consumeShareIntent(intent)
         setContent {
             MediaPlayerTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    AuthGate()
+                    AuthGate(
+                        pendingShareToken = pendingShareToken.value,
+                        onShareConsumed = { pendingShareToken.value = null },
+                    )
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        consumeShareIntent(intent)
+    }
+
+    private fun consumeShareIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme != "mediaplayer" || data.host != "share") return
+        val token = data.lastPathSegment?.takeIf { it.isNotBlank() } ?: return
+        pendingShareToken.value = token
     }
 }
 
 @UnstableApi
 @Composable
-private fun AuthGate() {
+private fun AuthGate(
+    pendingShareToken: String?,
+    onShareConsumed: () -> Unit,
+) {
     val authVm: AuthViewModel = viewModel(factory = AuthViewModel.Factory)
     val authState by authVm.state.collectAsStateWithLifecycle()
 
@@ -140,7 +168,11 @@ private fun AuthGate() {
                         onSignOut = authVm::signOut,
                     )
                     CompositionLocalProvider(LocalCurrentUser provides currentUser) {
-                        AppScaffold(onSignOut = authVm::signOut)
+                        AppScaffold(
+                            onSignOut = authVm::signOut,
+                            pendingShareToken = pendingShareToken,
+                            onShareConsumed = onShareConsumed,
+                        )
                     }
                 }
             }
@@ -204,7 +236,11 @@ private data class BottomDestination(
 
 @UnstableApi
 @Composable
-private fun AppScaffold(onSignOut: () -> Unit) {
+private fun AppScaffold(
+    onSignOut: () -> Unit,
+    pendingShareToken: String? = null,
+    onShareConsumed: () -> Unit = {},
+) {
     val playbackVm: PlaybackViewModel = viewModel()
     val currentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
     var sheetOpen by remember { mutableStateOf(false) }
@@ -327,6 +363,20 @@ private fun AppScaffold(onSignOut: () -> Unit) {
                 ChangelogPreferences.instance.markSeen(AppVersion.VERSION)
             }
         })
+    }
+
+    // Incoming share-link dialog. The token gets routed up from the
+    // activity's onCreate / onNewIntent and we pop the import preview
+    // here so it overlays whatever screen the user happens to be on.
+    if (pendingShareToken != null) {
+        PlaylistShareImporter(
+            token = pendingShareToken,
+            onDismiss = onShareConsumed,
+            onImported = { playlistId, _ ->
+                onShareConsumed()
+                navController.navigate(Routes.playlistDetail(playlistId))
+            },
+        )
     }
 }
 

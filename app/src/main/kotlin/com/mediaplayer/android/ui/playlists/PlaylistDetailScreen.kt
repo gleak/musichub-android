@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
@@ -48,8 +49,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.launch
+import com.mediaplayer.android.data.PlaylistRepository
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.compose.ui.Alignment
@@ -98,13 +103,16 @@ fun PlaylistDetailScreen(
 
     var sheetSong by remember { mutableStateOf<SongDto?>(null) }
     var addSongsOpen by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
-    var lastAdded by remember { mutableStateOf<String?>(null) }
+    var snackMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val playlistRepository = remember { PlaylistRepository() }
 
-    LaunchedEffect(lastAdded) {
-        val msg = lastAdded ?: return@LaunchedEffect
+    LaunchedEffect(snackMessage) {
+        val msg = snackMessage ?: return@LaunchedEffect
         snackbar.showSnackbar(msg)
-        lastAdded = null
+        snackMessage = null
     }
 
     val successState = state as? PlaylistDetailUiState.Success
@@ -133,6 +141,43 @@ fun PlaylistDetailScreen(
                                 Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
                             }
                         }
+                        IconButton(
+                            onClick = {
+                                if (sharing) return@IconButton
+                                sharing = true
+                                scope.launch {
+                                    try {
+                                        val link = playlistRepository.createShare(playlistId)
+                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(
+                                                Intent.EXTRA_SUBJECT,
+                                                "Listen to ${successState.playlist.name}",
+                                            )
+                                            putExtra(Intent.EXTRA_TEXT, link.url)
+                                        }
+                                        // Wrap in chooser so the user picks WhatsApp /
+                                        // Messages / etc. Each tap mints a new token,
+                                        // so cancelling the chooser leaves a token
+                                        // alive but unused — harmless.
+                                        context.startActivity(
+                                            Intent.createChooser(intent, "Share playlist")
+                                        )
+                                    } catch (t: Throwable) {
+                                        snackMessage = t.message ?: "Couldn't create share link"
+                                    } finally {
+                                        sharing = false
+                                    }
+                                }
+                            },
+                            enabled = !sharing,
+                        ) {
+                            if (sharing) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Filled.Share, contentDescription = "Share playlist")
+                            }
+                        }
                         IconButton(onClick = { addSongsOpen = true }) {
                             Icon(Icons.Filled.Add, contentDescription = "Add songs")
                         }
@@ -157,7 +202,10 @@ fun PlaylistDetailScreen(
                         downloadedIds = downloadedIds,
                         onPlayFromIndex = onPlayFromIndex,
                         onShufflePlay = onShufflePlay,
-                        onRemoveSong = viewModel::removeSong,
+                        onRemoveSong = { songId ->
+                            viewModel.removeSong(songId)
+                            snackMessage = "Removed from playlist"
+                        },
                         onReorderSongs = viewModel::reorderSongs,
                         onLongPressSong = { sheetSong = it },
                         onDownload = {
@@ -165,7 +213,7 @@ fun PlaylistDetailScreen(
                             val cm = context.getSystemService(ConnectivityManager::class.java)
                             val caps = cm.getNetworkCapabilities(cm.activeNetwork)
                             val onWifi = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
-                            if (!onWifi) lastAdded = "Download queued — will start on Wi-Fi"
+                            if (!onWifi) snackMessage = "Download queued — will start on Wi-Fi"
                         },
                         onRemoveDownloads = viewModel::removePlaylistDownloads,
                     )
@@ -180,7 +228,7 @@ fun PlaylistDetailScreen(
             songId = song.id,
             onDismiss = { sheetSong = null },
             onAdded = { playlistName ->
-                lastAdded = "Added to $playlistName"
+                snackMessage = "Added to $playlistName"
                 viewModel.refresh()
                 sheetSong = null
             },
@@ -297,14 +345,20 @@ private fun PlaylistDetailBody(
             ) { idx, entry ->
                 val song = entry.song
                 ReorderableItem(reorderState, key = entry.playlistSongId) {
-                    val dismissState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { value ->
-                            if (value == SwipeToDismissBoxValue.EndToStart) {
-                                onRemoveSong(song.id)
-                                true
-                            } else false
-                        },
-                    )
+                    // Canonical Material3 pattern: don't fire side effects from
+                    // confirmValueChange (it can be invoked multiple times during
+                    // a single gesture, and ignored values get re-tried). Observe
+                    // currentValue settling instead. `removed` guards re-entry
+                    // because the row stays composed until server response trims
+                    // `entries`.
+                    var removed by remember(entry.playlistSongId) { mutableStateOf(false) }
+                    val dismissState = rememberSwipeToDismissBoxState()
+                    LaunchedEffect(dismissState.currentValue) {
+                        if (!removed && dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
+                            removed = true
+                            onRemoveSong(song.id)
+                        }
+                    }
                     SwipeToDismissBox(
                         state = dismissState,
                         enableDismissFromStartToEnd = false,
@@ -345,6 +399,7 @@ private fun PlaylistDetailBody(
                                 isDownloaded = song.id in downloadedIds,
                                 onClick = { onPlayFromIndex(songsForPlayback, idx) },
                                 onLongPress = { onLongPressSong(song) },
+                                onMore = { onLongPressSong(song) },
                                 modifier = Modifier.weight(1f),
                             )
                         }

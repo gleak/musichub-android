@@ -136,6 +136,23 @@ interface MediaPlayerApi {
         @Body body: ReorderSongsRequest,
     ): PlaylistDetailDto
 
+    // ---------- Playlist share (M15a) ----------
+
+    @POST("api/playlists/{id}/share")
+    suspend fun createPlaylistShare(
+        @Path("id") id: Long,
+    ): com.mediaplayer.android.data.dto.ShareLinkDto
+
+    @GET("api/playlists/share/{token}")
+    suspend fun previewPlaylistShare(
+        @Path("token") token: String,
+    ): com.mediaplayer.android.data.dto.SharePreviewDto
+
+    @POST("api/playlists/share/{token}/accept")
+    suspend fun acceptPlaylistShare(
+        @Path("token") token: String,
+    ): PlaylistDetailDto
+
     // ---------- Find new music (M9) ----------
 
     /** Kicks off a Prowlarr search; server blocks briefly while the indexer answers. */
