@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>MusicHub — Onda sonora geometrica</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --lime: #A8E04E;
+    --lime-d: #8FC135;
+    --ink: #0A0A0A;
+    --ink2: #141414;
+    --line: rgba(255,255,255,0.08);
+    --muted: #8A8A85;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--ink); color: #EFEFEC; font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+  body { padding: 56px 64px 96px; }
+
+  .topbar {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 32px; border-bottom: 1px solid var(--line); margin-bottom: 56px;
+  }
+  .topbar h1 { font-size: 42px; font-weight: 700; letter-spacing: -0.02em; }
+  .topbar h1 .accent { color: var(--lime); }
+  .topbar .meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); text-align: right; line-height: 1.6; }
+  .pill { display: inline-block; padding: 4px 10px; border: 1px solid var(--lime); color: var(--lime); border-radius: 100px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; margin-bottom: 12px; }
+
+  section { margin-bottom: 88px; }
+  .section-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 32px; }
+  .section-head .num { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--lime); letter-spacing: 0.1em; }
+  .section-head h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .section-head .desc { color: var(--muted); font-size: 14px; margin-left: auto; max-width: 520px; text-align: right; }
+
+  /* HERO */
+  .hero {
+    display: grid; grid-template-columns: 1.4fr 1fr; gap: 48px;
+    background: var(--ink2); border: 1px solid var(--line); border-radius: 28px; padding: 56px;
+  }
+  .hero-left .lockup {
+    display: flex; align-items: center; gap: 32px; margin-bottom: 40px;
+  }
+  .hero-left .ic-big {
+    width: 200px; height: 200px; border-radius: 26%; overflow: hidden;
+    box-shadow: 0 30px 60px -20px rgba(168,224,78,0.25), 0 1px 0 rgba(255,255,255,0.06) inset;
+  }
+  .hero-left .ic-big img { width: 100%; height: 100%; }
+  .hero-left .ic-big.dark { box-shadow: 0 30px 60px -20px rgba(0,0,0,0.6), 0 0 0 1px rgba(168,224,78,0.18) inset; }
+  .hero-left h2 { font-size: 56px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; margin-bottom: 14px; }
+  .hero-left .subhead { color: var(--muted); font-size: 16px; line-height: 1.55; max-width: 480px; }
+  .hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 40px; padding-top: 32px; border-top: 1px solid var(--line); }
+  .hero-stats .stat .v { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; color: var(--lime); }
+  .hero-stats .stat .l { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; margin-top: 4px; }
+  .hero-right { display: flex; flex-direction: column; gap: 14px; }
+  .hero-right .row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: rgba(255,255,255,0.03); border-radius: 14px; }
+  .hero-right .row .ic { width: 56px; height: 56px; border-radius: 26%; overflow: hidden; flex-shrink: 0; }
+  .hero-right .row .ic img { width: 100%; height: 100%; }
+  .hero-right .row .meta-stack .name { font-size: 13px; font-weight: 600; }
+  .hero-right .row .meta-stack .sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px; }
+
+  /* ANATOMY */
+  .anatomy {
+    background: var(--ink2); border: 1px solid var(--line); border-radius: 24px; padding: 40px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; align-items: start;
+  }
+  .layer { display: flex; flex-direction: column; gap: 14px; }
+  .layer-frame {
+    aspect-ratio: 1; background: #0A0A0A; border: 1px dashed rgba(255,255,255,0.16);
+    border-radius: 12px; position: relative; overflow: hidden;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 12px 12px;
+  }
+  .layer-frame img { width: 100%; height: 100%; display: block; }
+  .layer-frame .safezone { position: absolute; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; }
+  .layer-frame .safezone::before { content: ""; width: 66.66%; height: 66.66%; border-radius: 50%; border: 1px dashed rgba(168, 224, 78, 0.55); }
+  .layer-frame .safezone::after { content: ""; position: absolute; width: 72.2%; height: 72.2%; border-radius: 28%; border: 1px dashed rgba(168, 224, 78, 0.3); }
+  .layer h3 { font-size: 13px; font-weight: 600; }
+  .layer .meta { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+  .layer p { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .anatomy-caption { grid-column: 1 / -1; display: flex; gap: 24px; padding-top: 24px; border-top: 1px solid var(--line); margin-top: 8px; }
+  .legend { display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+  .legend .swatch { width: 16px; height: 1px; border-bottom: 1px dashed; }
+  .legend.lime .swatch { border-color: rgba(168, 224, 78, 0.55); }
+  .legend.lime-soft .swatch { border-color: rgba(168, 224, 78, 0.3); }
+  .legend.white .swatch { border-color: rgba(255,255,255,0.16); }
+
+  /* RHYTHM SPEC */
+  .spec {
+    background: var(--ink2); border: 1px solid var(--line); border-radius: 24px; padding: 40px;
+    display: grid; grid-template-columns: 1.2fr 1fr; gap: 48px; align-items: center;
+  }
+  .spec svg { width: 100%; height: auto; }
+  .spec-meta dt { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; color: var(--lime); text-transform: uppercase; margin-bottom: 4px; }
+  .spec-meta dd { font-size: 14px; color: #EFEFEC; line-height: 1.6; margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+  .spec-meta dd:last-child { border-bottom: none; }
+  .spec-meta dd code { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--lime); }
+
+  /* DENSITY */
+  .density-ladder {
+    background: var(--ink2); border: 1px solid var(--line); border-radius: 24px;
+    padding: 40px; overflow-x: auto;
+  }
+  .density-row { display: flex; align-items: flex-end; gap: 36px; padding-bottom: 20px; }
+  .density-row + .density-row { padding-top: 20px; border-top: 1px solid var(--line); }
+  .density-label-col { flex-shrink: 0; width: 140px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; padding-bottom: 14px; }
+  .density-label-col .v { color: #fff; font-size: 13px; letter-spacing: 0; text-transform: none; font-family: 'Inter'; font-weight: 600; margin-bottom: 4px; }
+  .density-cell { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .density-cell .ic { border-radius: 22%; overflow: hidden; box-shadow: 0 6px 14px -6px rgba(0,0,0,0.6); }
+  .density-cell .ic img { display: block; }
+  .density-cell .lbl { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+
+  /* WALLPAPER */
+  .wallpaper-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  .phone-mock { aspect-ratio: 9 / 19.5; border-radius: 36px; padding: 28px 22px 22px; position: relative; overflow: hidden; box-shadow: 0 30px 60px -30px rgba(0,0,0,0.7), 0 0 0 1px var(--line); }
+  .phone-mock.wp-dawn { background: radial-gradient(120% 80% at 30% 10%, #4A3F8A 0%, #2A2350 40%, #0E0B2A 100%); }
+  .phone-mock.wp-paper { background: linear-gradient(180deg, #F4F2EC 0%, #DDD7C5 100%); }
+  .phone-mock.wp-noir { background: radial-gradient(100% 60% at 50% 0%, #1A1A1A 0%, #050505 100%); }
+  .phone-mock .notch { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 88px; height: 26px; background: #000; border-radius: 13px; opacity: 0.55; }
+  .phone-mock .clock { font-weight: 700; font-size: 56px; letter-spacing: -0.04em; text-align: center; padding-top: 36px; padding-bottom: 24px; }
+  .phone-mock.wp-dawn .clock, .phone-mock.wp-noir .clock { color: #fff; text-shadow: 0 2px 24px rgba(0,0,0,0.4); }
+  .phone-mock.wp-paper .clock { color: #1a1a1a; }
+  .home-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding-top: 8px; }
+  .home-row .icon-tile { aspect-ratio: 1; border-radius: 26%; overflow: hidden; box-shadow: 0 10px 22px -8px rgba(0,0,0,0.5); }
+  .home-row .icon-tile img { width: 100%; height: 100%; display: block; }
+  .home-row .placeholder { aspect-ratio: 1; border-radius: 26%; background: rgba(255,255,255,0.07); backdrop-filter: blur(20px); }
+  .phone-mock.wp-paper .home-row .placeholder { background: rgba(0,0,0,0.06); }
+  .phone-label { margin-top: 16px; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; text-align: center; }
+
+  /* MASK */
+  .mask-gallery { background: var(--ink2); border: 1px solid var(--line); border-radius: 24px; padding: 40px; }
+  .mask-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 24px; align-items: center; }
+  .mask-cell { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .mask-cell .ic {
+    width: 100%; aspect-ratio: 1;
+    background-image: url(android-icons/waveform-lime/svg/ic_launcher_full.svg);
+    background-size: cover;
+  }
+  .mask-cell .ic.circle { -webkit-mask: radial-gradient(circle, #000 49.5%, transparent 50%); mask: radial-gradient(circle, #000 49.5%, transparent 50%); }
+  .mask-cell .ic.squircle { border-radius: 26%; }
+  .mask-cell .ic.rounded { border-radius: 18%; }
+  .mask-cell .ic.square { border-radius: 4%; }
+  .mask-cell .ic.teardrop { border-radius: 50% 50% 50% 8%; }
+  .mask-cell .ic.diamond { transform: rotate(45deg) scale(0.72); border-radius: 12%; }
+  .mask-cell .lbl { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+
+  /* THEMED */
+  .themed-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .themed-cell { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+  .themed-cell .mono-bg { width: 100%; aspect-ratio: 1; border-radius: 26%; display: flex; align-items: center; justify-content: center; box-shadow: 0 12px 28px -12px rgba(0,0,0,0.5); }
+  .themed-cell .mono-bg img { width: 60%; height: 60%; }
+  .themed-cell .lbl { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; text-align: center; }
+
+  /* FILE MAP */
+  .filemap {
+    background: var(--ink2); border: 1px solid var(--line); border-radius: 24px; padding: 32px 40px;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.9; color: #d4d4cf;
+    white-space: pre; overflow-x: auto;
+  }
+  .filemap .c { color: var(--lime); }
+  .filemap .m { color: var(--muted); }
+
+  footer { margin-top: 80px; padding-top: 32px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>MusicHub <span class="accent">/</span> Onda sonora</h1>
+  <div class="meta">
+    Direzione finale · v1.0<br>
+    Adaptive icon · Android 8+<br>
+    Themed icon · Android 13+
+  </div>
+</div>
+
+<!-- HERO -->
+<section>
+  <div class="hero">
+    <div class="hero-left">
+      <span class="pill">DIREZIONE SCELTA</span>
+      <h2>Onda sonora<br>geometrica.</h2>
+      <p class="subhead">Otto barre con altezze e spessori calibrati su un ritmo asimmetrico — non casuale. Due picchi (uno centrale, uno spostato a destra) creano la cadenza che ricorda il visualizer del Now Playing dell'app.</p>
+      <div class="lockup">
+        <div class="ic-big"><img src="android-icons/waveform-lime/svg/ic_launcher_full.svg" alt=""></div>
+        <div class="ic-big dark"><img src="android-icons/waveform-dark/svg/ic_launcher_full.svg" alt=""></div>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><div class="v">8</div><div class="l">Barre</div></div>
+        <div class="stat"><div class="v">2</div><div class="l">Picchi · ritmo asimmetrico</div></div>
+        <div class="stat"><div class="v">62dp</div><div class="l">Picco max · entro safe zone</div></div>
+      </div>
+    </div>
+
+    <div class="hero-right">
+      <div class="row">
+        <div class="ic"><img src="android-icons/waveform-lime/svg/ic_launcher_full.svg"></div>
+        <div class="meta-stack"><div class="name">MusicHub</div><div class="sub">Lime · Default · Light</div></div>
+      </div>
+      <div class="row">
+        <div class="ic"><img src="android-icons/waveform-dark/svg/ic_launcher_full.svg"></div>
+        <div class="meta-stack"><div class="name">MusicHub</div><div class="sub">Dark · Notturno</div></div>
+      </div>
+      <div class="row" style="background: linear-gradient(180deg, rgba(168,224,78,0.08) 0%, transparent 100%); border: 1px solid rgba(168,224,78,0.25);">
+        <div class="ic" style="background: linear-gradient(180deg, #5B4FE0 0%, #3D2FB8 100%); display: flex; align-items: center; justify-content: center;">
+          <img src="android-icons/waveform-lime/svg/ic_launcher_monochrome.svg" style="width: 70%; height: 70%;">
+        </div>
+        <div class="meta-stack"><div class="name">MusicHub</div><div class="sub">Themed · Material You</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ANATOMY -->
+<section>
+  <div class="section-head">
+    <span class="num">01</span>
+    <h2>Anatomia adattiva</h2>
+    <span class="desc">Android compone l'icona da layer indipendenti. Le barre stanno nel cerchio sicuro da 66dp; la maschera OEM viene applicata per ultima.</span>
+  </div>
+
+  <div class="anatomy">
+    <div class="layer">
+      <div class="layer-frame"><img src="android-icons/waveform-lime/svg/ic_launcher_background.svg" alt=""><div class="safezone"></div></div>
+      <span class="meta">Layer 1 · 108×108dp</span>
+      <h3>Background</h3>
+      <p>Sfondo lime con gradiente verticale e cerchi concentrici sussurrati al 8%. Niente contenuti critici — viene tagliato da ogni maschera.</p>
+    </div>
+
+    <div class="layer">
+      <div class="layer-frame" style="background: rgba(168,224,78,0.06);"><img src="android-icons/waveform-lime/svg/ic_launcher_foreground.svg" alt=""><div class="safezone"></div></div>
+      <span class="meta">Layer 2 · 108×108dp</span>
+      <h3>Foreground</h3>
+      <p>L'onda. Tutte le barre — comprese le più alte — entrano nel cerchio sicuro Ø 66dp. 18dp di bleed trasparente su ogni lato per il parallax.</p>
+    </div>
+
+    <div class="layer">
+      <div class="layer-frame" style="background: #2a2a2a;"><img src="android-icons/waveform-lime/svg/ic_launcher_monochrome.svg" alt="" style="filter: brightness(0) invert(1); opacity: 0.85;"><div class="safezone"></div></div>
+      <span class="meta">Layer 3 · Themed</span>
+      <h3>Monochrome</h3>
+      <p>Silhouette mono-colore. Il launcher la tinta con la palette Material You quando "Icone a tema" è attivo (Android 13+).</p>
+    </div>
+
+    <div class="layer">
+      <div class="layer-frame" style="background: #0a0a0a;"><img src="android-icons/waveform-lime/svg/ic_launcher_full.svg" alt="" style="border-radius: 26%;"></div>
+      <span class="meta">Composito · Squircle</span>
+      <h3>Risultato</h3>
+      <p>Background + foreground compositati e ritagliati dalla maschera del launcher. Qui: squircle Pixel.</p>
+    </div>
+
+    <div class="anatomy-caption">
+      <div class="legend lime"><span class="swatch"></span>Cerchio sicuro Ø 66dp</div>
+      <div class="legend lime-soft"><span class="swatch"></span>Quadrato visibile 72×72dp</div>
+      <div class="legend white"><span class="swatch"></span>Canvas 108×108dp · 18dp bleed</div>
+    </div>
+  </div>
+</section>
+
+<!-- RHYTHM SPEC -->
+<section>
+  <div class="section-head">
+    <span class="num">02</span>
+    <h2>Geometria delle barre</h2>
+    <span class="desc">Otto barre, due larghezze (5dp / 6dp), altezze su una scala armonica con due picchi. Le coordinate sono fisse — il ritmo è disegnato, non casuale.</span>
+  </div>
+
+  <div class="spec">
+    <div>
+      <svg viewBox="0 0 540 360" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+          </pattern>
+        </defs>
+        <rect width="540" height="360" fill="url(#grid)"/>
+
+        <!-- baseline -->
+        <line x1="60" y1="180" x2="500" y2="180" stroke="rgba(168,224,78,0.5)" stroke-width="1" stroke-dasharray="4 4"/>
+        <text x="60" y="200" fill="#8A8A85" font-family="JetBrains Mono" font-size="10" letter-spacing="0.1em">BASELINE · y=54</text>
+
+        <!-- Bars at 5x scale: x*5 + offset, h*5 -->
+        <!-- mapping 108→440 grid; offset 60 -->
+        <g transform="translate(60, 0)">
+          <!-- bar 1: x=24 h=14 w=5 -->
+          <rect x="98" y="151" width="20" height="58" rx="10" fill="#A8E04E"/>
+          <text x="108" y="240" fill="#A8E04E" font-family="JetBrains Mono" font-size="9" text-anchor="middle">14</text>
+          <!-- bar 2: x=32 h=30 -->
+          <rect x="130" y="119" width="20" height="122" rx="10" fill="#A8E04E"/>
+          <text x="140" y="270" fill="#A8E04E" font-family="JetBrains Mono" font-size="9" text-anchor="middle">30</text>
+          <!-- bar 3: x=40 h=22 -->
+          <rect x="162" y="135" width="20" height="90" rx="10" fill="#A8E04E"/>
+          <text x="172" y="252" fill="#A8E04E" font-family="JetBrains Mono" font-size="9" text-anchor="middle">22</text>
+          <!-- bar 4: x=48 h=54 w=6 PEAK -->
+          <rect x="190" y="69" width="24" height="222" rx="12" fill="#A8E04E"/>
+          <text x="202" y="316" fill="#A8E04E" font-family="JetBrains Mono" font-size="9" text-anchor="middle" font-weight="700">54★</text>
+          <!-- bar 5: x=57 h=40 -->
+          <rect x="226" y="97" width="20" height="166" rx="10" fill="#A8E04E"/>
+          <text x="236" y="288" fill="#A8E04E" font-family="JetBrains Mono" font-size="9" text-anchor="middle">40</text>
+          <!-- bar 6: x=65 h=62 w=6 PEAK★ -->
+          <rect x="258" y="51" width="24" height="258" rx="12" fill="#A8E04E"/>
+          <text x="270" y="334" fill="#A8E04E" font-family="JetBrains Mono" font-size="9" text-anchor="middle" font-weight="700">62★</text>
+          <!-- bar 7: x=74 h=28 -->
+          <rect x="294" y="123" width="20" height="114" rx="10" fill="#A8E04E"/>
+          <text x="304" y="262" fill="#A8E04E" font-family="JetBrains Mono" font-size="9" text-anchor="middle">28</text>
+          <!-- bar 8: x=82 h=18 -->
+          <rect x="326" y="143" width="20" height="74" rx="10" fill="#A8E04E"/>
+          <text x="336" y="244" fill="#A8E04E" font-family="JetBrains Mono" font-size="9" text-anchor="middle">18</text>
+        </g>
+
+        <!-- top label -->
+        <text x="60" y="40" fill="#EFEFEC" font-family="Inter" font-size="14" font-weight="600">Pattern · 8 barre · ritmo asimmetrico</text>
+      </svg>
+    </div>
+
+    <dl class="spec-meta">
+      <dt>SCALA ALTEZZE</dt>
+      <dd><code>14 · 30 · 22 · 54 · 40 · 62 · 28 · 18</code> dp. Due picchi (★) a posizione 4 e 6 — non centrati, per dare cadenza musicale.</dd>
+      <dt>LARGHEZZE</dt>
+      <dd><code>5dp</code> standard, <code>6dp</code> sui due picchi. Differenza percepibile, non gridata.</dd>
+      <dt>PASSO</dt>
+      <dd>Spaziatura <code>8dp</code> tra centri di barra. Larghezza totale <code>58dp</code>, centrata in canvas <code>108×108dp</code>.</dd>
+      <dt>RAGGIO</dt>
+      <dd>Pill completa: <code>rx = w/2</code>. Bordo morbido, niente angoli vivi.</dd>
+    </dl>
+  </div>
+</section>
+
+<!-- DENSITY -->
+<section>
+  <div class="section-head">
+    <span class="num">03</span>
+    <h2>Scala densità</h2>
+    <span class="desc">PNG fallback per launcher legacy, mdpi → xxxhdpi. Adaptive XML su Android 8+ ha priorità dove supportato.</span>
+  </div>
+
+  <div class="density-ladder">
+    <div class="density-row">
+      <div class="density-label-col"><div class="v">Onda · Lime</div>Default</div>
+      <div class="density-cell"><div class="ic" style="width:48px;height:48px"><img src="android-icons/waveform-lime/mipmap-mdpi/ic_launcher.png" width="48"></div><span class="lbl">mdpi 48</span></div>
+      <div class="density-cell"><div class="ic" style="width:72px;height:72px"><img src="android-icons/waveform-lime/mipmap-hdpi/ic_launcher.png" width="72"></div><span class="lbl">hdpi 72</span></div>
+      <div class="density-cell"><div class="ic" style="width:96px;height:96px"><img src="android-icons/waveform-lime/mipmap-xhdpi/ic_launcher.png" width="96"></div><span class="lbl">xhdpi 96</span></div>
+      <div class="density-cell"><div class="ic" style="width:128px;height:128px"><img src="android-icons/waveform-lime/mipmap-xxhdpi/ic_launcher.png" width="128"></div><span class="lbl">xxhdpi 144</span></div>
+      <div class="density-cell"><div class="ic" style="width:160px;height:160px"><img src="android-icons/waveform-lime/mipmap-xxxhdpi/ic_launcher.png" width="160"></div><span class="lbl">xxxhdpi 192</span></div>
+    </div>
+    <div class="density-row">
+      <div class="density-label-col"><div class="v">Onda · Dark</div>Notturno</div>
+      <div class="density-cell"><div class="ic" style="width:48px;height:48px"><img src="android-icons/waveform-dark/mipmap-mdpi/ic_launcher.png" width="48"></div><span class="lbl">mdpi 48</span></div>
+      <div class="density-cell"><div class="ic" style="width:72px;height:72px"><img src="android-icons/waveform-dark/mipmap-hdpi/ic_launcher.png" width="72"></div><span class="lbl">hdpi 72</span></div>
+      <div class="density-cell"><div class="ic" style="width:96px;height:96px"><img src="android-icons/waveform-dark/mipmap-xhdpi/ic_launcher.png" width="96"></div><span class="lbl">xhdpi 96</span></div>
+      <div class="density-cell"><div class="ic" style="width:128px;height:128px"><img src="android-icons/waveform-dark/mipmap-xxhdpi/ic_launcher.png" width="128"></div><span class="lbl">xxhdpi 144</span></div>
+      <div class="density-cell"><div class="ic" style="width:160px;height:160px"><img src="android-icons/waveform-dark/mipmap-xxxhdpi/ic_launcher.png" width="160"></div><span class="lbl">xxxhdpi 192</span></div>
+    </div>
+    <div class="density-row">
+      <div class="density-label-col"><div class="v">Round mask</div>Pixel old</div>
+      <div class="density-cell"><div class="ic" style="width:48px;height:48px"><img src="android-icons/waveform-lime/mipmap-mdpi/ic_launcher_round.png" width="48"></div><span class="lbl">mdpi</span></div>
+      <div class="density-cell"><div class="ic" style="width:72px;height:72px"><img src="android-icons/waveform-lime/mipmap-hdpi/ic_launcher_round.png" width="72"></div><span class="lbl">hdpi</span></div>
+      <div class="density-cell"><div class="ic" style="width:96px;height:96px"><img src="android-icons/waveform-lime/mipmap-xhdpi/ic_launcher_round.png" width="96"></div><span class="lbl">xhdpi</span></div>
+      <div class="density-cell"><div class="ic" style="width:128px;height:128px"><img src="android-icons/waveform-lime/mipmap-xxhdpi/ic_launcher_round.png" width="128"></div><span class="lbl">xxhdpi</span></div>
+      <div class="density-cell"><div class="ic" style="width:160px;height:160px"><img src="android-icons/waveform-lime/mipmap-xxxhdpi/ic_launcher_round.png" width="160"></div><span class="lbl">xxxhdpi</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- WALLPAPER -->
+<section>
+  <div class="section-head">
+    <span class="num">04</span>
+    <h2>Su wallpaper</h2>
+    <span class="desc">L'onda lime tiene la scena su sfondi chiari, scuri e cromatici. La variante dark serve per chi configura il telefono in white-mode.</span>
+  </div>
+
+  <div class="wallpaper-grid">
+    <div>
+      <div class="phone-mock wp-dawn">
+        <div class="notch"></div>
+        <div class="clock">9:41</div>
+        <div class="home-row">
+          <div class="placeholder"></div><div class="placeholder"></div>
+          <div class="icon-tile"><img src="android-icons/waveform-lime/svg/ic_launcher_full.svg"></div>
+          <div class="placeholder"></div>
+          <div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div>
+          <div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div>
+        </div>
+      </div>
+      <p class="phone-label">Wallpaper Dusk</p>
+    </div>
+
+    <div>
+      <div class="phone-mock wp-paper">
+        <div class="notch"></div>
+        <div class="clock">9:41</div>
+        <div class="home-row">
+          <div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div>
+          <div class="icon-tile"><img src="android-icons/waveform-dark/svg/ic_launcher_full.svg"></div>
+          <div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div>
+          <div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div>
+        </div>
+      </div>
+      <p class="phone-label">Wallpaper Paper · variante dark</p>
+    </div>
+
+    <div>
+      <div class="phone-mock wp-noir">
+        <div class="notch"></div>
+        <div class="clock">9:41</div>
+        <div class="home-row">
+          <div class="icon-tile"><img src="android-icons/waveform-lime/svg/ic_launcher_full.svg"></div>
+          <div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div>
+          <div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div>
+          <div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div>
+        </div>
+      </div>
+      <p class="phone-label">OLED noir · il lime spicca</p>
+    </div>
+  </div>
+</section>
+
+<!-- MASKS -->
+<section>
+  <div class="section-head">
+    <span class="num">05</span>
+    <h2>Su tutte le maschere OEM</h2>
+    <span class="desc">Pixel, Samsung One UI, OnePlus, MIUI, Nothing — l'onda sopravvive a ogni maschera perché è costruita dentro al cerchio sicuro.</span>
+  </div>
+
+  <div class="mask-gallery">
+    <div class="mask-row">
+      <div class="mask-cell"><div class="ic circle"></div><span class="lbl">Circle · Pixel old</span></div>
+      <div class="mask-cell"><div class="ic squircle"></div><span class="lbl">Squircle · Pixel</span></div>
+      <div class="mask-cell"><div class="ic rounded"></div><span class="lbl">Rounded · Samsung</span></div>
+      <div class="mask-cell"><div class="ic square"></div><span class="lbl">Square · OnePlus</span></div>
+      <div class="mask-cell"><div class="ic teardrop"></div><span class="lbl">Teardrop · MIUI</span></div>
+      <div class="mask-cell" style="overflow:hidden"><div class="ic diamond"></div><span class="lbl">Diamond · Nothing</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- THEMED -->
+<section>
+  <div class="section-head">
+    <span class="num">06</span>
+    <h2>Icone a tema (Android 13+)</h2>
+    <span class="desc">Quando l'utente attiva "Icone a tema", il launcher tinge la silhouette monocromatica con la palette Material You. Quattro tinte di esempio.</span>
+  </div>
+
+  <div class="themed-row">
+    <div class="themed-cell">
+      <div class="mono-bg" style="background: linear-gradient(180deg, #5B4FE0 0%, #3D2FB8 100%);"><img src="android-icons/waveform-lime/svg/ic_launcher_monochrome.svg"></div>
+      <span class="lbl">Indaco</span>
+    </div>
+    <div class="themed-cell">
+      <div class="mono-bg" style="background: linear-gradient(180deg, #E0C44E 0%, #C19F35 100%);"><img src="android-icons/waveform-lime/svg/ic_launcher_monochrome.svg"></div>
+      <span class="lbl">Oro</span>
+    </div>
+    <div class="themed-cell">
+      <div class="mono-bg" style="background: linear-gradient(180deg, #E04E78 0%, #B83557 100%);"><img src="android-icons/waveform-lime/svg/ic_launcher_monochrome.svg"></div>
+      <span class="lbl">Corallo</span>
+    </div>
+    <div class="themed-cell">
+      <div class="mono-bg" style="background: linear-gradient(180deg, #4ECCE0 0%, #35A4B8 100%);"><img src="android-icons/waveform-lime/svg/ic_launcher_monochrome.svg"></div>
+      <span class="lbl">Ciano</span>
+    </div>
+  </div>
+</section>
+
+<!-- FILE MAP -->
+<section>
+  <div class="section-head">
+    <span class="num">07</span>
+    <h2>Drop-in</h2>
+    <span class="desc">Copia il contenuto di una delle due cartelle in <code>res/</code>. <code>AndroidManifest.xml</code> non cambia.</span>
+  </div>
+
+  <pre class="filemap"><span class="c">android-icons/waveform-lime/</span>     <span class="m">← default · per la maggior parte degli utenti</span>
+├── <span class="c">mipmap-anydpi-v26/</span>
+│   ├── ic_launcher.xml          <span class="m">← adaptive-icon: bg + fg + monochrome</span>
+│   └── ic_launcher_round.xml
+├── <span class="c">mipmap-mdpi/</span>            ic_launcher.png · ic_launcher_round.png
+├── <span class="c">mipmap-hdpi/</span>            ic_launcher.png · ic_launcher_round.png
+├── <span class="c">mipmap-xhdpi/</span>           ic_launcher.png · ic_launcher_round.png
+├── <span class="c">mipmap-xxhdpi/</span>          ic_launcher.png · ic_launcher_round.png
+├── <span class="c">mipmap-xxxhdpi/</span>         ic_launcher.png · ic_launcher_round.png
+│                              + ic_launcher_foreground.png  <span class="m">(432×432)</span>
+│                              + ic_launcher_background.png  <span class="m">(432×432)</span>
+├── <span class="c">drawable/</span>               ic_launcher_monochrome.svg  <span class="m">(themed icons)</span>
+└── <span class="c">svg/</span>                    masters · full · foreground · background · monochrome
+
+<span class="c">android-icons/waveform-dark/</span>      <span class="m">← stessa struttura, tema notturno</span>
+
+<span class="m"># AndroidManifest.xml — nessuna modifica
+&lt;application
+    android:icon="@mipmap/ic_launcher"
+    android:roundIcon="@mipmap/ic_launcher_round"
+    ... /&gt;</span></pre>
+</section>
+
+<footer>
+  <span>MusicHub · Onda sonora · v1.0</span>
+  <span>Lime + Dark · 38 file per variante</span>
+</footer>
+
+</body>
+</html>

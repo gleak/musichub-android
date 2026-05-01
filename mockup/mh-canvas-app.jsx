@@ -5,6 +5,7 @@ const { LyricsScreen, VideoScreen } = window.MHExtraScreens;
 const { ForYouScreen, GeneratedDetailScreen } = window.MHForYou;
 const { AAFrame, AAHome, AASearch, AALibrary, AAAlbum, AANowPlaying,
   AALyrics, AAVideo, AAArtist, AAProfile, AAQueue, AAVoice, AARecents, AAForYou } = window.MHAutoScreens;
+const { IconsScreen } = window.MHIcons;
 
 const W = 390, H = 844;
 
@@ -76,6 +77,11 @@ function App() {
         </DCArtboard>
         <DCArtboard id="aa-profile" label="AA · Profilo" width={1280} height={720}>
           <AAFrame label="ANDROID AUTO"><AAProfile/></AAFrame>
+        </DCArtboard>
+      </DCSection>
+      <DCSection id="brand" title="Brand · Launcher icons" subtitle="Adaptive icon Android — 3 varianti × 2 temi + esporti">
+        <DCArtboard id="icons-all" label="Launcher icons · review board" width={1320} height={2400}>
+          <IconsScreen/>
         </DCArtboard>
       </DCSection>
     </DesignCanvas>
