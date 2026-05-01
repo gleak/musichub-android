@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.9.1"
+    const val VERSION = "0.9.2"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,16 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.9.2",
+            title = "UI polish — empty states + clearer dialogs",
+            highlights = listOf(
+                "Empty Liked Songs, Playlists, Up next and song-picker screens now show a Spotify-style icon + message instead of a bare line of text",
+                "Song-list loading now animates a shimmer skeleton instead of a centered spinner",
+                "Now Playing's overflow menu disambiguates the two redownload paths — \"Re-download from source\" rebuilds the file on the server, \"Refresh local copy\" only redownloads to your phone",
+                "Tightened typography in Find, Spotify import and song rows — fewer one-off font weights",
+            ),
+        ),
         ChangelogEntry(
             version = "0.9.1",
             title = "Update channel + manual check",

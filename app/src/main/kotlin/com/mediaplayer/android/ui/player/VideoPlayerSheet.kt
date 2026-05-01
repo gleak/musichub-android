@@ -38,6 +38,7 @@ import com.mediaplayer.android.data.AuthTokenHolder
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.playback.PlayerCache
+import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 import java.util.concurrent.TimeUnit
 
 @UnstableApi
@@ -177,7 +178,7 @@ private fun VideoSurface(
             onClick = onClose,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(4.dp),
+                .padding(MediaPlayerSpacing.Xs),
         ) {
             Icon(
                 imageVector = Icons.Filled.Close,

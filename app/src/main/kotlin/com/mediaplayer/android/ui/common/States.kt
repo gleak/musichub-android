@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -34,6 +33,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.mediaplayer.android.ui.theme.CoverShapes
 
 /** Centered spinner used as the standard loading affordance for full-screen states. */
 @Composable
@@ -175,7 +175,7 @@ fun SongRowShimmer(modifier: Modifier = Modifier) {
         Box(
             modifier = Modifier
                 .size(48.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .clip(CoverShapes.SongRow)
                 .background(brush),
         )
         Spacer(Modifier.size(12.dp))
@@ -184,14 +184,14 @@ fun SongRowShimmer(modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .fillMaxWidth(0.7f)
                     .height(14.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(CoverShapes.Skeleton)
                     .background(brush),
             )
             Box(
                 modifier = Modifier
                     .fillMaxWidth(0.4f)
                     .height(12.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(CoverShapes.Skeleton)
                     .background(brush),
             )
         }

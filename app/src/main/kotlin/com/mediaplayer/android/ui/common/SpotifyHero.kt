@@ -1,5 +1,6 @@
 package com.mediaplayer.android.ui.common
 
+import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.theme.HeroCoverSize
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
@@ -196,7 +196,7 @@ private fun HeroCover(
     size: Dp,
     fallbackGradient: Pair<Color, Color>?,
 ) {
-    val composeShape = if (shape == CoverShape.Circle) CircleShape else RoundedCornerShape(6.dp)
+    val composeShape = if (shape == CoverShape.Circle) CircleShape else CoverShapes.SongRow
     val placeholderBrush = if (fallbackGradient != null)
         Brush.linearGradient(listOf(fallbackGradient.first, fallbackGradient.second))
     else

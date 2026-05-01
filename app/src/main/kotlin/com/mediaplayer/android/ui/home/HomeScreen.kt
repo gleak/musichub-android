@@ -70,6 +70,7 @@ import com.mediaplayer.android.ui.common.LocalCurrentUser
 import com.mediaplayer.android.ui.common.SectionHeader
 import com.mediaplayer.android.ui.common.SongCover
 import com.mediaplayer.android.ui.theme.CoverShapes
+import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 import com.mediaplayer.android.ui.theme.SpotifyColors
 import java.util.Calendar
 
@@ -126,7 +127,7 @@ private fun HomeContent(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(top = MediaPlayerSpacing.M, bottom = MediaPlayerSpacing.L),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         item(key = "greeting") {
@@ -242,7 +243,7 @@ private fun ColdStartTile(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(CoverShapes.Tile)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onClick)
             .padding(16.dp),
@@ -396,7 +397,7 @@ private fun ShortcutTile(
     onPlaylistClick: (PlaylistDto) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(6.dp)
+    val shape = CoverShapes.SongRow
     Row(
         modifier = modifier
             .height(56.dp)
@@ -549,7 +550,7 @@ private fun PlaylistCardSquare(playlist: PlaylistDto, onClick: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(6.dp))
+                .clip(CoverShapes.SongRow)
                 .background(
                     if (playlist.isAuto) {
                         Brush.linearGradient(
