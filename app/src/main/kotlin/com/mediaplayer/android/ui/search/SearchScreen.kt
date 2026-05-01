@@ -203,7 +203,7 @@ private fun RecentSongCard(song: SongDto, onClick: () -> Unit) {
                         .data(Network.coverUrl(song.id))
                         .crossfade(true)
                         .build(),
-                    contentDescription = null,
+                    contentDescription = "${song.title}, ${song.artist}",
                     modifier = Modifier.size(80.dp),
                 )
             } else {

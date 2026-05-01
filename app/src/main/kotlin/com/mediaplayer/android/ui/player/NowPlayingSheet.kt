@@ -379,7 +379,7 @@ private fun NowPlayingContent(viewModel: PlaybackViewModel, onDismiss: () -> Uni
                 ) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = null,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
                         modifier = Modifier.size(40.dp),
                     )
                 }

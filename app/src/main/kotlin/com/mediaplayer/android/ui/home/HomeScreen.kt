@@ -341,7 +341,7 @@ private fun ShortcutIcon(item: ShortcutItem) {
                             .data(Network.coverUrl(item.song.id))
                             .crossfade(true)
                             .build(),
-                        contentDescription = null,
+                        contentDescription = "${item.song.title}, ${item.song.artist}",
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
@@ -421,7 +421,7 @@ private fun SongCardSquare(song: SongDto, onClick: () -> Unit) {
                         .data(Network.coverUrl(song.id))
                         .crossfade(true)
                         .build(),
-                    contentDescription = null,
+                    contentDescription = "${song.title}, ${song.artist}",
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {

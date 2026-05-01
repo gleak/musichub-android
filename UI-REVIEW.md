@@ -38,9 +38,14 @@ Surfaces: Smartphone (Compose) + Android Auto (MediaLibraryService)
 - ✅ POST_NOTIFICATIONS runtime request (Finding 12.2) — fires on first non-null `currentSong` so the ask lands in context ("we want to show a media notification while music plays") rather than cold on app start. Android 13+ only.
 - ✅ Hero-cover spring entry on NowPlayingSheet (Finding 5.2 — partial) — cover scales from 0.25→1.0 with a `MediumBouncy` spring on each new song. Approximates a shared-element rise from the mini-player.
 
+**Shipped in v0.3.2:**
+- ✅ NowPlayingSheet central play/pause `contentDescription` (Finding 6.6) — toggles "Play"/"Pause" with the icon.
+- ✅ Cover `contentDescription` on carousel tiles (Finding 6.1, partial) — HomeScreen `ShortcutTile` + `SongCardSquare`, SearchScreen `RecentSongCard` now pass `"${title}, ${artist}"`. Row-with-text covers (MiniPlayer, SongRow, AddSongsToPlaylistSheet) intentionally left decorative since the title/artist text alongside is read by TalkBack.
+
 **Skipped/blocked:**
 - ⏸ 1.7 phone playlist grid vs AA grid — design decision pending
 - ⏸ 5.2 *true* `SharedTransitionLayout` mini ↔ sheet shared element — `ModalBottomSheet`'s Popup host fights cross-tree shared elements. Lifting the sheet content out of the popup is a larger refactor; the spring entry above is the pragmatic substitute.
+- ⏸ 5.4 `animateItemPlacement` on PlaylistDetailScreen reorder — blocked. The LazyColumn key is `"${song.id}_$idx"` because playlists allow duplicate songs (commit `086751f`); changing keys when idx shifts means Compose remounts items rather than animating. Real fix needs a per-occurrence id on `PlaylistDetailDto.songs` from the backend (e.g. join-table id).
 
 ## Executive summary
 
