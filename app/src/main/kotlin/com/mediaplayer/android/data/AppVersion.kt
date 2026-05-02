@@ -23,49 +23,17 @@ object Changelog {
     val entries: List<ChangelogEntry> = listOf(
         ChangelogEntry(
             version = "0.11.5",
-            title = "Ritocchi: vibrazione anche su play/pausa grande, niente trascinamento sulle playlist generate",
+            title = "HTTPS, Android Auto sistemato, prestazioni e ritocchi",
             highlights = listOf(
-                "Polish: il pulsante grande di play/pausa nella sheet del brano in riproduzione adesso vibra al tap, in linea con i pulsanti play/pausa del mini-player e del cuore.",
-                "Polish: nelle playlist generate per te (Discover Daily, On Repeat, ecc.) sono nascosti la maniglia di trascinamento e lo swipe per rimuovere — il backend non le riordina e non rimuove i brani da queste playlist, quindi le icone non appaiono più solo per non confondere.",
-            ),
-        ),
-        ChangelogEntry(
-            version = "0.11.4",
-            title = "Android Auto: ricerca e \"Hey Google\" tornano a funzionare",
-            highlights = listOf(
-                "Android Auto: la lente di ingrandimento riappare nella barra in alto e ricerca davvero per titolo, artista o album. Mancava un flag (SEARCH_SUPPORTED) sul nodo radice del browse tree e Auto la nascondeva, anche se il backend rispondeva alle query.",
-                "Android Auto: \"Hey Google, metti <brano> su MediaPlayer\" adesso parte direttamente. Il servizio dichiara MEDIA_PLAY_FROM_SEARCH e risolve la query vocale in una coda di brani prima di iniziare la riproduzione.",
-            ),
-        ),
-        ChangelogEntry(
-            version = "0.11.3",
-            title = "Playlist generate: ognuna ha il suo colore",
-            highlights = listOf(
-                "Le playlist generate (Discover Daily, On Repeat, Release Radar, Daily Mix, Time Capsule, Mood, Next) avevano tutte lo stesso sfondo viola di Brani preferiti su Home e Libreria. Ora ogni famiglia ha la sua coppia di colori, così le distingui a colpo d'occhio in una riga di sette.",
-            ),
-        ),
-        ChangelogEntry(
-            version = "0.11.2",
-            title = "Piccoli ritocchi: vibrazione play/pausa, errori più chiari",
-            highlights = listOf(
-                "Polish: il pulsante play/pausa del mini-player ora vibra brevemente al tap, come già faceva il cuore di Mi piace.",
-                "Polish: i messaggi di errore di Album, Artisti, Per te e \"Aggiungi a playlist\" usano ora le stesse formule chiare già usate nel resto dell'app (niente più \"Unknown error\" o codici grezzi quando la rete cade).",
-            ),
-        ),
-        ChangelogEntry(
-            version = "0.11.1",
-            title = "Risparmio batteria: stop al precaricamento quando serve",
-            highlights = listOf(
-                "Quando attivi il Risparmio energetico di sistema, l'app sospende automaticamente il precaricamento del prossimo brano. Riprende da sola appena disattivi il risparmio. La riproduzione del brano corrente non è influenzata.",
-            ),
-        ),
-        ChangelogEntry(
-            version = "0.11.0",
-            title = "Connessione cifrata + cover più rapide",
-            highlights = listOf(
-                "Sicurezza: tutto il traffico verso il server adesso passa su HTTPS con certificato Let's Encrypt — niente più dati in chiaro tra app e backend, anche fuori dal Wi-Fi di casa.",
+                "Sicurezza: tutto il traffico verso il server passa adesso su HTTPS con certificato Let's Encrypt — niente più dati in chiaro tra app e backend, anche fuori dal Wi-Fi di casa.",
+                "Android Auto: la lente di ingrandimento è tornata e ricerca per titolo, artista o album. \"Hey Google, metti <brano> su MediaPlayer\" parte direttamente, senza dover aprire l'app.",
                 "Velocità: cache HTTP da 50 MB lato app + cover scaricate alla risoluzione esatta della miniatura. Lo scroll della griglia copertine consuma meno dati e si ferma meno spesso.",
                 "Avvio: la prima apertura non blocca più l'interfaccia in attesa della preparazione dell'identità anonima. La schermata Home compare subito.",
+                "Risparmio batteria: quando attivi il Risparmio energetico di sistema, l'app sospende il precaricamento del prossimo brano. Riprende da sola appena lo disattivi. La riproduzione del brano corrente non è influenzata.",
+                "Errori più chiari: i messaggi di Album, Artisti, Per te e \"Aggiungi a playlist\" usano ora le stesse formule chiare già usate nel resto dell'app (niente più \"Unknown error\" o codici grezzi quando la rete cade).",
+                "Vibrazione: i pulsanti play/pausa (mini-player e Now Playing) vibrano al tap, in linea con il cuore di Mi piace.",
+                "Playlist generate: ogni famiglia (Discover Daily, On Repeat, Release Radar, Daily Mix, Time Capsule, Mood, Next) ha adesso la sua coppia di colori. Niente più sette tile viola identici di fila.",
+                "Playlist generate: nelle playlist \"per te\" sono nascosti la maniglia di trascinamento e lo swipe per rimuovere — il backend non le riordina e non rimuove i brani da queste playlist, le icone fuorvianti non appaiono più.",
             ),
         ),
         ChangelogEntry(
