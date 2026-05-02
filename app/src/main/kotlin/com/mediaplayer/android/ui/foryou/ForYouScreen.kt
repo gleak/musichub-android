@@ -21,9 +21,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,6 +58,7 @@ import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 @Composable
 fun ForYouScreen(
     onPlaylistClick: (PlaylistDto) -> Unit = {},
+    onProfileClick: () -> Unit = {},
     viewModel: ForYouViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -68,7 +71,7 @@ fun ForYouScreen(
         when (val s = state) {
             ForYouUiState.Loading -> CenteredSpinner()
             is ForYouUiState.Error -> ErrorWithRetry(s.message, viewModel::refresh)
-            is ForYouUiState.Ready -> ForYouContent(s.autoPlaylists, onPlaylistClick)
+            is ForYouUiState.Ready -> ForYouContent(s.autoPlaylists, onPlaylistClick, onProfileClick)
         }
     }
 }
@@ -77,6 +80,7 @@ fun ForYouScreen(
 private fun ForYouContent(
     autoPlaylists: List<PlaylistDto>,
     onPlaylistClick: (PlaylistDto) -> Unit,
+    onProfileClick: () -> Unit,
 ) {
     val mono = LocalMHMono.current
     val rotation = autoPlaylists.firstOrNull { familyOf(it.kind) == AutoPlaylistFamily.Rotation }
@@ -97,17 +101,27 @@ private fun ForYouContent(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 24.dp),
     ) {
         item {
-            Column(modifier = Modifier.padding(horizontal = MediaPlayerSpacing.M)) {
+            Column(modifier = Modifier.padding(start = MediaPlayerSpacing.M, end = 4.dp)) {
                 EyebrowText(text = "Generata dal sistema")
-                Text(
-                    text = "Per te",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = MHColors.TextHi,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Per te",
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = MHColors.TextHi,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = onProfileClick) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "Profilo",
+                            tint = MHColors.TextHi,
+                        )
+                    }
+                }
                 Text(
                     text = "${autoPlaylists.size} playlist · aggiornate oggi",
                     style = mono.caption.copy(color = MHColors.TextLo),
-                    modifier = Modifier.padding(top = 6.dp),
+                    modifier = Modifier.padding(top = 6.dp, end = 12.dp),
                 )
             }
             Spacer(Modifier.height(20.dp))

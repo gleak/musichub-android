@@ -14,13 +14,20 @@ class SongRepository(
 
     suspend fun listSongs(
         query: String?,
+        genre: String? = null,
         page: Int = 0,
         size: Int = 20,
     ): PageResponse<SongDto> {
-        // Backend treats an empty q and a missing q the same way; normalise
-        // to null so we don't litter the query string with `?q=`.
-        val normalized = query?.trim()?.takeIf { it.isNotEmpty() }
-        return api.listSongs(query = normalized, page = page, size = size)
+        // Backend treats an empty q/genre and a missing one the same way;
+        // normalise to null so we don't litter the query string with `?q=`.
+        val normalizedQ = query?.trim()?.takeIf { it.isNotEmpty() }
+        val normalizedGenre = genre?.trim()?.takeIf { it.isNotEmpty() }
+        return api.listSongs(
+            query = normalizedQ,
+            genre = normalizedGenre,
+            page = page,
+            size = size,
+        )
     }
 
     suspend fun redownload(songId: Long): SongDto = api.redownloadSong(songId)

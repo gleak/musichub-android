@@ -26,12 +26,14 @@ import com.mediaplayer.android.data.dto.SongDto
  * │   └── artist:{nameEnc}
  * │       ├── (artist's songs, list)
  * │       └── album:{nameEnc}|{artistEnc}  (cross-link)
+ * ├── genres       (grid — mirrors phone Search "Sfoglia · Tutti i generi")
+ * │   └── genre:{tag}                                   (songs filtered by tag)
  * └── all-songs    (list)
  * ```
  *
  * mediaId scheme (stable — AA caches them between sessions):
  * - `root` / `recents` / `liked` / `playlists` / `albums` / `artists` /
- *   `all-songs` / `lyrics`                              — fixed folders
+ *   `genres` / `all-songs` / `lyrics`                   — fixed folders
  * - `song:{songId}`                                     — generic playable leaf
  * - `playlist:{playlistId}`                             — playlist folder
  * - `pl:{playlistId}:{position}:{songId}`               — leaf inside playlist
@@ -39,6 +41,8 @@ import com.mediaplayer.android.data.dto.SongDto
  * - `al:{nameEnc}|{artistEnc}|{position}|{songId}`      — leaf inside album
  * - `artist:{nameEnc}`                                  — artist folder
  * - `ar:{nameEnc}|{position}|{songId}`                  — leaf inside artist
+ * - `genre:{tag}`                                       — genre folder
+ * - `gn:{tagEnc}|{position}|{songId}`                   — leaf inside genre
  * - `lk:{position}|{songId}`                            — leaf inside liked
  * - `rc:{position}|{songId}`                            — leaf inside recents
  *
@@ -59,16 +63,37 @@ internal object LibraryTree {
     const val ARTISTS_ID = "artists"
     /** M14f: server-curated auto-playlists (Discover Daily, On Repeat, …). */
     const val MADE_FOR_YOU_ID = "made-for-you"
+    /** Mirrors the phone Search "Sfoglia · Tutti i generi" tile in AA. */
+    const val GENRES_ID = "genres"
 
     private const val PLAYLIST_PREFIX = "playlist:"
     private const val SONG_PREFIX = "song:"
     private const val PL_LEAF_PREFIX = "pl:"
     private const val ALBUM_PREFIX = "album:"
     private const val ARTIST_PREFIX = "artist:"
+    private const val GENRE_PREFIX = "genre:"
     private const val ALBUM_LEAF_PREFIX = "al:"
     private const val ARTIST_LEAF_PREFIX = "ar:"
+    private const val GENRE_LEAF_PREFIX = "gn:"
     private const val LIKED_LEAF_PREFIX = "lk:"
     private const val RECENT_LEAF_PREFIX = "rc:"
+
+    /**
+     * Genre catalogue exposed in the AA browse tree. Display name + backend
+     * tag must stay in sync with `SearchScreen.GENRES` so phone and car
+     * surface the same 8 buckets. The tag is what `listSongs(genre=…)`
+     * filters on server-side (`song_tags`).
+     */
+    private val GENRES: List<Pair<String, String>> = listOf(
+        "Indie" to "indie",
+        "Elettronica" to "electronic",
+        "Hip-hop" to "hip-hop",
+        "Jazz" to "jazz",
+        "Classica" to "classical",
+        "Ambient" to "ambient",
+        "Rock" to "rock",
+        "Pop" to "pop",
+    )
 
     /** Used by paged catalog fetches. AA typically shows ~50 at a time. */
     private const val PAGE_SIZE = 50
@@ -120,6 +145,7 @@ internal object LibraryTree {
         parentId == RECENTS_ID -> recents()
         parentId == ALBUMS_ID -> albums(page, pageSize)
         parentId == ARTISTS_ID -> artists(page, pageSize)
+        parentId == GENRES_ID -> genreTiles()
         parentId.startsWith(PLAYLIST_PREFIX) ->
             parentId.removePrefix(PLAYLIST_PREFIX).toLongOrNull()
                 ?.let { playlistSongs(it) }
@@ -128,6 +154,8 @@ internal object LibraryTree {
                 ?.let { (name, artist) -> albumSongs(name, artist) }
         parentId.startsWith(ARTIST_PREFIX) ->
             artistChildren(decodePart(parentId.removePrefix(ARTIST_PREFIX)))
+        parentId.startsWith(GENRE_PREFIX) ->
+            genreSongs(parentId.removePrefix(GENRE_PREFIX))
         else -> null
     }
 
@@ -141,6 +169,18 @@ internal object LibraryTree {
         mediaId == RECENTS_ID -> sectionFolder(RECENTS_ID, "Ascoltati di recente", grid = false)
         mediaId == ALBUMS_ID -> sectionFolder(ALBUMS_ID, "Album", grid = true)
         mediaId == ARTISTS_ID -> sectionFolder(ARTISTS_ID, "Artisti", grid = false)
+        mediaId == GENRES_ID -> sectionFolder(GENRES_ID, "Generi", grid = true)
+        mediaId.startsWith(GENRE_PREFIX) -> {
+            val tag = mediaId.removePrefix(GENRE_PREFIX)
+            val display = GENRES.firstOrNull { it.second == tag }?.first ?: tag
+            folderTile(mediaId, display,
+                subtitle = null,
+                type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
+                artworkSongId = null,
+                grid = false)
+        }
+        mediaId.startsWith(GENRE_LEAF_PREFIX) ->
+            parseGenreLeaf(mediaId)?.third?.let { sid -> songLeaf(sid) }
         mediaId.startsWith(SONG_PREFIX) ->
             mediaId.removePrefix(SONG_PREFIX).toLongOrNull()?.let { songLeaf(it) }
         mediaId.startsWith(PLAYLIST_PREFIX) -> {
@@ -243,6 +283,16 @@ internal object LibraryTree {
         return Triple(decodePart(parts[0]), pos, sid)
     }
 
+    /** Parses `gn:{tagEnc}|{pos}|{sid}` into `(genreTag, pos, songId)`. */
+    fun parseGenreLeaf(mediaId: String): Triple<String, Int, Long>? {
+        if (!mediaId.startsWith(GENRE_LEAF_PREFIX)) return null
+        val parts = mediaId.removePrefix(GENRE_LEAF_PREFIX).split("|")
+        if (parts.size != 3) return null
+        val pos = parts[1].toIntOrNull() ?: return null
+        val sid = parts[2].toLongOrNull() ?: return null
+        return Triple(decodePart(parts[0]), pos, sid)
+    }
+
     /** Parses leaves of shape `{prefix}{pos}|{sid}` (liked, recents). */
     fun parseSimpleLeaf(mediaId: String, prefix: String): Pair<Int, Long>? {
         if (!mediaId.startsWith(prefix)) return null
@@ -269,6 +319,15 @@ internal object LibraryTree {
         val detail = Network.api.getArtist(name)
         return detail.songs.map { playableSong(it) }
     }
+
+    /**
+     * Queue resolver for a genre tap in AA. Pulls a wider page than the
+     * browse list (which is capped at PAGE_SIZE=50) so the user actually
+     * gets a long playable session per genre.
+     */
+    suspend fun genreQueue(tag: String): List<MediaItem> =
+        Network.api.listSongs(query = null, genre = tag, page = 0, size = LIKED_LIMIT)
+            .items.map { playableSong(it) }
 
     suspend fun likedQueue(): List<MediaItem> =
         Network.api.getLikedSongs(page = 0, size = LIKED_LIMIT).items.map { playableSong(it) }
@@ -320,6 +379,8 @@ internal object LibraryTree {
             type = MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS),
         sectionFolder(ARTISTS_ID, "Artisti", grid = false,
             type = MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS),
+        sectionFolder(GENRES_ID, "Generi", grid = true,
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
         sectionFolder(ALL_SONGS_ID, "Tutti i brani", grid = false,
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
     )
@@ -421,6 +482,38 @@ internal object LibraryTree {
             )
         }
         return list
+    }
+
+    /**
+     * Genre tile grid for AA. Static list — same 8 buckets as the phone's
+     * `Sfoglia · Tutti i generi`. Subtitle hints at the action so the
+     * driver-glance reading is unambiguous.
+     */
+    private fun genreTiles(): List<MediaItem> = GENRES.map { (display, tag) ->
+        folderTile(
+            mediaId = "$GENRE_PREFIX$tag",
+            title = display,
+            subtitle = "Genere",
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
+            artworkSongId = null,
+            grid = false,
+        )
+    }
+
+    private suspend fun genreSongs(tag: String): List<MediaItem> {
+        val resp = Network.api.listSongs(
+            query = null,
+            genre = tag,
+            page = 0,
+            size = PAGE_SIZE,
+        )
+        val tagEnc = encodePart(tag)
+        return resp.items.mapIndexed { index, song ->
+            MediaItem.Builder()
+                .setMediaId("$GENRE_LEAF_PREFIX$tagEnc|$index|${song.id}")
+                .setMediaMetadata(song.asBrowseMetadata(playable = true))
+                .build()
+        }.ifEmpty { listOf(infoItem("Nessun brano per questo genere")) }
     }
 
     private suspend fun liked(): List<MediaItem> {

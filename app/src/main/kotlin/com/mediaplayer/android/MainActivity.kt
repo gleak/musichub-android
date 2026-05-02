@@ -58,7 +58,9 @@ import androidx.navigation.navArgument
 import com.mediaplayer.android.data.AppVersion
 import com.mediaplayer.android.data.ChangelogPreferences
 import com.mediaplayer.android.data.ConnectivityObserver
+import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.OnboardingPreferences
+import com.mediaplayer.android.data.dto.AppVersionRequest
 import com.mediaplayer.android.ui.onboarding.OnboardingScreen
 import com.mediaplayer.android.ui.onboarding.OnboardingViewModel
 import com.mediaplayer.android.playback.PlaybackViewModel
@@ -234,6 +236,16 @@ internal object Routes {
         val r = currentRoute ?: return false
         return libraryPrefixes.any { r == it || r.startsWith("$it/") || r.startsWith("$it?") }
     }
+
+    /**
+     * Profile + nested settings render as a full-screen overlay above the
+     * bottom nav, so they're not a tab — entered only via the avatar button
+     * on Home and exited via the back chevron / system back.
+     */
+    fun isProfileOverlay(currentRoute: String?): Boolean {
+        val r = currentRoute ?: return false
+        return r == PROFILE || r.startsWith("profile/")
+    }
 }
 
 private data class BottomDestination(
@@ -257,6 +269,9 @@ private fun AppScaffold(
 
     val navController = rememberNavController()
     val networkAvailable by ConnectivityObserver.networkAvailable.collectAsStateWithLifecycle()
+    val backStack by navController.currentBackStackEntryAsState()
+    val currentRoute = backStack?.destination?.route
+    val hideBottomRegion = Routes.isProfileOverlay(currentRoute)
 
     // Android 13+ silent-notifications gap: declare in manifest is not enough,
     // the runtime permission must be requested. Trigger on first playback so the
@@ -293,6 +308,33 @@ private fun AppScaffold(
     val pendingUpdate by AppUpdateChecker.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { AppUpdateChecker.check(ctx) }
 
+    // Telemetry: report installed versionName once per cold launch.
+    // Fire-and-forget — failure here shouldn't block the UI.
+    LaunchedEffect(Unit) {
+        runCatching { Network.api.reportAppVersion(AppVersionRequest(AppVersion.VERSION)) }
+    }
+
+    // Manual "Controlla aggiornamenti" handler — bypasses 6h rate-limit
+    // and per-version dismissal. Updated → AppUpdateDialog pops via
+    // pendingUpdate; UpToDate / Error surface as a toast since there's
+    // no UI for them otherwise.
+    val updateScope = rememberCoroutineScope()
+    val onCheckUpdates: () -> Unit = {
+        updateScope.launch {
+            when (val result = AppUpdateChecker.forceCheck(ctx)) {
+                AppUpdateChecker.ManualResult.Updated -> Unit
+                AppUpdateChecker.ManualResult.UpToDate ->
+                    android.widget.Toast.makeText(
+                        ctx, "App già aggiornata", android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                is AppUpdateChecker.ManualResult.Error ->
+                    android.widget.Toast.makeText(
+                        ctx, result.message, android.widget.Toast.LENGTH_LONG,
+                    ).show()
+            }
+        }
+    }
+
     // Wrap the whole Scaffold + the NowPlaying overlay in one
     // `SharedTransitionLayout` so the MiniPlayer cover and the
     // NowPlayingSheet hero cover share an animation surface. The cover
@@ -303,17 +345,19 @@ private fun AppScaffold(
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 bottomBar = {
-                    // Mini-player rides inside an AnimatedVisibility so it can
-                    // (a) hand a sharedBounds modifier off to its cover and
-                    // (b) hide cleanly while the NowPlayingSheet takes over.
-                    val miniVisible = currentSong != null && !sheetOpen
-                    BottomRegion(
-                        navController = navController,
-                        miniPlayerVisible = miniVisible,
-                        onExpandMiniPlayer = { sheetOpen = true },
-                        playbackVm = playbackVm,
-                        sharedTransitionScope = this@SharedTransitionLayout,
-                    )
+                    // Profile + settings render as a full-screen overlay so the
+                    // bottom nav (and the mini player riding above it) drop out
+                    // entirely while they're open.
+                    if (!hideBottomRegion) {
+                        val miniVisible = currentSong != null && !sheetOpen
+                        BottomRegion(
+                            navController = navController,
+                            miniPlayerVisible = miniVisible,
+                            onExpandMiniPlayer = { sheetOpen = true },
+                            playbackVm = playbackVm,
+                            sharedTransitionScope = this@SharedTransitionLayout,
+                        )
+                    }
                 },
             ) { padding ->
                 Box(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -322,6 +366,7 @@ private fun AppScaffold(
                         playbackVm = playbackVm,
                         onSignOut = onSignOut,
                         onShowChangelog = { changelogOpen = true },
+                        onCheckUpdates = onCheckUpdates,
                     )
                     if (!networkAvailable) {
                         OfflineBadge(
@@ -430,6 +475,7 @@ private fun NavHostBody(
     playbackVm: PlaybackViewModel,
     onSignOut: () -> Unit,
     onShowChangelog: () -> Unit,
+    onCheckUpdates: () -> Unit,
 ) {
     NavHost(
             navController = navController,
@@ -442,12 +488,16 @@ private fun NavHostBody(
                     onPlaylistClick = { p ->
                         navController.navigate(Routes.playlistDetail(p.id))
                     },
+                    onArtistClick = { name ->
+                        navController.navigate(Routes.artistDetail(name))
+                    },
                     onLikedClick = { navController.navigate(Routes.LIKED) },
                     onFindClick = { navController.navigate(Routes.FIND) },
                     onSpotifyImport = { navController.navigate(Routes.SPOTIFY_IMPORT) },
                     onSignOut = onSignOut,
                     onShowChangelog = onShowChangelog,
                     onProfileClick = { navController.navigate(Routes.PROFILE) },
+                    onResumeFlush = { playbackVm.flushPlayHistoryAwait() },
                 )
             }
             composable(Routes.FOR_YOU) {
@@ -455,16 +505,34 @@ private fun NavHostBody(
                     onPlaylistClick = { p ->
                         navController.navigate(Routes.playlistDetail(p.id))
                     },
+                    onProfileClick = { navController.navigate(Routes.PROFILE) },
                 )
             }
             composable(Routes.PROFILE) {
                 com.mediaplayer.android.ui.profile.ProfileScreen(
+                    onBack = { navController.popBackStack() },
                     onShowChangelog = onShowChangelog,
-                    onCheckUpdates = {
-                        // TODO wire AppUpdateChecker.forceCheck via VM in Phase J
-                    },
+                    onCheckUpdates = onCheckUpdates,
                     onSignOut = onSignOut,
                     onOpenSetting = { route -> navController.navigate(route) },
+                    // Pop Profile off the stack on the way out so back from
+                    // the destination returns to Home, not to the Profile
+                    // overlay we just left.
+                    onSongsClick = {
+                        navController.navigate(Routes.LIKED) {
+                            popUpTo(Routes.PROFILE) { inclusive = true }
+                        }
+                    },
+                    onPlaylistsClick = {
+                        navController.navigate(Routes.LIBRARY) {
+                            popUpTo(Routes.PROFILE) { inclusive = true }
+                        }
+                    },
+                    onArtistsClick = {
+                        navController.navigate(Routes.ARTIST_LIST) {
+                            popUpTo(Routes.PROFILE) { inclusive = true }
+                        }
+                    },
                 )
             }
             composable(Routes.SETTINGS_CROSSFADE) {
@@ -495,6 +563,7 @@ private fun NavHostBody(
                         navController.navigate(Routes.artistDetail(name))
                     },
                     onArtistListClick = { navController.navigate(Routes.ARTIST_LIST) },
+                    onProfileClick = { navController.navigate(Routes.PROFILE) },
                 )
             }
             composable(Routes.FIND) {
@@ -508,7 +577,7 @@ private fun NavHostBody(
                     onLikedSongsClick = { navController.navigate(Routes.LIKED) },
                     onSpotifyImport = { navController.navigate(Routes.SPOTIFY_IMPORT) },
                     onFindClick = { navController.navigate(Routes.FIND) },
-                    onSignOut = onSignOut,
+                    onProfileClick = { navController.navigate(Routes.PROFILE) },
                 )
             }
             composable(Routes.SPOTIFY_IMPORT) {
@@ -684,14 +753,19 @@ private fun BottomNav(navController: NavHostController) {
             NavigationBarItem(
                 selected = selected,
                 onClick = {
-                    if (!selected) {
-                        navController.navigate(dest.route) {
-                            popUpTo(navController.graph.startDestinationId) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
+                    // Every bottom-nav tap lands at the tab's root, even if
+                    // already "in" that tab via a sub-route (Library has 4
+                    // children — Album / Artisti / Liked / Playlist detail).
+                    // popUpTo(HOME, inclusive=false) drops every entry above
+                    // start; launchSingleTop avoids re-pushing the root if
+                    // it's already on top. saveState/restoreState are off
+                    // on purpose: the user explicitly asked for "always go
+                    // to the root", not "remember where I was".
+                    navController.navigate(dest.route) {
+                        popUpTo(navController.graph.startDestinationId) {
+                            inclusive = false
                         }
+                        launchSingleTop = true
                     }
                 },
                 icon = dest.icon,

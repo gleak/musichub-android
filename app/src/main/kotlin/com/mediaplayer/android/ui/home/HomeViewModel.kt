@@ -35,6 +35,12 @@ class HomeViewModel(
 
     fun refresh() = load()
 
+    /** Silent reload — no spinner. Used on screen resume so returning from
+     *  the player surfaces newly-played tracks in the recents row. */
+    fun resume() {
+        viewModelScope.launch { loadOnce() }
+    }
+
     fun pullRefresh() {
         viewModelScope.launch {
             _isRefreshing.value = true

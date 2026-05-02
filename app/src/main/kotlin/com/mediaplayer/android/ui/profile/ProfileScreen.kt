@@ -18,12 +18,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
@@ -41,6 +48,7 @@ import com.mediaplayer.android.ui.common.LocalCurrentUser
 import com.mediaplayer.android.ui.theme.LocalMHMono
 import com.mediaplayer.android.ui.theme.MHColors
 import com.mediaplayer.android.ui.theme.MHGradient
+import com.mediaplayer.android.ui.theme.MHTheme
 import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 
 /**
@@ -53,10 +61,14 @@ import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
  */
 @Composable
 fun ProfileScreen(
+    onBack: () -> Unit = {},
     onShowChangelog: () -> Unit = {},
     onCheckUpdates: () -> Unit = {},
     onSignOut: () -> Unit = {},
     onOpenSetting: (route: String) -> Unit = {},
+    onSongsClick: () -> Unit = {},
+    onPlaylistsClick: () -> Unit = {},
+    onArtistsClick: () -> Unit = {},
     statsViewModel: ProfileStatsViewModel = viewModel(),
 ) {
     val user = LocalCurrentUser.current?.user
@@ -65,6 +77,36 @@ fun ProfileScreen(
     val crossfadeSec by com.mediaplayer.android.data.PlayerSettings.instance
         .crossfadeSeconds.collectAsStateWithLifecycle(initialValue = 0)
 
+    // Confirmation gate for sign-out — both Disconnetti and Cambia
+    // account funnel through here so an accidental tap doesn't drop
+    // the session silently.
+    var showSignOutConfirm by remember { mutableStateOf(false) }
+    if (showSignOutConfirm) {
+        AlertDialog(
+            onDismissRequest = { showSignOutConfirm = false },
+            title = { Text("Disconnettersi?") },
+            text = {
+                Text(
+                    "Verrai riportato alla schermata di accesso. " +
+                        "I download e le playlist locali resteranno sul dispositivo."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSignOutConfirm = false
+                    onSignOut()
+                }) {
+                    Text("Disconnetti", color = Color(0xFFFF4D2E))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutConfirm = false }) {
+                    Text("Annulla")
+                }
+            },
+        )
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -72,12 +114,25 @@ fun ProfileScreen(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 24.dp),
     ) {
         item {
-            Text(
-                text = "Profilo",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MHColors.TextHi,
-                modifier = Modifier.padding(horizontal = MediaPlayerSpacing.M),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Indietro",
+                        tint = MHTheme.textHi,
+                    )
+                }
+                Text(
+                    text = "Profilo",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MHTheme.textHi,
+                )
+            }
             Spacer(Modifier.height(12.dp))
         }
 
@@ -96,7 +151,7 @@ fun ProfileScreen(
                     Text(
                         text = user?.name ?: user?.email ?: "Ospite",
                         style = MaterialTheme.typography.titleLarge,
-                        color = MHColors.TextHi,
+                        color = MHTheme.textHi,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -104,7 +159,7 @@ fun ProfileScreen(
                         text = if (user?.anonymous == true) "Sessione ospite"
                         else user?.email ?: "—",
                         style = mono.caption,
-                        color = MHColors.TextLo,
+                        color = MHTheme.textLo,
                         modifier = Modifier.padding(top = 4.dp),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -123,9 +178,9 @@ fun ProfileScreen(
                     .padding(horizontal = MediaPlayerSpacing.M),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                StatCard("Brani", stats.songs, modifier = Modifier.weight(1f))
-                StatCard("Playlist", stats.playlists, modifier = Modifier.weight(1f))
-                StatCard("Artisti", stats.artists, modifier = Modifier.weight(1f))
+                StatCard("Brani", stats.songs, modifier = Modifier.weight(1f), onClick = onSongsClick)
+                StatCard("Playlist", stats.playlists, modifier = Modifier.weight(1f), onClick = onPlaylistsClick)
+                StatCard("Artisti", stats.artists, modifier = Modifier.weight(1f), onClick = onArtistsClick)
             }
         }
 
@@ -134,6 +189,15 @@ fun ProfileScreen(
         item {
             SettingsSection(title = "ACCOUNT") {
                 SettingsRow(label = "Profilo", detail = user?.email ?: "Ospite")
+                // Same callback as Disconnetti — signOut clears the
+                // credential + flips AuthState so LoginScreen comes back,
+                // and the user picks a different Google account (or
+                // continues as guest) from there.
+                SettingsRow(
+                    label = "Cambia account",
+                    detail = "Esci e accedi con un altro account",
+                    onClick = { showSignOutConfirm = true },
+                )
             }
         }
         item {
@@ -169,17 +233,23 @@ fun ProfileScreen(
 
         item {
             Spacer(Modifier.height(24.dp))
+            // Full-width clickable card. The previous version put
+            // .clickable on the Text node only, so the hit target was
+            // the text glyphs alone — easy to miss and felt broken.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = MediaPlayerSpacing.M),
+                    .padding(horizontal = MediaPlayerSpacing.M)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MHTheme.card)
+                    .clickable(onClick = { showSignOutConfirm = true })
+                    .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = "Disconnetti",
                     color = Color(0xFFFF4D2E),
                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                    modifier = Modifier.clickable(onClick = onSignOut),
                 )
             }
         }
@@ -210,23 +280,29 @@ private fun AvatarBlock(initial: String) {
 }
 
 @Composable
-private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
+private fun StatCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
     val mono = LocalMHMono.current
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(MHColors.Card)
+            .background(MHTheme.card)
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Text(
             text = value,
             style = mono.statValue,
-            color = MHColors.Lime,
+            color = MHTheme.accent,
         )
         Text(
             text = label.uppercase(),
             style = MaterialTheme.typography.labelSmall,
-            color = MHColors.TextLo,
+            color = MHTheme.textLo,
             modifier = Modifier.padding(top = 2.dp),
         )
     }
@@ -245,7 +321,7 @@ private fun SettingsSection(title: String, content: @Composable androidx.compose
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(MHColors.Card),
+                .background(MHTheme.card),
             content = content,
         )
     }
@@ -261,20 +337,20 @@ private fun androidx.compose.foundation.layout.ColumnScope.SettingsRow(
         modifier = Modifier
             .fillMaxWidth()
             .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-            .border(0.5.dp, MHColors.Divider, RoundedCornerShape(0.dp))
+            .border(0.5.dp, MHTheme.divider, RoundedCornerShape(0.dp))
             .padding(horizontal = 14.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = label,
-            color = MHColors.TextHi,
+            color = MHTheme.textHi,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
         if (detail != null) {
             Text(
                 text = detail,
-                color = MHColors.TextLo,
+                color = MHTheme.textLo,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(end = 6.dp),
             )
@@ -285,7 +361,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.SettingsRow(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = MHColors.TextLo,
+                tint = MHTheme.textLo,
                 modifier = Modifier.size(14.dp),
             )
         }

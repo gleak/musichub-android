@@ -26,8 +26,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Login
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -37,6 +35,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -73,7 +72,7 @@ import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.LocalCurrentUser
 import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.common.displayInitial
-import com.mediaplayer.android.ui.theme.SpotifyColors
+import com.mediaplayer.android.ui.theme.MHColors
 
 private enum class LibraryFilter { Playlists, Albums, Artisti, Scaricati }
 
@@ -85,7 +84,7 @@ fun PlaylistsScreen(
     onLikedSongsClick: () -> Unit = {},
     onSpotifyImport: () -> Unit = {},
     onFindClick: () -> Unit = {},
-    onSignOut: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
@@ -97,7 +96,7 @@ fun PlaylistsScreen(
             LibraryTopBar(
                 onSearch = onFindClick,
                 onAdd = { createOpen = true },
-                onSignOut = onSignOut,
+                onProfileClick = onProfileClick,
             )
             AnonymousBanner()
             FilterRow(filter = filter, onChange = { filter = it })
@@ -153,7 +152,7 @@ fun PlaylistsScreen(
 private fun LibraryTopBar(
     onSearch: () -> Unit,
     onAdd: () -> Unit,
-    onSignOut: () -> Unit,
+    onProfileClick: () -> Unit,
 ) {
     val currentUser = LocalCurrentUser.current
     val isAnonymous = currentUser?.user?.anonymous == true
@@ -208,10 +207,10 @@ private fun LibraryTopBar(
                 tint = MaterialTheme.colorScheme.onSurface,
             )
         }
-        IconButton(onClick = onSignOut) {
+        IconButton(onClick = onProfileClick) {
             Icon(
-                imageVector = if (isAnonymous) Icons.AutoMirrored.Filled.Login else Icons.AutoMirrored.Filled.Logout,
-                contentDescription = if (isAnonymous) "Sign in" else "Sign out",
+                imageVector = Icons.Filled.Settings,
+                contentDescription = "Profilo",
                 tint = MaterialTheme.colorScheme.onSurface,
             )
         }
@@ -346,8 +345,8 @@ private fun LikedSongsRow(onClick: () -> Unit) {
                 .background(
                     Brush.linearGradient(
                         listOf(
-                            SpotifyColors.LikedGradientStart,
-                            SpotifyColors.LikedGradientEnd,
+                            MHColors.LikedGradientStart,
+                            MHColors.LikedGradientEnd,
                         )
                     )
                 ),
@@ -437,8 +436,8 @@ private fun PlaylistRow(
                     if (playlist.isAuto) {
                         Brush.linearGradient(
                             listOf(
-                                SpotifyColors.LikedGradientStart,
-                                SpotifyColors.LikedGradientEnd,
+                                MHColors.LikedGradientStart,
+                                MHColors.LikedGradientEnd,
                             )
                         )
                     } else {
@@ -537,8 +536,8 @@ private fun PlaylistTile(
                     if (playlist.isAuto) {
                         Brush.linearGradient(
                             listOf(
-                                SpotifyColors.LikedGradientStart,
-                                SpotifyColors.LikedGradientEnd,
+                                MHColors.LikedGradientStart,
+                                MHColors.LikedGradientEnd,
                             )
                         )
                     } else {

@@ -52,14 +52,6 @@ object MHColors {
     val BrowseArtistsTile = Color(0xFFFF4D2E)   // hip-hop orange-red
 }
 
-/**
- * Backwards-compatible alias for callers still importing
- * `SpotifyColors`. Will be removed once the rebrand fully lands;
- * the object name carries no user-facing meaning.
- */
-@Deprecated("Renamed to MHColors", ReplaceWith("MHColors"))
-val SpotifyColors = MHColors
-
 private val MHDark = darkColorScheme(
     primary = MHColors.Lime,
     onPrimary = MHColors.Black,

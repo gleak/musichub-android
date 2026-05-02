@@ -6,6 +6,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadService
+import androidx.media3.exoplayer.scheduler.PlatformScheduler
 import androidx.media3.exoplayer.scheduler.Scheduler
 import com.mediaplayer.android.R
 
@@ -17,9 +18,10 @@ import com.mediaplayer.android.R
  * The service binds the singleton [DownloadManager] and shows a persistent
  * notification while downloads are in flight.
  *
- * No [Scheduler] is wired for now — interrupted downloads will resume the
- * next time the service starts (i.e. when a new download is requested or
- * the app is opened).
+ * Wires a [PlatformScheduler] (JobScheduler-backed, persisted across
+ * reboots via [android.Manifest.permission.RECEIVE_BOOT_COMPLETED]) so
+ * interrupted downloads resume automatically when the network requirement
+ * is met again — without the user having to reopen the app.
  */
 @UnstableApi
 class MediaDownloadService : DownloadService(
@@ -33,7 +35,8 @@ class MediaDownloadService : DownloadService(
     override fun getDownloadManager(): DownloadManager =
         DownloadRoot.getDownloadManager(this)
 
-    override fun getScheduler(): Scheduler? = null
+    override fun getScheduler(): Scheduler? =
+        PlatformScheduler(this, JOB_ID)
 
     override fun getForegroundNotification(
         downloads: MutableList<Download>,
@@ -57,5 +60,9 @@ class MediaDownloadService : DownloadService(
     companion object {
         private const val NOTIFICATION_ID = 2
         const val CHANNEL_ID = "media_downloads"
+        // PlatformScheduler job id — must be unique per app. Persisted in
+        // JobScheduler under this id so a re-install replaces (rather
+        // than duplicates) the existing entry.
+        private const val JOB_ID = 9101
     }
 }

@@ -19,6 +19,12 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- Required so MediaDownloadService's PlatformScheduler can persist
+         queued JobScheduler jobs across reboots. Without this the
+         scheduler silently downgrades to non-persistent jobs and
+         interrupted downloads stall until the user opens the app. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- Saving songs as alarm sound writes to MediaStore. Android 10+ uses
          scoped storage (no permission); pre-Q needs the legacy write perm. -->
     <uses-permission

@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import android.util.LruCache
 import androidx.palette.graphics.Palette
 import coil3.asDrawable
 import coil3.compose.AsyncImage
@@ -58,6 +59,19 @@ import coil3.size.Size
 import coil3.imageLoader
 
 private val DefaultBackdrop = Color(0xFF3E3E3E)
+
+/**
+ * Process-wide memo of cover-art → dominant Color. Hero header is
+ * re-composed on every detail-screen open; without a cache, each
+ * navigation triggers a fresh Coil fetch + Palette generation on the
+ * same handful of cover URLs. 64 entries covers a typical session.
+ *
+ * `Color.Unspecified` is stored as a sentinel for "computed but no
+ * swatch found" so we don't redo the work on the next visit.
+ */
+private val paletteCache = LruCache<String, Color>(64)
+
+private fun cacheKey(model: Any): String = model.toString()
 
 /**
  * Re-usable hero header for detail screens (Liked / Playlist / Album / Artist),
@@ -233,24 +247,33 @@ internal suspend fun extractDominantColor(
     context: android.content.Context,
     model: Any,
 ): Color? {
-    return try {
+    val key = cacheKey(model)
+    paletteCache.get(key)?.let { cached ->
+        return if (cached == Color.Unspecified) null else cached
+    }
+    val computed: Color? = try {
         val request = ImageRequest.Builder(context)
             .data(model)
             .size(Size(128, 128))
             .crossfade(false)
             .build()
         val result = context.imageLoader.execute(request)
-        if (result !is SuccessResult) return null
-        val bmp = (result.image.asDrawable(context.resources) as? BitmapDrawable)?.bitmap
-            ?: return null
-        val palette = Palette.from(bmp).clearFilters().generate()
-        val swatch = palette.darkVibrantSwatch
-            ?: palette.darkMutedSwatch
-            ?: palette.vibrantSwatch
-            ?: palette.dominantSwatch
-            ?: return null
-        Color(swatch.rgb)
+        if (result !is SuccessResult) null
+        else {
+            val bmp = (result.image.asDrawable(context.resources) as? BitmapDrawable)?.bitmap
+            if (bmp == null) null
+            else {
+                val palette = Palette.from(bmp).clearFilters().generate()
+                val swatch = palette.darkVibrantSwatch
+                    ?: palette.darkMutedSwatch
+                    ?: palette.vibrantSwatch
+                    ?: palette.dominantSwatch
+                if (swatch == null) null else Color(swatch.rgb)
+            }
+        }
     } catch (_: Throwable) {
         null
     }
+    paletteCache.put(key, computed ?: Color.Unspecified)
+    return computed
 }

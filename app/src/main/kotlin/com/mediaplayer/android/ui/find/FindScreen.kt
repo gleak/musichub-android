@@ -36,6 +36,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
@@ -58,6 +59,14 @@ fun FindScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val activeRequests by viewModel.activeRequests.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+
+    // Gate the VM's two poll loops on screen visibility — backgrounded
+    // FindScreen no longer wakes the CPU every few seconds to hit the
+    // backend.
+    LifecycleStartEffect(viewModel) {
+        viewModel.resume()
+        onStopOrDispose { viewModel.pause() }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         QueryBar(

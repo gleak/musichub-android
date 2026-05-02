@@ -6,6 +6,7 @@ import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
+import androidx.media3.exoplayer.scheduler.Requirements
 import com.mediaplayer.android.MediaPlayerApp
 import com.mediaplayer.android.playback.DownloadRoot
 import com.mediaplayer.android.playback.MediaDownloadService
@@ -51,6 +52,19 @@ object DownloadRepository {
         val dm = DownloadRoot.getDownloadManager(MediaPlayerApp.instance)
         dm.addListener(listener)
         refreshAsync(dm)
+        // Wire the "Solo Wi-Fi" toggle to the manager's requirements so the
+        // setting actually gates network use. Default in DownloadRoot is
+        // unmetered-only; the first emission of the flow corrects it to the
+        // user's stored preference, then tracks subsequent toggles.
+        scope.launch {
+            PlayerSettings.instance.downloadWifiOnly.collect { wifiOnly ->
+                dm.requirements = if (wifiOnly) {
+                    Requirements(Requirements.NETWORK_UNMETERED)
+                } else {
+                    Requirements(Requirements.NETWORK)
+                }
+            }
+        }
     }
 
     fun download(songId: Long) {

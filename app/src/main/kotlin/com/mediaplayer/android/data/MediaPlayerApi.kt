@@ -1,6 +1,7 @@
 package com.mediaplayer.android.data
 
 import com.mediaplayer.android.data.dto.AddSongRequest
+import com.mediaplayer.android.data.dto.AppVersionRequest
 import com.mediaplayer.android.data.dto.UserDto
 import com.mediaplayer.android.data.dto.LyricLineDto
 import com.mediaplayer.android.data.dto.RecordPlayRequest
@@ -51,6 +52,10 @@ interface MediaPlayerApi {
     @GET("api/auth/stats")
     suspend fun getStats(): com.mediaplayer.android.data.dto.StatsDto
 
+    /** Phone-side telemetry — reports the installed versionName on cold launch. */
+    @POST("api/auth/version")
+    suspend fun reportAppVersion(@Body body: AppVersionRequest)
+
     // ---------- Taste / Onboarding (M14e) ----------
 
     /** Seeds GENRE rows in user_taste so the recommender's cold-start path has signal. */
@@ -62,6 +67,7 @@ interface MediaPlayerApi {
     @GET("api/songs")
     suspend fun listSongs(
         @Query("q") query: String? = null,
+        @Query("genre") genre: String? = null,
         @Query("page") page: Int = 0,
         @Query("size") size: Int = 20,
     ): PageResponse<SongDto>

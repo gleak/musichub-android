@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -90,6 +91,7 @@ fun SearchScreen(
     onAlbumListClick: () -> Unit = {},
     onArtistClick: (name: String) -> Unit = {},
     onArtistListClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -135,12 +137,26 @@ fun SearchScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        Text(
-            text = "Cerca",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Cerca",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onProfileClick) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Profilo",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
 
         SearchField(
             query = query,
@@ -157,7 +173,7 @@ fun SearchScreen(
                     onRecentClick = viewModel::commitQuery,
                     onRecentRemove = viewModel::removeRecent,
                     onClearRecents = viewModel::clearRecents,
-                    onGenreClick = viewModel::selectGenre,
+                    onGenreClick = { display, tag -> viewModel.selectGenre(display, tag) },
                 )
                 SearchUiState.Loading -> Column {
                     activeGenre?.let { GenreFilterPill(name = it, onClear = viewModel::clearGenre) }
@@ -299,7 +315,7 @@ private fun IdleContent(
     onRecentClick: (String) -> Unit,
     onRecentRemove: (String) -> Unit,
     onClearRecents: () -> Unit,
-    onGenreClick: (String) -> Unit,
+    onGenreClick: (displayName: String, tagQuery: String) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         if (recents.isNotEmpty()) {
@@ -390,32 +406,34 @@ private fun RecentRow(
 
 private data class Genre(
     val name: String,
+    /** English Last.fm tag matched against `song_tags.tag` server-side. */
+    val tagQuery: String,
     val tile: Color,
     val kind: MHCoverKind,
     val palette: MHCoverPalette,
 )
 
 private val GENRES: List<Genre> = listOf(
-    Genre("Indie", Color(0xFF3A0CA3), MHCoverKind.Arc,
+    Genre("Indie", "indie", Color(0xFF3A0CA3), MHCoverKind.Arc,
         MHCoverPalette(Color(0xFF3A0CA3), Color(0xFFF72585))),
-    Genre("Elettronica", Color(0xFF06B6D4), MHCoverKind.Wave,
+    Genre("Elettronica", "electronic", Color(0xFF06B6D4), MHCoverKind.Wave,
         MHCoverPalette(Color(0xFF1E3A8A), Color(0xFF06B6D4))),
-    Genre("Hip-hop", Color(0xFFFF4D2E), MHCoverKind.Triangles,
+    Genre("Hip-hop", "hip-hop", Color(0xFFFF4D2E), MHCoverKind.Triangles,
         MHCoverPalette(Color(0xFF1A1A1A), Color(0xFFFF4D2E))),
-    Genre("Jazz", Color(0xFFFFC857), MHCoverKind.Stripes,
+    Genre("Jazz", "jazz", Color(0xFFFFC857), MHCoverKind.Stripes,
         MHCoverPalette(Color(0xFFFFC857), Color(0xFF1A1A1A))),
-    Genre("Classica", Color(0xFFE8DCC4), MHCoverKind.Moon,
+    Genre("Classica", "classical", Color(0xFFE8DCC4), MHCoverKind.Moon,
         MHCoverPalette(Color(0xFFE8DCC4), Color(0xFF1A1A1A))),
-    Genre("Ambient", Color(0xFF0B3D2E), MHCoverKind.Dot,
+    Genre("Ambient", "ambient", Color(0xFF0B3D2E), MHCoverKind.Dot,
         MHCoverPalette(Color(0xFF0B3D2E), MHColors.Lime)),
-    Genre("Rock", Color(0xFF5C2D8C), MHCoverKind.Grid,
+    Genre("Rock", "rock", Color(0xFF5C2D8C), MHCoverKind.Grid,
         MHCoverPalette(Color(0xFF5C2D8C), Color(0xFFF0A6B0))),
-    Genre("Pop", Color(0xFFF0A6B0), MHCoverKind.Duotone,
+    Genre("Pop", "pop", Color(0xFFF0A6B0), MHCoverKind.Duotone,
         MHCoverPalette(Color(0xFFF0A6B0), Color(0xFF3A0CA3))),
 )
 
 @Composable
-private fun GenreGrid(onGenreClick: (String) -> Unit) {
+private fun GenreGrid(onGenreClick: (displayName: String, tagQuery: String) -> Unit) {
     // Inline grid (no nested scroll) — split into rows of 2 manually.
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         GENRES.chunked(2).forEach { pair ->
@@ -430,7 +448,7 @@ private fun GenreGrid(onGenreClick: (String) -> Unit) {
                             .height(90.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(g.tile)
-                            .clickable { onGenreClick(g.name) }
+                            .clickable { onGenreClick(g.name, g.tagQuery) }
                             .padding(12.dp),
                     ) {
                         Text(

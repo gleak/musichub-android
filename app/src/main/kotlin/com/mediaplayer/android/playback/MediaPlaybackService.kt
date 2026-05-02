@@ -38,7 +38,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.guava.future
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 /**
  * Bound foreground service that owns the ExoPlayer instance.
@@ -88,6 +87,14 @@ class MediaPlaybackService : MediaLibraryService() {
             "com.android.systemui",                   // System lockscreen / notification controls
             "android",                                // System "android" package (lockscreen, etc.)
         )
+
+        /** AA / Automotive packages — narrower than [ALLOWED_CONTROLLER_PACKAGES],
+         *  used to gate the [AALyricsTicker] so phone-only sessions don't pay
+         *  for an AA-card refresh that nothing renders. */
+        private val CAR_CONTROLLER_PACKAGES = setOf(
+            "com.google.android.projection.gearhead",
+            "com.google.android.car.media",
+        )
     }
 
     private var mediaSession: MediaLibrarySession? = null
@@ -95,6 +102,22 @@ class MediaPlaybackService : MediaLibraryService() {
     private var resumptionListener: Player.Listener? = null
     private var prefetch: PrefetchOrchestrator? = null
     private var crossfadeJob: Job? = null
+
+    /**
+     * Cached crossfade seconds — kept in sync with [PlayerSettings] via a
+     * collect on [serviceScope]. Read on every auto-transition; the prior
+     * `runBlocking { crossfadeSecondsNow() }` blocked the player looper on
+     * a DataStore read on every track change.
+     */
+    @Volatile private var crossfadeSecondsCached: Int = 0
+
+    /**
+     * Number of currently-attached AA / Automotive controllers. The AA
+     * lyrics ticker is disabled while this is 0 so phone-only playback
+     * doesn't pay for `replaceMediaItem` per lyric line.
+     */
+    private var carControllerCount: Int = 0
+    private var aaLyricsTicker: AALyricsTicker? = null
 
     /**
      * Off-main scope for `MediaLibrarySession.Callback` work (browse tree
@@ -165,6 +188,11 @@ class MediaPlaybackService : MediaLibraryService() {
                 /* handleAudioFocus = */ true,
             )
             .setHandleAudioBecomingNoisy(true)
+            // Keep CPU + Wi-Fi awake while streaming network audio so the
+            // OS doesn't doze the buffer mid-playback. NETWORK wake mode
+            // also covers local cached files (superset of WAKE_MODE_LOCAL).
+            // Manifest already declares WAKE_LOCK.
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
 
         // Pin a fresh audio-session id BEFORE the equalizer attaches.
@@ -203,6 +231,14 @@ class MediaPlaybackService : MediaLibraryService() {
             }
         }
 
+        // Cache crossfade seconds so the auto-transition listener doesn't
+        // have to runBlocking-read DataStore on every track change.
+        serviceScope.launch {
+            com.mediaplayer.android.data.PlayerSettings.instance
+                .crossfadeSeconds
+                .collectLatest { crossfadeSecondsCached = it }
+        }
+
         // M13: bind the hardware Equalizer to the audio session we pinned
         // above. Using the locally-generated id (rather than re-reading
         // `player.audioSessionId`) protects against drivers that report
@@ -220,6 +256,11 @@ class MediaPlaybackService : MediaLibraryService() {
         prefetch = PrefetchOrchestrator(this, streamCache, httpFactory).also {
             it.install(player)
         }
+
+        // Drive the AA now-playing card with the current synced lyric line.
+        // Phone has its own LyricsSheet; AA can't show a scrolling list, so
+        // we surface lyrics one line at a time via MediaMetadata.description.
+        aaLyricsTicker = AALyricsTicker(player, serviceScope).also { it.install() }
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -243,9 +284,7 @@ class MediaPlaybackService : MediaLibraryService() {
      */
     private fun fadeInOnAutoTransition() {
         val p = mediaSession?.player ?: return
-        val seconds = runBlocking {
-            com.mediaplayer.android.data.PlayerSettings.instance.crossfadeSecondsNow()
-        }
+        val seconds = crossfadeSecondsCached
         if (seconds <= 0) {
             p.volume = 1f
             return
@@ -343,6 +382,11 @@ class MediaPlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         EqualizerController.release()
+        // Drop the lyrics listener before serviceScope is cancelled so the
+        // ticker stops cleanly without a stray replaceMediaItem on a
+        // half-released player.
+        aaLyricsTicker?.uninstall()
+        aaLyricsTicker = null
         serviceScope.cancel()
         // Release the prefetch orchestrator *before* tearing down the
         // player — it holds a Player.Listener and a NetworkCallback and
@@ -402,6 +446,26 @@ class MediaPlaybackService : MediaLibraryService() {
                 availableSessionCommands,
                 availablePlayerCommands,
             )
+        }
+
+        override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
+            super.onPostConnect(session, controller)
+            if (controller.packageName in CAR_CONTROLLER_PACKAGES) {
+                carControllerCount++
+                if (carControllerCount == 1) {
+                    aaLyricsTicker?.setAaConnected(true)
+                }
+            }
+        }
+
+        override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
+            if (controller.packageName in CAR_CONTROLLER_PACKAGES) {
+                carControllerCount = (carControllerCount - 1).coerceAtLeast(0)
+                if (carControllerCount == 0) {
+                    aaLyricsTicker?.setAaConnected(false)
+                }
+            }
+            super.onDisconnected(session, controller)
         }
 
         override fun onCustomCommand(
@@ -580,6 +644,13 @@ class MediaPlaybackService : MediaLibraryService() {
                     LibraryTree.parseArtistLeaf(id)?.let { (name, pos, _) ->
                         return@future MediaSession.MediaItemsWithStartPosition(
                             LibraryTree.artistQueue(name), pos, C.TIME_UNSET
+                        )
+                    }
+
+                    // Genre leaf → expand genre's song list from pos.
+                    LibraryTree.parseGenreLeaf(id)?.let { (tag, pos, _) ->
+                        return@future MediaSession.MediaItemsWithStartPosition(
+                            LibraryTree.genreQueue(tag), pos, C.TIME_UNSET
                         )
                     }
 

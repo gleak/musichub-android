@@ -53,6 +53,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
@@ -72,7 +76,7 @@ import com.mediaplayer.android.ui.common.SectionHeader
 import com.mediaplayer.android.ui.common.SongCover
 import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
-import com.mediaplayer.android.ui.theme.SpotifyColors
+import com.mediaplayer.android.ui.theme.MHColors
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,21 +84,48 @@ import java.util.Calendar
 fun HomeScreen(
     onSongClick: (SongDto) -> Unit = {},
     onPlaylistClick: (PlaylistDto) -> Unit = {},
+    onArtistClick: (String) -> Unit = {},
     onLikedClick: () -> Unit = {},
     onFindClick: () -> Unit = {},
     onSpotifyImport: () -> Unit = {},
     onSignOut: () -> Unit = {},
     onShowChangelog: () -> Unit = {},
     onProfileClick: () -> Unit = {},
+    onResumeFlush: suspend () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
+    // Silent refresh on resume so songs played in this session land in the
+    // recents row (and therefore in the Musica/Artisti filter views) when
+    // the user returns to Home from the player or another tab. We flush
+    // the in-flight play first so the backend has the new record before we
+    // re-fetch /recent.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                scope.launch {
+                    onResumeFlush()
+                    viewModel.resume()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     PullToRefreshBox(
         isRefreshing = isRefreshing,
-        onRefresh = viewModel::pullRefresh,
+        onRefresh = {
+            scope.launch {
+                onResumeFlush()
+                viewModel.pullRefresh()
+            }
+        },
         modifier = modifier.fillMaxSize(),
     ) {
         when (val s = state) {
@@ -105,6 +136,7 @@ fun HomeScreen(
                 playlists = s.playlists,
                 onSongClick = onSongClick,
                 onPlaylistClick = onPlaylistClick,
+                onArtistClick = onArtistClick,
                 onLikedClick = onLikedClick,
                 onFindClick = onFindClick,
                 onSpotifyImport = onSpotifyImport,
@@ -116,12 +148,20 @@ fun HomeScreen(
     }
 }
 
+private enum class HomeFilter(val label: String) {
+    All("Tutto"),
+    Music("Musica"),
+    Playlists("Playlist"),
+    Artists("Artisti"),
+}
+
 @Composable
 private fun HomeContent(
     recents: List<SongDto>,
     playlists: List<PlaylistDto>,
     onSongClick: (SongDto) -> Unit,
     onPlaylistClick: (PlaylistDto) -> Unit,
+    onArtistClick: (String) -> Unit,
     onLikedClick: () -> Unit,
     onFindClick: () -> Unit,
     onSpotifyImport: () -> Unit,
@@ -129,6 +169,12 @@ private fun HomeContent(
     onShowChangelog: () -> Unit,
     onProfileClick: () -> Unit,
 ) {
+    var filter by remember { mutableStateOf(HomeFilter.All) }
+
+    val artists = remember(recents) {
+        recents.map { it.artist }.filter { it.isNotBlank() }.distinct()
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = MediaPlayerSpacing.M, bottom = MediaPlayerSpacing.L),
@@ -143,62 +189,137 @@ private fun HomeContent(
         }
 
         item(key = "filter_chips") {
-            HomeFilterChips()
+            HomeFilterChips(selected = filter, onSelect = { filter = it })
         }
 
         item(key = "anonymous_banner") {
             AnonymousBanner()
         }
 
-        if (recents.isNotEmpty() || playlists.isNotEmpty()) {
-            item(key = "shortcuts") {
-                ShortcutGrid(
-                    recents = recents,
-                    onLikedClick = onLikedClick,
-                    onSongClick = onSongClick,
-                    onPlaylistClick = onPlaylistClick,
-                    playlists = playlists,
-                )
-            }
-        } else {
-            // Cold-start (zero recents AND zero playlists). Default Home is
-            // otherwise empty under the greeting — surface CTAs that move the
-            // user toward content instead of leaving them at a wall.
-            item(key = "cold_start") {
-                ColdStartCtas(
-                    onFindClick = onFindClick,
-                    onSpotifyImport = onSpotifyImport,
-                )
-            }
-        }
-
-        if (recents.isNotEmpty()) {
-            item(key = "recent_title") {
-                SectionHeader(eyebrow = "Cronologia", title = "Riprodotti di recente")
-            }
-            item(key = "recent_row") {
-                RecentRow(recents = recents, onClick = onSongClick)
-            }
-        }
-
         val autoPlaylists = playlists.filter { it.isAuto }
         val userPlaylists = playlists.filter { !it.isAuto }
 
-        if (autoPlaylists.isNotEmpty()) {
-            item(key = "made_for_you_title") {
-                SectionHeader(eyebrow = "Generata per te", title = "Le tue playlist di oggi")
-            }
-            item(key = "made_for_you_row") {
-                PlaylistRow(playlists = autoPlaylists, onClick = onPlaylistClick)
-            }
-        }
+        when (filter) {
+            HomeFilter.All -> {
+                if (recents.isNotEmpty() || playlists.isNotEmpty()) {
+                    item(key = "shortcuts") {
+                        ShortcutGrid(
+                            recents = recents,
+                            playlists = playlists,
+                            includeLiked = true,
+                            onLikedClick = onLikedClick,
+                            onSongClick = onSongClick,
+                            onPlaylistClick = onPlaylistClick,
+                        )
+                    }
+                } else {
+                    // Cold-start (zero recents AND zero playlists). Default Home
+                    // is otherwise empty under the greeting — surface CTAs that
+                    // move the user toward content instead of leaving them at a wall.
+                    item(key = "cold_start") {
+                        ColdStartCtas(
+                            onFindClick = onFindClick,
+                            onSpotifyImport = onSpotifyImport,
+                        )
+                    }
+                }
 
-        if (userPlaylists.isNotEmpty()) {
-            item(key = "playlists_title") {
-                SectionHeader(eyebrow = "Libreria", title = "Le tue playlist")
+                if (recents.isNotEmpty()) {
+                    item(key = "recent_title") {
+                        SectionHeader(eyebrow = "Cronologia", title = "Riprodotti di recente")
+                    }
+                    item(key = "recent_row") {
+                        RecentRow(recents = recents, onClick = onSongClick)
+                    }
+                }
+
+                if (autoPlaylists.isNotEmpty()) {
+                    item(key = "made_for_you_title") {
+                        SectionHeader(eyebrow = "Generata per te", title = "Le tue playlist di oggi")
+                    }
+                    item(key = "made_for_you_row") {
+                        PlaylistRow(playlists = autoPlaylists, onClick = onPlaylistClick)
+                    }
+                }
+
+                if (userPlaylists.isNotEmpty()) {
+                    item(key = "playlists_title") {
+                        SectionHeader(eyebrow = "Libreria", title = "Le tue playlist")
+                    }
+                    item(key = "playlists_row") {
+                        PlaylistRow(playlists = userPlaylists, onClick = onPlaylistClick)
+                    }
+                }
             }
-            item(key = "playlists_row") {
-                PlaylistRow(playlists = userPlaylists, onClick = onPlaylistClick)
+
+            HomeFilter.Music -> {
+                item(key = "liked_row") {
+                    SingleColumnTile(
+                        title = "Liked Songs",
+                        subtitle = "I brani con il cuore",
+                        icon = Icons.Filled.Favorite,
+                        gradientStart = MHColors.LikedGradientStart,
+                        gradientEnd = MHColors.LikedGradientEnd,
+                        iconTint = Color.White,
+                        onClick = onLikedClick,
+                    )
+                }
+                if (recents.isEmpty()) {
+                    item(key = "music_empty") {
+                        EmptyFilterHint("Nessun brano recente — riproduci qualcosa per riempire questa lista.")
+                    }
+                } else {
+                    item(key = "music_title") {
+                        SectionHeader(eyebrow = "Cronologia", title = "Brani recenti")
+                    }
+                    items(items = recents, key = { "song_${it.id}" }) { song ->
+                        com.mediaplayer.android.ui.search.SongRow(
+                            song = song,
+                            onClick = { onSongClick(song) },
+                            onArtistClick = onArtistClick,
+                        )
+                    }
+                }
+            }
+
+            HomeFilter.Playlists -> {
+                if (playlists.isEmpty()) {
+                    item(key = "pl_empty") {
+                        EmptyFilterHint("Nessuna playlist — creane una o importala.")
+                    }
+                } else {
+                    if (autoPlaylists.isNotEmpty()) {
+                        item(key = "pl_auto_title") {
+                            SectionHeader(eyebrow = "Generata per te", title = "Le tue playlist di oggi")
+                        }
+                        items(items = autoPlaylists, key = { "auto_${it.id}" }) { p ->
+                            PlaylistListRow(playlist = p, onClick = { onPlaylistClick(p) })
+                        }
+                    }
+                    if (userPlaylists.isNotEmpty()) {
+                        item(key = "pl_user_title") {
+                            SectionHeader(eyebrow = "Libreria", title = "Le tue playlist")
+                        }
+                        items(items = userPlaylists, key = { "user_${it.id}" }) { p ->
+                            PlaylistListRow(playlist = p, onClick = { onPlaylistClick(p) })
+                        }
+                    }
+                }
+            }
+
+            HomeFilter.Artists -> {
+                if (artists.isEmpty()) {
+                    item(key = "artists_empty") {
+                        EmptyFilterHint("Nessun artista — riproduci qualcosa per popolare questa lista.")
+                    }
+                } else {
+                    item(key = "artists_title") {
+                        SectionHeader(eyebrow = "Dai tuoi ascolti", title = "Artisti")
+                    }
+                    items(items = artists, key = { "artist_$it" }) { name ->
+                        ArtistListRow(name = name, onClick = { onArtistClick(name) })
+                    }
+                }
             }
         }
 
@@ -219,9 +340,11 @@ private fun HomeContent(
 }
 
 @Composable
-private fun HomeFilterChips() {
-    var selected by remember { mutableStateOf("Tutto") }
-    val chips = listOf("Tutto", "Musica", "Playlist", "Artisti")
+private fun HomeFilterChips(
+    selected: HomeFilter,
+    onSelect: (HomeFilter) -> Unit,
+) {
+    val chips = HomeFilter.values().toList()
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -229,12 +352,22 @@ private fun HomeFilterChips() {
     ) {
         items(chips) { c ->
             com.mediaplayer.android.ui.common.PillChip(
-                label = c,
+                label = c.label,
                 selected = c == selected,
-                onClick = { selected = c },
+                onClick = { onSelect(c) },
             )
         }
     }
+}
+
+@Composable
+private fun EmptyFilterHint(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+    )
 }
 
 @Composable
@@ -361,16 +494,20 @@ private fun currentDateLabel(): String {
 private fun ShortcutGrid(
     recents: List<SongDto>,
     playlists: List<PlaylistDto>,
+    includeLiked: Boolean,
     onLikedClick: () -> Unit,
     onSongClick: (SongDto) -> Unit,
     onPlaylistClick: (PlaylistDto) -> Unit,
 ) {
     // Up to 6 horizontally-laid wide tiles in a 2-col layout, Spotify style.
     val items = buildList<ShortcutItem> {
-        add(ShortcutItem.Liked)
-        recents.take(3).forEach { add(ShortcutItem.Song(it)) }
-        playlists.take(2).forEach { add(ShortcutItem.Playlist(it)) }
+        if (includeLiked) add(ShortcutItem.Liked)
+        val songSlots = if (playlists.isEmpty()) 5 else 3
+        val plSlots = if (recents.isEmpty()) 5 else 2
+        recents.take(songSlots).forEach { add(ShortcutItem.Song(it)) }
+        playlists.take(plSlots).forEach { add(ShortcutItem.Playlist(it)) }
     }.take(6)
+    if (items.isEmpty()) return
 
     Column(
         modifier = Modifier
@@ -457,8 +594,8 @@ private fun ShortcutIcon(item: ShortcutItem) {
                         .background(
                             Brush.linearGradient(
                                 listOf(
-                                    SpotifyColors.LikedGradientStart,
-                                    SpotifyColors.LikedGradientEnd,
+                                    MHColors.LikedGradientStart,
+                                    MHColors.LikedGradientEnd,
                                 )
                             )
                         ),
@@ -570,8 +707,8 @@ private fun PlaylistCardSquare(playlist: PlaylistDto, onClick: () -> Unit) {
                     if (playlist.isAuto) {
                         Brush.linearGradient(
                             listOf(
-                                SpotifyColors.LikedGradientStart,
-                                SpotifyColors.LikedGradientEnd,
+                                MHColors.LikedGradientStart,
+                                MHColors.LikedGradientEnd,
                             )
                         )
                     } else {
@@ -609,6 +746,214 @@ private fun PlaylistCardSquare(playlist: PlaylistDto, onClick: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun ArtistRow(artists: List<String>, onClick: (String) -> Unit) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(items = artists, key = { it }) { name ->
+            ArtistCardCircle(name = name, onClick = { onClick(name) })
+        }
+    }
+}
+
+@Composable
+private fun ArtistCardCircle(name: String, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(120.dp)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.colorScheme.surfaceContainerHigh,
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = name.take(1).uppercase(),
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Text(
+            text = name,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun SingleColumnTile(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    gradientStart: Color,
+    gradientEnd: Color,
+    iconTint: Color,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(CoverShapes.SongRow)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .background(Brush.linearGradient(listOf(gradientStart, gradientEnd))),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlaylistListRow(playlist: PlaylistDto, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(CoverShapes.SongRow)
+                .background(
+                    if (playlist.isAuto) {
+                        Brush.linearGradient(
+                            listOf(
+                                MHColors.LikedGradientStart,
+                                MHColors.LikedGradientEnd,
+                            )
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                MaterialTheme.colorScheme.surfaceVariant,
+                            )
+                        )
+                    }
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (playlist.isAuto) Icons.Filled.AutoAwesome
+                else Icons.AutoMirrored.Filled.QueueMusic,
+                contentDescription = null,
+                tint = if (playlist.isAuto) Color.White
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = playlist.name,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (playlist.isAuto) "Per te · ${playlist.songCount} brani"
+                else "Playlist · ${playlist.songCount} brani",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArtistListRow(name: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.colorScheme.surfaceContainerHigh,
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = name.take(1).uppercase(),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = name,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
     }
 }

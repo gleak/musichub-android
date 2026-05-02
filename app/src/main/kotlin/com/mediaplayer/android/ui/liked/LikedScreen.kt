@@ -48,7 +48,7 @@ import com.mediaplayer.android.ui.common.SongListShimmer
 import com.mediaplayer.android.ui.common.SpotifyHero
 import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
 import com.mediaplayer.android.ui.search.SongRow
-import com.mediaplayer.android.ui.theme.SpotifyColors
+import com.mediaplayer.android.ui.theme.MHColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -168,7 +168,7 @@ private fun LikedBody(
                 title = "Liked Songs",
                 subtitle = "Playlist • ${pluralizeSongs(totalItems)}",
                 coverModel = null,
-                fallbackGradient = SpotifyColors.LikedGradientStart to SpotifyColors.LikedGradientEnd,
+                fallbackGradient = MHColors.LikedGradientStart to MHColors.LikedGradientEnd,
                 onPlay = { if (songs.isNotEmpty()) onPlayFromIndex(songs, 0) },
                 onShuffle = { if (songs.isNotEmpty()) onShufflePlay(songs) },
                 playEnabled = songs.isNotEmpty(),

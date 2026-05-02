@@ -117,7 +117,7 @@ fun DownloadOfflineScreen(onBack: () -> Unit) {
             )
             SettingsToggleRow(
                 label = "Download automatico",
-                detail = "Scarica i brani che ascolti più di 3 volte",
+                detail = "Scarica automaticamente ogni brano che ascolti",
                 checked = autoDownload,
                 onCheckedChange = { v -> scope.launch { settings.setDownloadAuto(v) } },
             )

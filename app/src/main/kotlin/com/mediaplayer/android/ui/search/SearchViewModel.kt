@@ -52,8 +52,16 @@ class SearchViewModel(
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
+    /** Display name shown in the genre filter pill (e.g. "Hip-hop"). */
     private val _activeGenre = MutableStateFlow<String?>(null)
     val activeGenre: StateFlow<String?> = _activeGenre.asStateFlow()
+
+    /**
+     * Backend tag to filter on (e.g. "hip-hop") — distinct from the display
+     * name because Last.fm tags are English while UI labels are Italian.
+     * Null when no genre is active.
+     */
+    private val _activeGenreTag = MutableStateFlow<String?>(null)
 
     private val _likedIds = MutableStateFlow<Set<Long>>(emptySet())
     val likedIds: StateFlow<Set<Long>> = _likedIds.asStateFlow()
@@ -76,15 +84,16 @@ class SearchViewModel(
 
     val state: StateFlow<SearchUiState> = combine(
         _query.debounce(DEBOUNCE_MS).distinctUntilChanged(),
+        _activeGenreTag,
         _retryTick,
-    ) { q, _ -> q }
-        .flatMapLatest { q ->
+    ) { q, tag, _ -> q to tag }
+        .flatMapLatest { (q, tag) ->
             flow {
-                if (q.isBlank()) {
+                if (q.isBlank() && tag.isNullOrBlank()) {
                     emit(SearchUiState.Idle)
                 } else {
                     emit(SearchUiState.Loading)
-                    emit(fetch(q))
+                    emit(fetch(q, tag))
                 }
             }
         }
@@ -104,15 +113,13 @@ class SearchViewModel(
 
     fun onQueryChange(newQuery: String) {
         _query.value = newQuery
-        if (newQuery.isBlank()) _activeGenre.value = null
     }
 
     fun clearQuery() {
         _query.value = ""
-        _activeGenre.value = null
     }
 
-    /** User-triggered commit (Enter / mic / history reuse / genre click). Persists query. */
+    /** User-triggered commit (Enter / mic / history reuse). Persists query. */
     fun commitQuery(text: String) {
         val q = text.trim()
         if (q.isEmpty()) return
@@ -120,14 +127,20 @@ class SearchViewModel(
         viewModelScope.launch { searchHistoryStore.add(q) }
     }
 
-    fun selectGenre(name: String) {
-        _activeGenre.value = name
-        commitQuery(name)
+    /**
+     * Activate a genre filter. [displayName] populates the pill, [tagQuery]
+     * is the actual `song_tags.tag` value sent to the backend. The free-text
+     * query is left untouched — typing in the field then narrows within the
+     * genre rather than replacing it.
+     */
+    fun selectGenre(displayName: String, tagQuery: String) {
+        _activeGenre.value = displayName
+        _activeGenreTag.value = tagQuery
     }
 
     fun clearGenre() {
         _activeGenre.value = null
-        clearQuery()
+        _activeGenreTag.value = null
     }
 
     fun removeRecent(query: String) {
@@ -155,8 +168,8 @@ class SearchViewModel(
         else DownloadRepository.download(songId)
     }
 
-    private suspend fun fetch(query: String): SearchUiState = try {
-        val page = repository.listSongs(query = query)
+    private suspend fun fetch(query: String, genre: String?): SearchUiState = try {
+        val page = repository.listSongs(query = query, genre = genre)
         val ids = page.items.map { it.id }
         _likedIds.value = if (ids.isEmpty()) emptySet() else likedRepository.status(ids)
         SearchUiState.Success(page.items)

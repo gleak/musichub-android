@@ -1,6 +1,14 @@
 package com.mediaplayer.android.playback
 
 import android.app.Application
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.SharedPreferencesMigration
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
@@ -15,14 +23,34 @@ import coil3.memory.MemoryCache
 import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.HistoryRepository
 import com.mediaplayer.android.data.Network
+import com.mediaplayer.android.data.PlayerSettings
 import com.mediaplayer.android.data.SongRepository
 import com.mediaplayer.android.data.dto.SongDto
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+
+private const val PLAYBACK_DATASTORE = "playback"
+
+/**
+ * Playback session prefs (shuffle, repeat). [SharedPreferencesMigration]
+ * pulls in the legacy `playback` SharedPreferences file on first access so
+ * existing user state migrates seamlessly.
+ */
+private val Context.playbackDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = PLAYBACK_DATASTORE,
+    produceMigrations = { ctx ->
+        listOf(SharedPreferencesMigration(ctx, PLAYBACK_DATASTORE))
+    },
+)
+
+private val PREF_SHUFFLE_KEY = booleanPreferencesKey("shuffle")
+private val PREF_REPEAT_KEY = intPreferencesKey("repeat")
 
 @UnstableApi
 class PlaybackViewModel(application: Application) : AndroidViewModel(application) {
@@ -109,7 +137,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     // before any source item under any shuffle state. Spotify-equivalent.
     private var originalSourceOrder: List<Long> = emptyList()
 
-    private val prefs = application.getSharedPreferences("playback", android.content.Context.MODE_PRIVATE)
+    private val playbackPrefs: DataStore<Preferences> = application.playbackDataStore
+
+    private var positionPollJob: Job? = null
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {
@@ -119,6 +149,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             } else if (!playing && playingStartWall != -1L) {
                 listenedMs += System.currentTimeMillis() - playingStartWall
                 playingStartWall = -1L
+            }
+            if (playing) startPositionPoll() else {
+                stopPositionPoll()
+                pushPositionOnce()
             }
         }
 
@@ -145,6 +179,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             newPosition: Player.PositionInfo,
             reason: Int,
         ) {
+            // Push position once on every discontinuity (seek, auto-advance,
+            // skip) so the UI tracks jumps even while the periodic poll is
+            // not running (paused state).
+            pushPositionOnce()
             // Spotify-queue contract: a user-queued item is consumed the
             // moment we leave it (auto-advance or manual skip). The new
             // item is already prepared and playing, so removing the old
@@ -174,14 +212,22 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             }
             if (shuffleModeEnabled != _shuffleEnabled.value) {
                 _shuffleEnabled.value = shuffleModeEnabled
-                prefs.edit().putBoolean(PREF_SHUFFLE, shuffleModeEnabled).apply()
+                viewModelScope.launch {
+                    runCatching {
+                        playbackPrefs.edit { it[PREF_SHUFFLE_KEY] = shuffleModeEnabled }
+                    }
+                }
                 rearrangeSourceItems(toShuffled = shuffleModeEnabled)
             }
         }
 
         override fun onRepeatModeChanged(repeatMode: Int) {
             _repeatMode.value = repeatMode
-            prefs.edit().putInt(PREF_REPEAT, repeatMode).apply()
+            viewModelScope.launch {
+                runCatching {
+                    playbackPrefs.edit { it[PREF_REPEAT_KEY] = repeatMode }
+                }
+            }
         }
     }
 
@@ -192,8 +238,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 controller = c
                 if (c != null) {
                     c.addListener(listener)
-                    val savedShuffle = prefs.getBoolean(PREF_SHUFFLE, false)
-                    val savedRepeat = prefs.getInt(PREF_REPEAT, Player.REPEAT_MODE_OFF)
+                    val snapshot = runCatching { playbackPrefs.data.first() }.getOrNull()
+                    val savedShuffle = snapshot?.get(PREF_SHUFFLE_KEY) ?: false
+                    val savedRepeat = snapshot?.get(PREF_REPEAT_KEY) ?: Player.REPEAT_MODE_OFF
                     // Force the controller's shuffle off — app owns shuffle
                     // semantics now, layered on top of the timeline so the
                     // user queue stays at currentIndex+1 under any state.
@@ -206,17 +253,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     pushDuration()
                     pushQueueAvailability()
                     pushQueue()
+                    pushPositionOnce()
+                    if (c.isPlaying) startPositionPoll() else stopPositionPoll()
+                } else {
+                    stopPositionPoll()
                 }
-            }
-        }
-
-        viewModelScope.launch {
-            while (true) {
-                controller?.let { c ->
-                    _positionMs.value = c.currentPosition.coerceAtLeast(0)
-                    if (trackedDurationMs == 0L && c.duration > 0) trackedDurationMs = c.duration
-                }
-                delay(if (controller?.isPlaying == true) POSITION_POLL_MS else POSITION_POLL_IDLE_MS)
             }
         }
 
@@ -266,7 +307,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         originalSourceOrder = songs.map { it.id }
         if (!_shuffleEnabled.value) {
             _shuffleEnabled.value = true
-            prefs.edit().putBoolean(PREF_SHUFFLE, true).apply()
+            persistShuffle(true)
         }
         val items = songs.shuffled().map { it.toMediaItem() }
         c.shuffleModeEnabled = false
@@ -299,8 +340,16 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     fun toggleShuffle() {
         val newShuffle = !_shuffleEnabled.value
         _shuffleEnabled.value = newShuffle
-        prefs.edit().putBoolean(PREF_SHUFFLE, newShuffle).apply()
+        persistShuffle(newShuffle)
         rearrangeSourceItems(toShuffled = newShuffle)
+    }
+
+    private fun persistShuffle(value: Boolean) {
+        viewModelScope.launch {
+            runCatching {
+                playbackPrefs.edit { it[PREF_SHUFFLE_KEY] = value }
+            }
+        }
     }
 
     /**
@@ -476,8 +525,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 songRepository.downloadVideo(current.id)
-                while (true) {
-                    delay(2_000)
+                var wait = VIDEO_POLL_INITIAL_MS
+                var attempts = 0
+                while (attempts < VIDEO_POLL_MAX_ATTEMPTS) {
+                    delay(wait)
+                    attempts++
                     val s = songRepository.getDownloadVideoStatus(current.id)
                     when (s.status) {
                         "DONE" -> {
@@ -489,6 +541,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                             break
                         }
                     }
+                    wait = (wait * 2).coerceAtMost(VIDEO_POLL_MAX_MS)
+                }
+                if (attempts >= VIDEO_POLL_MAX_ATTEMPTS && _videoDownloadError.value == null) {
+                    _videoDownloadError.value = "Video download timed out"
                 }
             } catch (t: Throwable) {
                 _videoDownloadError.value = t.message ?: "Video download failed"
@@ -509,8 +565,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 songRepository.reinitializeVideo(current.id)
-                while (true) {
-                    delay(2_000)
+                var wait = VIDEO_POLL_INITIAL_MS
+                var attempts = 0
+                while (attempts < VIDEO_POLL_MAX_ATTEMPTS) {
+                    delay(wait)
+                    attempts++
                     val s = songRepository.getReinitializeStatus(current.id)
                     when (s.status) {
                         "DONE" -> break
@@ -519,6 +578,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                             break
                         }
                     }
+                    wait = (wait * 2).coerceAtMost(VIDEO_POLL_MAX_MS)
+                }
+                if (attempts >= VIDEO_POLL_MAX_ATTEMPTS && _videoReinitializeError.value == null) {
+                    _videoReinitializeError.value = "Reinitialize timed out"
                 }
             } catch (t: Throwable) {
                 _videoReinitializeError.value = t.message ?: "Reinitialize failed"
@@ -683,11 +746,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         val id = trackedSongId ?: return
         val listened = listenedMs
         val duration = trackedDurationMs
-        // Drop pure no-ops: queue advanced past this item before playback
-        // ever started (listenedMs == 0). Anything with even a moment of
-        // playback is worth telling the recommender about — either as a
-        // real play or as a skip signal.
-        if (listened <= 0L) return
+        // Drop pure no-ops AND micro-skips. Sub-second listens are noise:
+        // user mashing skip burns a request per item without giving the
+        // recommender useful signal. Real "skipped after a moment" plays
+        // still get through above the floor.
+        if (listened < MIN_RECORD_MS) return
 
         val countsAsFullPlay = listened >= LISTEN_THRESHOLD_MS ||
             (duration > 0 && listened * 2 >= duration)
@@ -708,11 +771,55 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 )
             } catch (_: Throwable) {}
         }
-        // Auto-download only triggers on a real play — a skip shouldn't
-        // commit the user to caching the file.
-        if (countsAsFullPlay && !DownloadRepository.isDownloaded(id)) {
+        // Auto-download every song the user actually starts (listened > 0,
+        // already gated above). Setting toggles whether we cache at all.
+        viewModelScope.launch {
+            if (PlayerSettings.instance.downloadAutoNow() &&
+                !DownloadRepository.isDownloaded(id)
+            ) {
+                DownloadRepository.download(id)
+            }
+        }
+    }
+
+    /**
+     * Force-flush the in-flight play so /recent reflects the current track
+     * even when there's been no transition. Suspends until the backend
+     * record call completes so callers can refresh /recent immediately
+     * afterwards. Only sends if the listen threshold is met — partial
+     * plays still wait for the next transition (or onCleared) to be
+     * reported as skips. Resets the running counter so the same
+     * listened-ms isn't double-counted at transition time.
+     */
+    suspend fun flushPlayHistoryAwait() {
+        if (playingStartWall != -1L) {
+            val now = System.currentTimeMillis()
+            listenedMs += now - playingStartWall
+            playingStartWall = if (controller?.isPlaying == true) now else -1L
+        }
+        val id = trackedSongId ?: return
+        val listened = listenedMs
+        val duration = trackedDurationMs
+        val countsAsFullPlay = listened >= LISTEN_THRESHOLD_MS ||
+            (duration > 0 && listened * 2 >= duration)
+        if (!countsAsFullPlay) return
+        val ratio = if (duration > 0)
+            (listened.toDouble() / duration).coerceAtMost(1.0)
+        else null
+        try {
+            historyRepository.record(
+                songId = id,
+                durationListenedMs = listened,
+                completionRatio = ratio,
+                wasSkipped = false,
+            )
+        } catch (_: Throwable) {}
+        if (PlayerSettings.instance.downloadAutoNow() &&
+            !DownloadRepository.isDownloaded(id)
+        ) {
             DownloadRepository.download(id)
         }
+        listenedMs = 0L
     }
 
     override fun onCleared() {
@@ -721,16 +828,58 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             playingStartWall = -1L
         }
         maybeRecordPlay()
+        stopPositionPoll()
         controller?.removeListener(listener)
         super.onCleared()
     }
 
+    /**
+     * Push a single fresh position snapshot to the StateFlow. Cheap — no
+     * allocation, no suspension. Used on transitions/seeks/pause to keep
+     * the UI accurate without leaving the periodic poll running.
+     */
+    private fun pushPositionOnce() {
+        controller?.let { c ->
+            _positionMs.value = c.currentPosition.coerceAtLeast(0)
+            if (trackedDurationMs == 0L && c.duration > 0) trackedDurationMs = c.duration
+        }
+    }
+
+    /**
+     * Tick `positionMs` once per second while the player is playing.
+     * Driven by `onIsPlayingChanged` so the loop never runs while paused
+     * or while no controller is attached — earlier versions polled on
+     * a forever-running `while(true)` that woke the CPU even with the
+     * screen off.
+     */
+    private fun startPositionPoll() {
+        if (positionPollJob?.isActive == true) return
+        positionPollJob = viewModelScope.launch {
+            while (true) {
+                pushPositionOnce()
+                delay(POSITION_POLL_MS)
+            }
+        }
+    }
+
+    private fun stopPositionPoll() {
+        positionPollJob?.cancel()
+        positionPollJob = null
+    }
+
     private companion object {
         const val POSITION_POLL_MS = 1_000L
-        const val POSITION_POLL_IDLE_MS = 2_000L
         const val LISTEN_THRESHOLD_MS = 30_000L
-        const val PREF_SHUFFLE = "shuffle"
-        const val PREF_REPEAT = "repeat"
+        // Floor below which a transition isn't reported at all — drops
+        // sub-second micro-skips that would otherwise spam the backend
+        // during rapid skipping with no useful recommender signal.
+        const val MIN_RECORD_MS = 1_500L
+        // Video download/reinit polling: exponential backoff, hard cap.
+        // Stops the loop wedging the network if the backend never returns
+        // a terminal status (network flap, 502, navigated-away dialog).
+        const val VIDEO_POLL_INITIAL_MS = 2_000L
+        const val VIDEO_POLL_MAX_MS = 30_000L
+        const val VIDEO_POLL_MAX_ATTEMPTS = 30
     }
 }
 

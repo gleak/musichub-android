@@ -1,11 +1,38 @@
 package com.mediaplayer.android.playback
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.media.audiofx.Equalizer
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.SharedPreferencesMigration
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+
+private const val DATASTORE_NAME = "equalizer"
+
+/**
+ * Equalizer settings DataStore. [SharedPreferencesMigration] auto-imports the
+ * legacy `equalizer` SharedPreferences file on first access so existing user
+ * presets and band levels survive the migration without any user action.
+ */
+private val Context.equalizerDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = DATASTORE_NAME,
+    produceMigrations = { ctx ->
+        listOf(SharedPreferencesMigration(ctx, DATASTORE_NAME))
+    },
+)
 
 enum class EqPreset(val label: String) {
     FLAT("Flat"),
@@ -41,19 +68,42 @@ object EqualizerController {
     val state: StateFlow<EqState?> = _state.asStateFlow()
 
     private var eq: Equalizer? = null
-    private var prefs: SharedPreferences? = null
+    private var appContext: Context? = null
+
+    /**
+     * Singleton scope for async DataStore reads/writes. SupervisorJob so a
+     * write failure on one band doesn't cancel the rest. Bound to IO since
+     * DataStore writes touch disk.
+     */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var restoreJob: Job? = null
 
     fun init(context: Context, audioSessionId: Int) {
         if (audioSessionId == 0) return
         val app = context.applicationContext
-        val p = app.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
-        prefs = p
+        appContext = app
         try {
             val e = Equalizer(0, audioSessionId)
-            e.enabled = p.getBoolean(PREF_ENABLED, true)
-            restoreBands(e, p)
             eq = e
-            _state.value = snapshot(e, savedPreset(p))
+            // Async restore: hardware stays at flat defaults for the brief
+            // window before DataStore's first emit lands (~50 ms cold start
+            // / ~5 ms warm). The prior sync read blocked the service
+            // looper on a SharedPreferences load — we trade that for a
+            // very short visual blip if the user opens the EQ sheet
+            // within that window.
+            restoreJob?.cancel()
+            restoreJob = scope.launch {
+                try {
+                    val prefs = app.equalizerDataStore.data.first()
+                    val enabled = prefs[KEY_ENABLED] ?: true
+                    try { e.enabled = enabled } catch (_: Exception) {}
+                    restoreBands(e, prefs)
+                    _state.value = snapshot(e, savedPreset(prefs))
+                } catch (_: Exception) {
+                    // Couldn't read DataStore — leave hardware at flat
+                    // defaults; _state stays null until a user action.
+                }
+            }
         } catch (_: Exception) {
             // Device doesn't support Equalizer
         }
@@ -62,13 +112,15 @@ object EqualizerController {
     fun release() {
         try { eq?.release() } catch (_: Exception) {}
         eq = null
+        restoreJob?.cancel()
+        restoreJob = null
         _state.value = null
     }
 
     fun setEnabled(enabled: Boolean) {
         val e = eq ?: return
-        e.enabled = enabled
-        prefs?.edit()?.putBoolean(PREF_ENABLED, enabled)?.apply()
+        try { e.enabled = enabled } catch (_: Exception) { return }
+        editAsync { it[KEY_ENABLED] = enabled }
         _state.value = _state.value?.copy(enabled = enabled)
     }
 
@@ -76,11 +128,11 @@ object EqualizerController {
         val e = eq ?: return
         val range = e.bandLevelRange
         val clamped = levelMilliBel.coerceIn(range[0].toInt(), range[1].toInt())
-        e.setBandLevel(band.toShort(), clamped.toShort())
-        prefs?.edit()
-            ?.putInt(bandKey(band), clamped)
-            ?.putString(PREF_PRESET, EqPreset.CUSTOM.name)
-            ?.apply()
+        if (!trySetBand(e, band, clamped)) return
+        editAsync {
+            it[bandKey(band)] = clamped
+            it[KEY_PRESET] = EqPreset.CUSTOM.name
+        }
         _state.value = _state.value?.let { s ->
             s.copy(
                 preset = EqPreset.CUSTOM,
@@ -96,25 +148,40 @@ object EqualizerController {
         val min = range[0].toInt()
         val max = range[1].toInt()
         val levels = presetLevels(preset, bandCount, min, max)
-        val editor = prefs?.edit()
+        // Per-band try/catch: some OEM Equalizer impls throw on a single
+        // misbehaving band; without the guard one bad band aborts the
+        // whole preset and leaves the EQ in a half-applied state.
+        val applied = ArrayList<Pair<Int, Int>>(bandCount)
         repeat(bandCount) { i ->
-            e.setBandLevel(i.toShort(), levels[i].toShort())
-            editor?.putInt(bandKey(i), levels[i])
+            if (trySetBand(e, i, levels[i])) {
+                applied += i to levels[i]
+            }
         }
-        editor?.putString(PREF_PRESET, preset.name)?.apply()
+        editAsync {
+            for ((i, lvl) in applied) it[bandKey(i)] = lvl
+            it[KEY_PRESET] = preset.name
+        }
         _state.value = snapshot(e, preset)
     }
 
-    private fun restoreBands(e: Equalizer, p: SharedPreferences) {
+    private fun restoreBands(e: Equalizer, prefs: Preferences) {
         val range = e.bandLevelRange
         repeat(e.numberOfBands.toInt()) { i ->
-            val saved = p.getInt(bandKey(i), Int.MIN_VALUE)
-            if (saved != Int.MIN_VALUE) {
+            val saved = prefs[bandKey(i)]
+            if (saved != null) {
                 val clamped = saved.coerceIn(range[0].toInt(), range[1].toInt())
-                e.setBandLevel(i.toShort(), clamped.toShort())
+                trySetBand(e, i, clamped)
             }
         }
     }
+
+    private fun trySetBand(e: Equalizer, band: Int, levelMilliBel: Int): Boolean =
+        try {
+            e.setBandLevel(band.toShort(), levelMilliBel.toShort())
+            true
+        } catch (_: Exception) {
+            false
+        }
 
     private fun snapshot(e: Equalizer, preset: EqPreset): EqState {
         val range = e.bandLevelRange
@@ -133,8 +200,8 @@ object EqualizerController {
         )
     }
 
-    private fun savedPreset(p: SharedPreferences): EqPreset =
-        p.getString(PREF_PRESET, EqPreset.FLAT.name)
+    private fun savedPreset(prefs: Preferences): EqPreset =
+        prefs[KEY_PRESET]
             ?.let { runCatching { EqPreset.valueOf(it) }.getOrNull() }
             ?: EqPreset.FLAT
 
@@ -150,9 +217,20 @@ object EqualizerController {
         return sized.map { it.coerceIn(min, max) }
     }
 
-    private fun bandKey(i: Int) = "band_$i"
+    private fun bandKey(i: Int) = intPreferencesKey("band_$i")
 
-    private const val PREF_FILE = "equalizer"
-    private const val PREF_ENABLED = "enabled"
-    private const val PREF_PRESET = "preset"
+    private fun editAsync(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
+        val ctx = appContext ?: return
+        scope.launch {
+            try {
+                ctx.equalizerDataStore.edit { prefs -> block(prefs) }
+            } catch (_: Exception) {
+                // Best-effort persistence; failures here don't break the
+                // hardware EQ which has already been updated.
+            }
+        }
+    }
+
+    private val KEY_ENABLED = booleanPreferencesKey("enabled")
+    private val KEY_PRESET = stringPreferencesKey("preset")
 }
