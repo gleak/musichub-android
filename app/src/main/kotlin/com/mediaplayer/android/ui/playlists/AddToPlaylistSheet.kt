@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.mediaplayer.android.data.PlaylistRepository
 import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.ui.common.EmptyState
+import com.mediaplayer.android.ui.common.friendlyMessage
 import com.mediaplayer.android.ui.theme.CoverShapes
 import kotlinx.coroutines.launch
 
@@ -89,7 +90,7 @@ fun AddToPlaylistSheet(
         try {
             playlists = repository.list()
         } catch (t: Throwable) {
-            errorMessage = t.message ?: "Unknown error"
+            errorMessage = friendlyMessage(t)
         } finally {
             loading = false
         }

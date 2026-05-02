@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.PlaylistDto
+import com.mediaplayer.android.ui.common.friendlyMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,7 +27,7 @@ class ForYouViewModel : ViewModel() {
             _state.value = ForYouUiState.Loading
             runCatching { Network.api.listPlaylists(kind = "auto") }
                 .onSuccess { _state.value = ForYouUiState.Ready(it) }
-                .onFailure { _state.value = ForYouUiState.Error(it.message ?: "Unknown error") }
+                .onFailure { _state.value = ForYouUiState.Error(friendlyMessage(it)) }
         }
     }
 }

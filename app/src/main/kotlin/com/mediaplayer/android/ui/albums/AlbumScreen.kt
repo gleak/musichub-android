@@ -44,6 +44,7 @@ import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.SongListShimmer
 import com.mediaplayer.android.ui.common.SpotifyHero
+import com.mediaplayer.android.ui.common.friendlyMessage
 import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
 import com.mediaplayer.android.ui.search.SongRow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,7 +81,7 @@ class AlbumViewModel(
             _state.value = try {
                 AlbumUiState.Success(repository.getAlbum(name, artist))
             } catch (t: Throwable) {
-                AlbumUiState.Error(t.message ?: "Unknown error")
+                AlbumUiState.Error(friendlyMessage(t))
             }
         }
     }
@@ -91,7 +92,7 @@ class AlbumViewModel(
             _state.value = try {
                 AlbumUiState.Success(repository.getAlbum(name, artist))
             } catch (t: Throwable) {
-                AlbumUiState.Error(t.message ?: "Unknown error")
+                AlbumUiState.Error(friendlyMessage(t))
             }
             _isRefreshing.value = false
         }

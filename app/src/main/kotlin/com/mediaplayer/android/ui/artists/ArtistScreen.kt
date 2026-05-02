@@ -63,6 +63,7 @@ import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.SongListShimmer
 import com.mediaplayer.android.ui.common.CoverShape
+import com.mediaplayer.android.ui.common.friendlyMessage
 import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.common.SectionHeader
 import com.mediaplayer.android.ui.common.SpotifyHero
@@ -108,7 +109,7 @@ class ArtistViewModel(
             _state.value = try {
                 ArtistUiState.Success(repository.getArtist(name))
             } catch (t: Throwable) {
-                ArtistUiState.Error(t.message ?: "Unknown error")
+                ArtistUiState.Error(friendlyMessage(t))
             }
         }
     }
@@ -143,7 +144,7 @@ class ArtistViewModel(
             _state.value = try {
                 ArtistUiState.Success(repository.getArtist(name))
             } catch (t: Throwable) {
-                ArtistUiState.Error(t.message ?: "Unknown error")
+                ArtistUiState.Error(friendlyMessage(t))
             }
             _isRefreshing.value = false
             loadFollowStatus()

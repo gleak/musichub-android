@@ -49,6 +49,7 @@ import com.mediaplayer.android.data.dto.AlbumDto
 import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.ErrorWithRetry
+import com.mediaplayer.android.ui.common.friendlyMessage
 import com.mediaplayer.android.ui.theme.CoverShapes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -105,7 +106,7 @@ class AlbumListViewModel(
                 endReached = page.items.size >= page.totalItems || page.items.isEmpty(),
             )
         } catch (t: Throwable) {
-            AlbumListUiState.Error(t.message ?: "Unknown error")
+            AlbumListUiState.Error(friendlyMessage(t))
         }
     }
 

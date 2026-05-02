@@ -49,6 +49,7 @@ import com.mediaplayer.android.data.dto.ArtistDto
 import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.ErrorWithRetry
+import com.mediaplayer.android.ui.common.friendlyMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -104,7 +105,7 @@ class ArtistListViewModel(
                 endReached = page.items.size >= page.totalItems || page.items.isEmpty(),
             )
         } catch (t: Throwable) {
-            ArtistListUiState.Error(t.message ?: "Unknown error")
+            ArtistListUiState.Error(friendlyMessage(t))
         }
     }
 

@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.11.1"
+    const val VERSION = "0.11.2"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,14 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.11.2",
+            title = "Piccoli ritocchi: vibrazione play/pausa, errori più chiari",
+            highlights = listOf(
+                "Polish: il pulsante play/pausa del mini-player ora vibra brevemente al tap, come già faceva il cuore di Mi piace.",
+                "Polish: i messaggi di errore di Album, Artisti, Per te e \"Aggiungi a playlist\" usano ora le stesse formule chiare già usate nel resto dell'app (niente più \"Unknown error\" o codici grezzi quando la rete cade).",
+            ),
+        ),
         ChangelogEntry(
             version = "0.11.1",
             title = "Risparmio batteria: stop al precaricamento quando serve",

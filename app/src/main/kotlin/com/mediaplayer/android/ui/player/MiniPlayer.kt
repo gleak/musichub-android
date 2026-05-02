@@ -123,7 +123,10 @@ fun MiniPlayer(
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(onClick = viewModel::togglePlayPause) {
+            IconButton(onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.togglePlayPause()
+            }) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                     contentDescription = if (isPlaying) "Pause" else "Play",
