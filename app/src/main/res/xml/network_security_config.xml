@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Allow cleartext traffic only to dev/local addresses.
-    Everything else falls back to HTTPS-only defaults.
+    Cleartext traffic is permitted only for emulator + LAN dev addresses.
+    The production backend is now HTTPS via DuckDNS + Caddy + Let's
+    Encrypt — the previous `194.116.60.68` exception was removed since
+    no Android client should reach the QNAP via cleartext anymore. Set
+    `base.url.release=http://194.116.60.68:8090` in `local.properties`
+    only for debugging the legacy path; that override won't pass the
+    HTTPS-only default and will need this file re-extended locally.
 -->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
@@ -9,6 +14,5 @@
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">192.168.0.181</domain>
         <domain includeSubdomains="true">192.168.1.42</domain>
-        <domain includeSubdomains="true">194.116.60.68</domain>
     </domain-config>
 </network-security-config>

@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.10.20"
+    const val VERSION = "0.11.0"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,15 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.11.0",
+            title = "Connessione cifrata + cover più rapide",
+            highlights = listOf(
+                "Sicurezza: tutto il traffico verso il server adesso passa su HTTPS con certificato Let's Encrypt — niente più dati in chiaro tra app e backend, anche fuori dal Wi-Fi di casa.",
+                "Velocità: cache HTTP da 50 MB lato app + cover scaricate alla risoluzione esatta della miniatura. Lo scroll della griglia copertine consuma meno dati e si ferma meno spesso.",
+                "Avvio: la prima apertura non blocca più l'interfaccia in attesa della preparazione dell'identità anonima. La schermata Home compare subito.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.10.20",
             title = "MusicHub — riepilogo completo + Testi e Generi su Android Auto",

@@ -24,7 +24,12 @@ val localProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
-val RELEASE_URL_DEFAULT = "http://194.116.60.68:8090"
+// HTTPS via Caddy + Let's Encrypt fronting the backend. The cleartext
+// :8090 mapping stays open on QNAP during cutover; release builds can
+// override this in `local.properties` (`base.url.release=...`) if a
+// fallback to the legacy `http://194.116.60.68:8090` is needed for
+// debugging.
+val RELEASE_URL_DEFAULT = "https://92b70eb3-9758-47a7-a830-744a9d61f809.duckdns.org"
 val SENTINEL_URL = "https://mediaplayer.invalid"
 
 fun resolveBaseUrl(variantKey: String, fallback: String): String {
@@ -78,8 +83,8 @@ android {
         applicationId = "com.mediaplayer.android"
         minSdk = 24
         targetSdk = 35
-        versionCode = 51
-        versionName = "0.10.20"
+        versionCode = 52
+        versionName = "0.11.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -102,6 +107,10 @@ android {
             buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
             buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$GOOGLE_WEB_CLIENT_ID\"")
             isMinifyEnabled = true
+            // R8 also strips unreferenced resources (drawables, strings, layouts)
+            // from the packaged APK once minification has identified what code
+            // survives. Pairs with isMinifyEnabled — alone it is a no-op.
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
