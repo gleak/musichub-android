@@ -1,6 +1,7 @@
 package com.mediaplayer.android.data
 
 import com.mediaplayer.android.data.dto.AddSongRequest
+import com.mediaplayer.android.data.dto.DailyMixRefreshDto
 import com.mediaplayer.android.data.dto.AppVersionRequest
 import com.mediaplayer.android.data.dto.UserDto
 import com.mediaplayer.android.data.dto.LyricLineDto
@@ -147,9 +148,9 @@ interface MediaPlayerApi {
 
     // ---------- Playlist share (M15a) ----------
 
-    /** Recompute Daily Mix on demand. Backend returns {userId, refreshed} — caller can ignore. */
+    /** Recompute Daily Mix on demand. */
     @POST("api/playlists/auto/daily-mix/refresh")
-    suspend fun refreshDailyMix(): Map<String, Any?>
+    suspend fun refreshDailyMix(): DailyMixRefreshDto
 
     @POST("api/playlists/{id}/share")
     suspend fun createPlaylistShare(

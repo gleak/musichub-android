@@ -80,8 +80,5 @@ class PlaylistRepository(
         api.acceptPlaylistShare(token)
 
     /** Triggers a manual Daily Mix recompute. Returns the number of refreshed entries. */
-    suspend fun refreshDailyMix(): Int {
-        val resp = api.refreshDailyMix()
-        return (resp["refreshed"] as? Number)?.toInt() ?: 0
-    }
+    suspend fun refreshDailyMix(): Int = api.refreshDailyMix().refreshed
 }

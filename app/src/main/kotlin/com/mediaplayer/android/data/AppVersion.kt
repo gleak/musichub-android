@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.11.6"
+    const val VERSION = "0.11.7"
 }
 
 data class ChangelogEntry(

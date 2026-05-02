@@ -64,8 +64,37 @@ object AppUpdateInstaller {
                 val finishedId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
                 if (finishedId != downloadId) return
                 ctx.unregisterReceiver(this)
+
+                val query = DownloadManager.Query().setFilterById(finishedId)
+                val (status, reason) = dm.query(query)?.use { c ->
+                    if (c.moveToFirst()) {
+                        c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) to
+                            c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                    } else -1 to -1
+                } ?: (-1 to -1)
+
+                if (status != DownloadManager.STATUS_SUCCESSFUL) {
+                    val detail = when (reason) {
+                        DownloadManager.ERROR_CANNOT_RESUME -> "Cannot resume download"
+                        DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Storage not found"
+                        DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "File conflict"
+                        DownloadManager.ERROR_FILE_ERROR -> "Storage error"
+                        DownloadManager.ERROR_HTTP_DATA_ERROR -> "HTTP data error"
+                        DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Insufficient storage"
+                        DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "Too many redirects"
+                        DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "Unexpected server response"
+                        DownloadManager.ERROR_UNKNOWN -> "Unknown error"
+                        401 -> "Unauthorized — try signing out and back in"
+                        403 -> "Access denied"
+                        404 -> "Update file not found on server"
+                        else -> if (reason in 400..599) "Server error $reason" else "Error $reason"
+                    }
+                    onError("Download failed: $detail")
+                    return
+                }
+
                 if (!target.exists() || target.length() == 0L) {
-                    onError("Download failed")
+                    onError("Download failed: file missing after completion")
                     return
                 }
                 if (!expectedSha256.isNullOrBlank()) {
