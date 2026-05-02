@@ -50,6 +50,18 @@ object MHColors {
     // 2×2 colored tiles in the mockup.
     val BrowseAlbumsTile = Color(0xFF3A0CA3)    // indie purple
     val BrowseArtistsTile = Color(0xFFFF4D2E)   // hip-hop orange-red
+
+    // Hero-overlay tokens — text/icon colors painted over a cover-derived
+    // gradient backdrop (Now Playing sheet, video sheets, full-screen
+    // covers). These are intentionally NOT theme-reactive: the backdrop is
+    // an arbitrary cover, so contrast must come from white-on-image
+    // regardless of light/dark mode. Replaces ~30 inline `Color.White` /
+    // `Color.White.copy(alpha = …)` literals scattered across NowPlayingSheet.
+    val OnHero = Color(0xFFFFFFFF)
+    val OnHeroMuted = Color(0xD9FFFFFF)         // 0.85 alpha — secondary chrome
+    val OnHeroDim = Color(0x73FFFFFF)           // 0.45 alpha — tertiary chrome, dim lyric lines
+    val OnHeroTrack = Color(0x4DFFFFFF)         // 0.30 alpha — slider inactive track
+    val HeroScrim = Color(0x73000000)           // 0.45 alpha — cover bottom-edge scrim
 }
 
 private val MHDark = darkColorScheme(

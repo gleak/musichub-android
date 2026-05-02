@@ -86,6 +86,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.ui.theme.HeroCoverSize
+import com.mediaplayer.android.ui.theme.MHColors
 import com.mediaplayer.android.playback.PlaybackViewModel
 import com.mediaplayer.android.ui.common.SongCover
 import com.mediaplayer.android.ui.common.rememberCoverDominantColor
@@ -222,7 +223,7 @@ private fun NowPlayingContent(
                     Brush.verticalGradient(
                         0f to Color.Transparent,
                         0.45f to Color.Transparent,
-                        1f to Color.Black.copy(alpha = 0.45f),
+                        1f to MHColors.HeroScrim,
                     )
                 ),
         )
@@ -243,7 +244,7 @@ private fun NowPlayingContent(
                     Icon(
                         imageVector = Icons.Filled.KeyboardArrowDown,
                         contentDescription = "Collapse",
-                        tint = Color.White,
+                        tint = MHColors.OnHero,
                     )
                 }
                 Column(
@@ -253,12 +254,12 @@ private fun NowPlayingContent(
                     Text(
                         text = "IN RIPRODUZIONE DA",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = MHColors.OnHeroMuted,
                     )
                     Text(
                         text = current.album ?: current.artist,
                         style = MaterialTheme.typography.titleSmall,
-                        color = Color.White,
+                        color = MHColors.OnHero,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -268,7 +269,7 @@ private fun NowPlayingContent(
                         Icon(
                             imageVector = Icons.Filled.Bedtime,
                             contentDescription = "Sleep timer",
-                            tint = if (sleepActive) MaterialTheme.colorScheme.primary else Color.White,
+                            tint = if (sleepActive) MaterialTheme.colorScheme.primary else MHColors.OnHero,
                         )
                     }
                     SleepTimerMenu(
@@ -340,14 +341,14 @@ private fun NowPlayingContent(
                     Text(
                         text = current.title,
                         style = MaterialTheme.typography.headlineSmall,
-                        color = Color.White,
+                        color = MHColors.OnHero,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = current.artist,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = MHColors.OnHeroMuted,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = if (onArtistClick != null) {
@@ -365,7 +366,7 @@ private fun NowPlayingContent(
                     Icon(
                         imageVector = if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                         contentDescription = if (liked) "Unlike" else "Like",
-                        tint = if (liked) MaterialTheme.colorScheme.primary else Color.White,
+                        tint = if (liked) MaterialTheme.colorScheme.primary else MHColors.OnHero,
                     )
                 }
             }
@@ -384,9 +385,9 @@ private fun NowPlayingContent(
                 valueRange = 0f..sliderMax,
                 enabled = duration > 0,
                 colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = Color.White,
-                    inactiveTrackColor = Color.White.copy(alpha = 0.3f),
+                    thumbColor = MHColors.OnHero,
+                    activeTrackColor = MHColors.OnHero,
+                    inactiveTrackColor = MHColors.OnHeroTrack,
                 ),
                 modifier = Modifier.semantics { contentDescription = "Playback position" },
             )
@@ -397,12 +398,12 @@ private fun NowPlayingContent(
                 Text(
                     text = formatMs(sliderValue.toLong()),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = MHColors.OnHeroMuted,
                 )
                 Text(
                     text = formatMs(duration.coerceAtLeast(0)),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = MHColors.OnHeroMuted,
                 )
             }
 
@@ -418,7 +419,7 @@ private fun NowPlayingContent(
                         imageVector = Icons.Filled.Shuffle,
                         contentDescription = "Shuffle",
                         tint = if (shuffleEnabled) MaterialTheme.colorScheme.primary
-                               else Color.White.copy(alpha = 0.85f),
+                               else MHColors.OnHeroMuted,
                     )
                 }
                 IconButton(
@@ -429,7 +430,7 @@ private fun NowPlayingContent(
                     Icon(
                         imageVector = Icons.Filled.SkipPrevious,
                         contentDescription = "Previous",
-                        tint = Color.White,
+                        tint = MHColors.OnHero,
                         modifier = Modifier.size(40.dp),
                     )
                 }
@@ -437,7 +438,7 @@ private fun NowPlayingContent(
                     onClick = viewModel::togglePlayPause,
                     modifier = Modifier.size(72.dp),
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = Color.White,
+                        containerColor = MHColors.OnHero,
                         contentColor = Color.Black,
                     ),
                 ) {
@@ -455,7 +456,7 @@ private fun NowPlayingContent(
                     Icon(
                         imageVector = Icons.Filled.SkipNext,
                         contentDescription = "Next",
-                        tint = Color.White,
+                        tint = MHColors.OnHero,
                         modifier = Modifier.size(40.dp),
                     )
                 }
@@ -466,7 +467,7 @@ private fun NowPlayingContent(
                         contentDescription = "Repeat",
                         tint = if (repeatMode != Player.REPEAT_MODE_OFF)
                             MaterialTheme.colorScheme.primary
-                        else Color.White.copy(alpha = 0.85f),
+                        else MHColors.OnHeroMuted,
                     )
                 }
             }
@@ -482,7 +483,7 @@ private fun NowPlayingContent(
                     Icon(
                         imageVector = Icons.Filled.TextSnippet,
                         contentDescription = "Lyrics",
-                        tint = Color.White.copy(alpha = 0.85f),
+                        tint = MHColors.OnHeroMuted,
                     )
                 }
                 if (current.hasVideo) {
@@ -491,7 +492,7 @@ private fun NowPlayingContent(
                             Icon(
                                 imageVector = Icons.Filled.VideoLibrary,
                                 contentDescription = "Watch video",
-                                tint = Color.White.copy(alpha = 0.85f),
+                                tint = MHColors.OnHeroMuted,
                             )
                         }
                         IconButton(
@@ -502,13 +503,13 @@ private fun NowPlayingContent(
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(20.dp),
                                     strokeWidth = 2.dp,
-                                    color = Color.White,
+                                    color = MHColors.OnHero,
                                 )
                             } else {
                                 Icon(
                                     imageVector = Icons.Filled.Tune,
                                     contentDescription = "Reinitialize video for fast seeking",
-                                    tint = Color.White.copy(alpha = 0.45f),
+                                    tint = MHColors.OnHeroDim,
                                 )
                             }
                         }
@@ -522,13 +523,13 @@ private fun NowPlayingContent(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
                                 strokeWidth = 2.dp,
-                                color = Color.White,
+                                color = MHColors.OnHero,
                             )
                         } else {
                             Icon(
                                 imageVector = Icons.Filled.VideoFile,
                                 contentDescription = "Download video",
-                                tint = Color.White.copy(alpha = 0.45f),
+                                tint = MHColors.OnHeroDim,
                             )
                         }
                     }
@@ -537,14 +538,14 @@ private fun NowPlayingContent(
                     Icon(
                         imageVector = Icons.Filled.Equalizer,
                         contentDescription = "Equalizer",
-                        tint = Color.White.copy(alpha = 0.85f),
+                        tint = MHColors.OnHeroMuted,
                     )
                 }
                 IconButton(onClick = { showQueue = true }) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.QueueMusic,
                         contentDescription = "Queue",
-                        tint = Color.White.copy(alpha = 0.85f),
+                        tint = MHColors.OnHeroMuted,
                     )
                 }
                 Box {
@@ -552,7 +553,7 @@ private fun NowPlayingContent(
                         Icon(
                             imageVector = Icons.Filled.MoreVert,
                             contentDescription = "More",
-                            tint = Color.White.copy(alpha = 0.85f),
+                            tint = MHColors.OnHeroMuted,
                         )
                     }
                     DropdownMenu(
