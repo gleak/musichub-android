@@ -435,7 +435,10 @@ private fun NowPlayingContent(
                     )
                 }
                 FilledIconButton(
-                    onClick = viewModel::togglePlayPause,
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.togglePlayPause()
+                    },
                     modifier = Modifier.size(72.dp),
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = MHColors.OnHero,

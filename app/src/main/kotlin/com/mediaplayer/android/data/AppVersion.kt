@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.11.4"
+    const val VERSION = "0.11.5"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,14 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.11.5",
+            title = "Ritocchi: vibrazione anche su play/pausa grande, niente trascinamento sulle playlist generate",
+            highlights = listOf(
+                "Polish: il pulsante grande di play/pausa nella sheet del brano in riproduzione adesso vibra al tap, in linea con i pulsanti play/pausa del mini-player e del cuore.",
+                "Polish: nelle playlist generate per te (Discover Daily, On Repeat, ecc.) sono nascosti la maniglia di trascinamento e lo swipe per rimuovere — il backend non le riordina e non rimuove i brani da queste playlist, quindi le icone non appaiono più solo per non confondere.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.11.4",
             title = "Android Auto: ricerca e \"Hey Google\" tornano a funzionare",

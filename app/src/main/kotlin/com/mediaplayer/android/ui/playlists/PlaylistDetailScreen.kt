@@ -375,6 +375,11 @@ private fun PlaylistDetailBody(
                     SwipeToDismissBox(
                         state = dismissState,
                         enableDismissFromStartToEnd = false,
+                        // Auto-playlists are server-managed; swipe-remove and
+                        // reorder both no-op upstream, so suppressing the
+                        // affordances avoids the misleading "I removed it but
+                        // it's still here" feel.
+                        enableDismissFromEndToStart = !playlist.isAuto,
                         backgroundContent = {
                             Box(
                                 modifier = Modifier
@@ -397,15 +402,17 @@ private fun PlaylistDetailBody(
                                 .background(MaterialTheme.colorScheme.surface),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            IconButton(
-                                modifier = Modifier.draggableHandle(),
-                                onClick = {},
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.DragHandle,
-                                    contentDescription = "Reorder",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                            if (!playlist.isAuto) {
+                                IconButton(
+                                    modifier = Modifier.draggableHandle(),
+                                    onClick = {},
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.DragHandle,
+                                        contentDescription = "Reorder",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                             SongRow(
                                 song = song,
