@@ -9,15 +9,18 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import coil3.size.Size
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.theme.CoverShapes
@@ -64,6 +67,15 @@ fun SongCover(
     shape: Shape = CoverShapes.SongRow,
     contentDescription: String? = null,
 ) {
+    val context = LocalContext.current
+    val sizePx = with(LocalDensity.current) { size.roundToPx() }
+    val request = remember(songId, sizePx) {
+        ImageRequest.Builder(context)
+            .data(Network.coverUrl(songId))
+            .size(Size(sizePx, sizePx))
+            .crossfade(true)
+            .build()
+    }
     Box(
         modifier = modifier
             .size(size)
@@ -73,10 +85,7 @@ fun SongCover(
     ) {
         if (hasCoverArt) {
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(Network.coverUrl(songId))
-                    .crossfade(true)
-                    .build(),
+                model = request,
                 contentDescription = contentDescription,
                 modifier = Modifier.fillMaxSize(),
             )

@@ -15,7 +15,10 @@ import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.playback.PlayerConnection
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 
 /**
  * Application class — single place where app-wide singletons get wired:
@@ -32,12 +35,18 @@ class MediaPlayerApp : Application(), SingletonImageLoader.Factory {
             private set
     }
 
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     override fun onCreate() {
         super.onCreate()
         instance = this
-        // Resolve the persistent anonymous device id before any network call so
-        // unauthenticated requests carry X-Anonymous-Id instead of the dev API key.
-        AuthTokenHolder.anonymousId = runBlocking { AuthRepository.instance.anonymousId() }
+        // Resolve the persistent anonymous device id off the main thread; the
+        // OkHttp interceptor awaits this Deferred on its dispatcher thread for
+        // the very first cold-start request and skips the await once resolved.
+        // Replaces a runBlocking call that was blocking onCreate on DataStore IO.
+        AuthTokenHolder.anonymousIdDeferred = applicationScope.async {
+            AuthRepository.instance.anonymousId().also { AuthTokenHolder.anonymousId = it }
+        }
         ConnectivityObserver.init()
         PlayerConnection.connect(this)
         DownloadRepository.init()
@@ -48,13 +57,13 @@ class MediaPlayerApp : Application(), SingletonImageLoader.Factory {
             .components {
                 add(OkHttpNetworkFetcherFactory(callFactory = { Network.okHttp }))
             }
-            // 15% heap for in-memory cover cache — Coil's default 25%
-            // crowds the rest of the app on smaller devices and the gain
-            // for the 25-cover-or-so working set we actually scroll past
-            // is negligible.
+            // 22% heap for in-memory cover cache — bumped from 15% after
+            // adding sized ImageRequests + remember() to SongCover so the
+            // working set is small per-cover but accumulates across more
+            // distinct covers as the user scrolls multiple shelves.
             .memoryCache {
                 MemoryCache.Builder()
-                    .maxSizePercent(context, 0.15)
+                    .maxSizePercent(context, 0.22)
                     .build()
             }
             // Explicit disk cache scoped to a dedicated dir + 50 MB cap so

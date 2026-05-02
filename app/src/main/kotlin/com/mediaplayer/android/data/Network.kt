@@ -1,7 +1,11 @@
 package com.mediaplayer.android.data
 
 import com.mediaplayer.android.BuildConfig
+import com.mediaplayer.android.MediaPlayerApp
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import okhttp3.Cache
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.MediaType.Companion.toMediaType
@@ -9,11 +13,17 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 object AuthTokenHolder {
     @Volatile var idToken: String? = null
     @Volatile var anonymousId: String? = null
+    // Resolved off main during MediaPlayerApp.onCreate; the OkHttp interceptor
+    // awaits this on the OkHttp dispatcher thread when [anonymousId] is still
+    // unset for the very first request after cold start. Subsequent requests
+    // see [anonymousId] populated and skip the await entirely.
+    @Volatile var anonymousIdDeferred: Deferred<String>? = null
 }
 
 object Network {
@@ -48,49 +58,69 @@ object Network {
         timeUnit = TimeUnit.MINUTES,
     )
 
-    val okHttp: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .dispatcher(dispatcher)
-        .connectionPool(connectionPool)
-        .addInterceptor { chain ->
-            val token = AuthTokenHolder.idToken
-            val anonId = AuthTokenHolder.anonymousId
-            val req = chain.request().newBuilder().apply {
-                header("X-Api-Key", API_KEY)
-                if (token != null) {
-                    header("Authorization", "Bearer $token")
-                } else if (anonId != null) {
-                    header("X-Anonymous-Id", anonId)
+    // 50 MB on-disk response cache. Empty until the backend starts emitting
+    // Cache-Control + ETag headers (Phase E); once it does, cover thumbs and
+    // catalog list bodies hit the 304 path and skip the body re-download.
+    private val responseCache: Cache by lazy {
+        Cache(File(MediaPlayerApp.instance.cacheDir, "http"), 50L * 1024 * 1024)
+    }
+
+    val okHttp: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .dispatcher(dispatcher)
+            .connectionPool(connectionPool)
+            .cache(responseCache)
+            .addInterceptor { chain ->
+                val token = AuthTokenHolder.idToken
+                val anonId = AuthTokenHolder.anonymousId ?: run {
+                    // Cold-start race: the resolver coroutine hasn't completed yet.
+                    // Block this OkHttp dispatcher thread (never main) until it does;
+                    // a completed Deferred returns instantly thereafter.
+                    AuthTokenHolder.anonymousIdDeferred?.let { d ->
+                        runBlocking { d.await() }
+                    }
                 }
-            }.build()
-            try {
-                val resp = chain.proceed(req)
-                ConnectivityObserver.recordBackendSuccess()
-                resp
-            } catch (e: java.io.IOException) {
-                ConnectivityObserver.recordBackendFailure()
-                throw e
+                val req = chain.request().newBuilder().apply {
+                    header("X-Api-Key", API_KEY)
+                    if (token != null) {
+                        header("Authorization", "Bearer $token")
+                    } else if (anonId != null) {
+                        header("X-Anonymous-Id", anonId)
+                    }
+                }.build()
+                try {
+                    val resp = chain.proceed(req)
+                    ConnectivityObserver.recordBackendSuccess()
+                    resp
+                } catch (e: java.io.IOException) {
+                    ConnectivityObserver.recordBackendFailure()
+                    throw e
+                }
             }
-        }
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) {
-                HttpLoggingInterceptor.Level.BASIC
-            } else {
-                HttpLoggingInterceptor.Level.NONE
-            }
-        })
-        .build()
+            .addInterceptor(HttpLoggingInterceptor().apply {
+                level = if (BuildConfig.DEBUG) {
+                    HttpLoggingInterceptor.Level.BASIC
+                } else {
+                    HttpLoggingInterceptor.Level.NONE
+                }
+            })
+            .build()
+    }
 
-    private val retrofit: Retrofit = Retrofit.Builder()
-        .baseUrl(baseUrl)
-        .client(okHttp)
-        .addConverterFactory(
-            json.asConverterFactory("application/json".toMediaType())
-        )
-        .build()
+    private val retrofit: Retrofit by lazy {
+        Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(okHttp)
+            .addConverterFactory(
+                json.asConverterFactory("application/json".toMediaType())
+            )
+            .build()
+    }
 
-    val api: MediaPlayerApi = retrofit.create(MediaPlayerApi::class.java)
+    val api: MediaPlayerApi by lazy { retrofit.create(MediaPlayerApi::class.java) }
 
     fun coverUrl(songId: Long): String = "${baseUrl}api/songs/$songId/cover"
     fun streamUrl(songId: Long): String = "${baseUrl}api/songs/$songId/stream"
