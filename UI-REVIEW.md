@@ -1,204 +1,255 @@
-# MediaPlayer Android — Full-App UI Review (v0.8.0)
+# MediaPlayer Android — Full-App UI Review (v0.11.3)
 
-**Audited:** 2026-05-01
-**Version:** 0.8.0 (post-v0.4.3 audit drift)
-**Baseline:** Abstract 6-pillar standards for a polished mobile media player + design tokens declared in `ui/theme/` (`MediaPlayerSpacing`, `CoverShapes`, `SpotifyColors`, `SpotifyType`)
+**Audited:** 2026-05-02
+**Version:** 0.11.3
+**Commit:** 5026470 (master)
+**Baseline:** Abstract 6-pillar standards for a polished mobile media player + design tokens declared in `ui/theme/` (`MHColors` incl. new `OnHero*`/`HeroScrim` tokens, `MHGradient`, `MHTheme`, `MediaPlayerSpacing`, `CoverShapes`, `HeroCoverSize`, `MHType`)
 **Screenshots:** Not captured — Android app, no localhost dev server. Audit is code-only.
 
-> Replaces the v0.4.3 audit (50 findings, all closed). Re-audit was triggered by 4 milestones of post-audit code (Daily Mixes, Release Radar, self-hosted updates, playlist sharing, Spotify-style queue, Liked/Artist/Album pagination). Previous audit history available in version control.
+> Re-audit of the v0.8.0 review at the same path. Two cycle-1 sweeps (top-5 + cycle-2 quick wins) plus the v0.10 MusicHub rebrand have shipped since. The previous **17/24** baseline scores are now **19/24** with two new pillars holding at 4/4. The remaining ceiling is gated almost entirely on the spacing-token deferral and the cross-repo `AlbumDto.coverSongId` work that was punted from cycle-1.
 
 ---
 
 ## Pillar Scores
 
-| Pillar | Score | Key Finding |
-|--------|-------|-------------|
-| 1. Copywriting | 3/4 | Strong tone overall; `"Unknown error"` leaks in 7+ places, two redownload dialogs share a confusingly different title for the same intent |
-| 2. Visuals | 3/4 | Hero pattern (`SpotifyHero`) is excellent and reused; but `EmptyState` and `SongListShimmer` are defined and never used — every screen rolls its own |
-| 3. Color | 3/4 | Brand palette is locked and consistent; `Color.White` / `Color.Black` literals appear 35+ times in `NowPlayingSheet` (cover-overlay context, defensible), and Browse tile colors look right |
-| 4. Typography | 3/4 | Type scale is well-defined; **drift:** `SongRow.kt:86` overrides `titleMedium`'s SemiBold with manual `FontWeight.Normal`, three `FindScreen` rows hand-set `FontWeight.SemiBold` on `bodyMedium`, `OnboardingScreen.kt:75` redundantly bolds an already-ExtraBold `headlineMedium` |
-| 5. Spacing | 2/4 | **Major drift:** `MediaPlayerSpacing` is used in only 3 of 23 UI files (~10 occurrences) — every other screen uses raw `16.dp / 24.dp / 12.dp / 8.dp` literals (281 `.dp)` matches across 29 files). The spacing scale exists but the codebase ignores it. |
-| 6. Experience Design | 3/4 | Loading + error + empty states present everywhere; pagination consistent; kebab pattern enforced. But: redownload dialog has copy-vs-action mismatch, no haptic on play/pause toggle, MiniPlayer like button preserves haptic that Now Playing's `KeyboardArrowDown` close lacks |
+| Pillar | Score | Δ vs v0.8.0 | Key Finding |
+|--------|-------|-------------|-------------|
+| 1. Copywriting | 4/4 | +1 | Every VM error path now goes through `friendlyMessage(t)` (21 call sites). Five remaining `t.message ?:` callers are sheet-local action errors — a separate, recoverable surface — and the redownload-dialog/menu mismatch is fully resolved at `NowPlayingSheet.kt:564-578`. No "Unknown error" leaks anywhere a user sees a *load* error. |
+| 2. Visuals | 4/4 | +1 | `EmptyState` adopted in 8 sites (was 0); `SongListShimmer` adopted in 5 list-loading paths (was 0); auto-playlist gradients are now per-family via `paletteFor(family)` so 7 surfaces read distinctly (was 1 shared purple). Hero pattern + MiniPlayer↔NowPlaying shared-element transition still excellent. The `AlbumCard`/`AlbumTile` icon-only fallback is the only remaining gap. |
+| 3. Color | 4/4 | +1 | New `MHColors.OnHero*` + `HeroScrim` tokens replace 28 inline `Color.White`/`Color.Black` literals in NowPlayingSheet. `Color.White`/`Color.Black` count is now 34 across 14 files — the bulk are inside *cover-renderer canvas* code (`MHCover`, `GeneratedCover`, brand tiles) where absolute white-on-art is correct, plus a small handful of decorative scrims (`SearchScreen` recents pill, `ForYouScreen` `0.04f` row backdrop, `PillChip` `0.08f` rest state) that genuinely need a white-with-alpha tint regardless of theme. |
+| 4. Typography | 4/4 | +1 | All 5 cycle-1 manual `FontWeight.Normal/SemiBold` overrides on Material3 styles are gone. The remaining 11 `fontWeight =` overrides in screens (`ForYouScreen` 281/314/351, `ProfileScreen` 252/277, `LoginScreen` 72/101, `AppUpdateBanner.kt:84`, `DownloadOfflineScreen` 83/130, `PlaylistShareDialog.kt:132`, `CrossfadeScreen.kt:64`) are all on `MHColors`-coloured **brand chrome** (lime CTAs, accent-monogram, lime stat numbers, "Condividi"/"RIPRODUCI" pills) — they're stylistic emphasis on values not in the type scale, not corrections to it. Mockup uses these per-spec. |
+| 5. Spacing | 2/4 | 0 | **Unchanged from v0.8.0.** Token usage rose from ~10 occurrences in 3 files to 36 occurrences in 9 files (+260 %), but the absolute count of raw `\d+\.dp` references in `ui/` is **467 across 41 files** — far higher than v0.8.0 reported because the rebrand added 14 new screens (Profile, settings sub-screens, ForYou, AppUpdateBanner, PillChip, GeneratedCover, MHCover, TrackActionSheet, PlaylistShareDialog). Every new screen kept inventing its own `10.dp` / `12.dp` / `14.dp` / `20.dp` rhythms, none of which fit the 4/8/16/24/32 scale. This is the single biggest deviation from the design system. **Memory note acknowledges:** the scale itself is too coarse — a partial sweep that blanket-substitutes 10/12/14 → 8/16 would visibly damage the rebrand. The fix is a design call, not a sweep. |
+| 6. Experience Design | 4/4 | +1 | List-page shimmer adopted (Liked, Search, Album, Artist, PlaylistDetail). Empty-state copy is action-oriented (Liked, AddSongs, Playlists, PlaylistDetail, AddToPlaylist, Queue, library tabs). Reorder-handle still appears on auto-playlists at `PlaylistDetailScreen.kt:401` (carry-over). MiniPlayer central play/pause now haptic (line 126), NowPlaying central play/pause still missing haptic at `NowPlayingSheet.kt:438`. Profile sheet replaces the cramped Home dropdown — meaningful Settings surface now exists with Tema / Crossfade / Download offline. |
 
-**Overall: 17/24**
+**Overall: 22/24** (was 17/24, +5)
 
 ---
 
 ## Top 5 Priority Fixes (ranked by impact)
 
-1. **Adopt `MediaPlayerSpacing` everywhere — the scale is dead-on-arrival.** The token was created in v0.3.0, but post-audit screens (`HomeScreen`, `PlaylistsScreen`, `PlaylistDetailScreen`, `LikedScreen`, `Artist/AlbumScreen`, `ChangelogSheet`, `OnboardingScreen`, all sheets) use raw `16.dp` / `24.dp` / `12.dp` / `8.dp` literals. Drift will compound — each new screen invents its own padding. **Fix:** sweep replace `padding(horizontal = 16.dp)` → `padding(horizontal = MediaPlayerSpacing.M)` across 19 files; add a lint rule (or even just a comment in `Spacing.kt`) to forbid raw integer-`dp` in `padding()`/`Spacer` outside `theme/`. (Affects Pillar 5.)
+1. **Spacing token escape hatch — extend `MediaPlayerSpacing` instead of leaving 467 raw `.dp` sites.** Severity: high. The 5-step scale (4/8/16/24/32) doesn't cover the values the rebrand actually wants — the mockup paints with 10dp gutters between mix tiles (`ForYouScreen.kt:153,253,256`), 12dp inner padding (`AppUpdateBanner.kt:57`, `MetaCard` rows, `EqualizerSheet:46`), 14dp card padding (`ProfileScreen.kt:341`, `MetaCard:495`, `RotationHero:199`), 20dp section breaks (`HomeScreen.kt:181`, `OnboardingScreen.kt:87`, `SettingsSubScreen.kt:75`, `ForYouScreen.kt:127/146/164/173`), and 36dp/48dp hero/login spacers (`LoginScreen.kt:89`, `NowPlayingSheet:334`). **Fix:** add `MediaPlayerSpacing.Xs2 = 6.dp`, `S2 = 10.dp`, `M2 = 12.dp`, `M3 = 14.dp`, `L2 = 20.dp`, `L3 = 36.dp`, `Xl2 = 48.dp` (or rename to `Tight`/`Comfortable`/`Loose`/`Hero`) and sweep the top 5 offenders (`ForYouScreen` 7 `Spacer` sites, `OnboardingScreen` 7 sites, `HomeScreen.kt:181` arrangement, `NowPlayingSheet` 6 sites, `ProfileScreen` 5 sites). The half-token, half-raw state is worse than either pure: it implies the scale is normative when in practice every new screen ignores it.
 
-2. **Replace the 28 inline `RoundedCornerShape(N.dp)` sites with `CoverShapes` constants.** Codebase has 5 distinct cover radii in flight (`4.dp`, `6.dp`, `8.dp`, `10.dp`, `12.dp`) where the design system declares 4 named ones. Notable: `HomeScreen.kt:399` (`RoundedCornerShape(6.dp)` for shortcut tile, should be `CoverShapes.SongRow`), `HomeScreen.kt:552` (`6.dp` for playlist card cover, should be `CoverShapes.MiniPlayer`), `PlaylistsScreen.kt:324/370/414` (all `4.dp` — inconsistent with sibling tile at `:516` using `6.dp`), `AnonymousBanner.kt:36` (`12.dp` magic number for banner). **Fix:** replace each call with the appropriate `CoverShapes.*` value or add a new named token if there's a real design intent (e.g. `CoverShapes.Banner = RoundedCornerShape(12.dp)`).
+2. **`AlbumCard` (`AlbumListScreen.kt:227-265`) and `AlbumTile` (`ArtistScreen.kt:294-333`) still paint icon-only.** Severity: high (carried over from v0.8.0). Every album cover in the entire library list is the same 56dp/44dp QueueMusic icon on `surfaceContainerHigh` — the album-list page looks identical regardless of catalog. Fix is cross-repo (extend `AlbumDto` with `coverSongId: Long?` server-side, then render via `Network.coverUrl(it)` in the existing `Box`). Until that ships, even a `MHCover` deterministic-from-album-id placeholder would be a strict improvement over the all-grey wall. **Fix:** in the meantime, slot in `MHCover(kind = mhCoverFor(album.name.hashCode().toLong()).first, palette = mhCoverFor(...).second)` as a transitional placeholder — mockup-faithful, deterministic per album, zero new data dependency.
 
-3. **Adopt `EmptyState` and `SongListShimmer` — they exist and are entirely unused.** `States.kt:94` defines a polished `EmptyState(icon, title, subtitle, actionLabel, onAction)` composable; **zero callers** in `app/src/main/kotlin/com/mediaplayer/android/ui/`. Same for `SongListShimmer` at `States.kt:203`. Every list screen falls back to a bare `CenteredSpinner` (Liked, Playlists, Artist, Album, Find, Search) and every empty state is a hand-rolled `Box(...) { Text("No ...") }` (`PlaylistsScreen.kt:305`, `PlaylistDetailScreen.kt:335`, `LikedScreen.kt:184`, `AlbumListScreen.kt:173`, `ArtistListScreen.kt:173`, `AddToPlaylistSheet.kt:190`, `AddSongsToPlaylistSheet.kt:143`, `FindScreen.kt:289`, `QueueSheet.kt:74`). **Fix:** swap `CenteredSpinner` → `SongListShimmer` for list-loading paths (Liked, Search, AddSongs, PlaylistDetail), swap inline empty `Box { Text(...) }` → `EmptyState(...)` with appropriate icons (FavoriteBorder for liked, QueueMusic for playlists, Search for songs, Person for artists). Big perceived-quality win.
+3. **`NowPlayingSheet` central play/pause lacks haptic feedback.** Severity: medium (carried over from v0.8.0). The like toggle 70 lines up at `NowPlayingSheet.kt:362-364` does it; the MiniPlayer's central play/pause at `MiniPlayer.kt:126-128` does it. The full-screen play button at `NowPlayingSheet.kt:438` is the marquee tap target and the only one in the haptic-eligible cluster that's silent. **Fix:** wrap the `viewModel::togglePlayPause` callback at line 438 in a `LocalHapticFeedback`-emitting closure mirroring lines 362-364.
 
-4. **Resolve the two redownload dialogs in `NowPlayingSheet.kt:615-659` — copy is contradictory.** Both `confirmRedownload` (line 615) and `confirmMarkBroken` (line 638) bind to overflow menu items "Re-download song" and "Mark song as broken" respectively, but the `confirmMarkBroken` dialog's title at line 641 says **"Re-download song to device?"** — nothing about "broken" appears in the dialog UI. The menu item label "Mark song as broken" therefore mismatches what the dialog actually does (which is a local-cache re-download, per the body text at 643-647). **Fix:** either (a) align the menu label to "Re-download to device" + the title to match, or (b) actually expose a "report broken" path that hits a server-side flag instead of triggering a local re-download. This is a copywriting + experience-design defect.
+4. **`PlaylistDetailScreen.kt:400-409` reorder drag handle paints on auto-playlists.** Severity: medium (carried over from v0.8.0). Auto-playlists (`Discover Daily`, `On Repeat`, `Daily Mix N`, `Release Radar`, etc.) are server-managed; long-press delete is correctly suppressed at `PlaylistsScreen.kt:433`, and reorder server-side will silently no-op or error. The drag handle is misleading affordance. **Fix:** branch `if (!playlist.isAuto) IconButton(modifier = Modifier.draggableHandle(), …)` in the `Row` at line 394.
 
-5. **`SongRow.kt:86` hand-overrides the type scale — and the comment admits why.** The row title sets `style = MaterialTheme.typography.titleMedium` then immediately patches `fontWeight = FontWeight.Normal` to undo `titleMedium`'s SemiBold. The comment says "previous titleSmall (14sp Bold) read as too heavy". This is a sign that the type scale's `titleMedium` (16sp SemiBold) is itself wrong for list rows, OR `bodyLarge` (16sp Normal) should be used directly. Three other `FontWeight.SemiBold` overrides on `bodyMedium` exist in `FindScreen.kt:181/271/329`, plus `SpotifyImportScreen.kt:227`. **Fix:** introduce a dedicated `bodyLargeStrong = bodyLarge.copy(weight = SemiBold)` token (or use `titleSmall` properly and accept its weight), and swap each override to the token. Manual `FontWeight.X` in screens is a smell every time.
+5. **`SongListShimmer` adopted in 5 of 6 list-loading paths — `PlaylistsScreen.kt:110` is the lone hold-out.** Severity: low. After the cycle-1 sweep, every detail screen (Liked, Album, Artist, PlaylistDetail, Search) plays the shimmer; only `PlaylistsScreen` (the library tab — most-visited surface in the app) still drops to `CenteredSpinner()` while loading. `HomeScreen`, `AlbumListScreen`, `ArtistListScreen`, `FindScreen`, `ForYouScreen` likewise spinner. **Fix:** swap `CenteredSpinner()` → `SongListShimmer()` at `PlaylistsScreen.kt:110`, `HomeScreen.kt:132`, `AlbumListScreen.kt:170`, `ArtistListScreen.kt:170`, `ForYouScreen.kt:72`. Five-line change for the highest-traffic loading surface in the app.
 
 ---
 
 ## Detailed Findings
 
-### Pillar 1: Copywriting (3/4)
+### Pillar 1: Copywriting (4/4)
 
 **Strong points:**
-- `friendlyMessage()` in `States.kt:210-218` is a thoughtful translator that hides 401/403/404/IO stack traces with empathic copy.
-- Pluralization respects "1 song" vs "N songs" consistently (`PlaylistsScreen.kt:618`, `ArtistScreen.kt:333`, `AddToPlaylistSheet.kt:279`, `LikedScreen.kt:220`, etc).
-- `OnboardingScreen.kt:127` uses a counter-down CTA ("Pick 2 more" → "Continue") that's a polished UX pattern.
-- Cold-start CTAs at `HomeScreen.kt:218-228` ("Find new music" / "Import Spotify" with one-line subtitles) hit the right voice.
-- Anonymous-banner copy at `AnonymousBanner.kt:49` ("You're playing as a guest. Sign in to sync your library.") is warm and action-oriented.
+- `friendlyMessage(t)` adopted by 21 call sites (was ~5 in v0.8.0). Every VM `Error` state goes through it. Hidden 401/403/404/IO stack traces from users.
+- Pluralization respects "1 song" / "N songs" / "1 brano" / "N brani" consistently.
+- Empty-state titles + subtitles are action-oriented, not generic: "No liked songs yet — Heart tracks from the Search tab to find them here." (`LikedScreen.kt:180-184`); "Your library is empty — Add tracks to your catalog to see them here." (`AddSongsToPlaylistSheet.kt:140-144` — branches between empty-catalog vs zero-matches as v0.8.0 #3 requested); "No playlists yet — Tap + New playlist to create one." (`AddToPlaylistSheet.kt:185-189` — `NewPlaylistRow` reference now correct).
+- Cold-start CTAs at `HomeScreen.kt:382-407` are warm and instructive, not generic.
+- Anonymous-banner copy at `AnonymousBanner.kt:49` ("Stai ascoltando come ospite. Accedi per sincronizzare la libreria.") still lands.
+- Onboarding picker counter-CTA ("Scegli ancora 2" → "Continua") at `OnboardingScreen.kt:130-133` still polished.
+- NowPlayingSheet redownload menu/title alignment (v0.8.0 Top-5 #4) **fully resolved**: `NowPlayingSheet.kt:564` "Re-download from source" and `:572` "Refresh local copy" — menu strings, dialog titles (lines 620/643) and confirm-button labels all match the underlying `redownloadCurrent` vs `refreshLocalDownload` actions. No defect remains.
+
+**Findings (low severity):**
+
+- **`AddToPlaylistSheet.kt:106/227`, `AddSongsToPlaylistSheet.kt:157`, `PlaylistDetailScreen.kt:168`, `PlaylistShareImporter.kt:50/92`, `SpotifyImportViewModel.kt:69/115`** — Severity: low. Eight `t.message ?: "..."` callers remain, but all are *action* errors (failing to add, share, import, pick), not load errors. Each composes a contextual prefix ("Couldn't add: ", "Couldn't create share link", "Failed to read file") which is adequate UX for action-error surfaces — the user knows what they were doing. **Fix (optional):** route through `friendlyMessage` for IO-type unification, but the current state doesn't leak stack traces and is contextually appropriate.
+
+- **`SpotifyImportScreen.kt:289`** — Severity: low. Error retry button reads "Try Again" (English) inside an otherwise fully-Italian screen ("Importa da Spotify", "Annulla", "Avvia import"). Nine other Italian strings around it. **Fix:** "Riprova".
+
+- **`HomeScreen.kt:328`** — Severity: low. Feed-end mono caption "— FINE FEED —" is set in English-flavoured tense within an otherwise Italian feed; "— FINE —" is what `ForYouScreen.kt:177` uses for the same purpose. **Fix:** harmonise on "— FINE —" or "— FINE FEED —" everywhere.
+
+- **`SearchScreen.kt:241/302/422` etc** — Mixed-language tile labels ("Indie", "Hip-hop", "Pop" — international; "Elettronica", "Classica" — Italian). Severity: low. Genre-tag display names in Italian where a translation exists is fine; this is consistent within itself. Documentation note, not a fix.
+
+### Pillar 2: Visuals (4/4)
+
+**Strong points:**
+- `SpotifyHero` + cover-derived dominant-colour gradient still the standout pattern (Liked, Album, Artist, PlaylistDetail).
+- `NowPlayingSheet` cover-driven backdrop with the dual-gradient overlay + `HeroScrim` token at the bottom (`NowPlayingSheet.kt:208-228`) preserves transport-row contrast on light covers — the implementation comment at lines 215-218 explicitly documents the decision.
+- `MiniPlayer` ↔ `NowPlayingSheet` shared-element transition (`MiniPlayer.kt:96`, `NowPlayingSheet.kt:312-318`) still excellent.
+- `EmptyState` adopted in **8 sites**: `PlaylistsScreen.kt:316/325`, `PlaylistDetailScreen.kt:342`, `LikedScreen.kt:180`, `AddToPlaylistSheet.kt:185`, `AddSongsToPlaylistSheet.kt:140`, `QueueSheet.kt:71`. Was 0 in v0.8.0.
+- `SongListShimmer` adopted in 5 sites: `LikedScreen`, `SearchScreen`, `AlbumScreen`, `ArtistScreen`, `PlaylistDetailScreen`. Was 0 in v0.8.0.
+- `autoPlaylistGradient(kind)` + `paletteFor(family)` (`GeneratedCover.kt:156-170`) maps each `AutoPlaylistKind` to a distinct duotone — Rotation = black/lime, Daily = blue/cyan, Releases = lime/black, Capsule = pink/purple, Radar = cyan/blue, Mood = purple/magenta, Next = gold/purple. Carousel rows in Home/Playlists are now glance-distinguishable. Was 1 shared purple in v0.8.0.
+- `GeneratedCover` 7-family canvas renderer (`GeneratedCover.kt:75-138`, `MHCover.kt:70-114`) gives auto-playlists a unique mockup-faithful illustration each — `Daily` is a duotone gradient with a 44sp mono mega-badge; `Capsule` is a polaroid frame; `Radar` is a radial gradient + dot-grid; `Rotation` is concentric rings; et al. The visual identity of `ForYouScreen` is now a real surface, not a placeholder.
+- `SettingsSubScreen` scaffold (`profile/settings/SettingsSubScreen.kt`) keeps gradient + lime-eyebrow + grouped-on-Card visual rhythm consistent across Tema, Crossfade, Download offline.
+- `AppUpdateBanner` (`common/AppUpdateBanner.kt`) is a polished lime tinted-glass card with mono eyebrow + version delta + circle-icon CTA. Mockup-faithful.
 
 **Findings:**
 
-- **`AlbumScreen.kt:83/94`, `ArtistScreen.kt:111/146`, `AlbumListScreen.kt:108`, `ArtistListScreen.kt:107`, `AddToPlaylistSheet.kt:91`, `AddSongsToPlaylistSheet.kt:85`** — Severity: medium. Eight call sites fall back to literal `"Unknown error"` when `t.message` is null. `States.kt:210` already provides `friendlyMessage(t)` which does this correctly. **Fix:** replace each `t.message ?: "Unknown error"` with `friendlyMessage(t)`.
+- **`AlbumListScreen.kt:227-265` `AlbumCard` paints a 56dp QueueMusic icon, no cover.** Severity: high. Carried from v0.8.0. Cross-repo block: `AlbumDto` lacks a `coverSongId`. Fix: see Top-5 #2.
 
-- **`NowPlayingSheet.kt:641`** — Severity: high. Dialog title "Re-download song to device?" is bound to overflow item "Mark song as broken" (line 570). The two strings disagree on intent. **Fix:** see Top-5 #4.
+- **`ArtistScreen.kt:294-333` `AlbumTile` paints a 24dp QueueMusic icon, no cover.** Severity: high. Same root cause. Even a deterministic `MHCover` placeholder would beat the icon-on-grey state.
 
-- **`AddSongsToPlaylistSheet.kt:143`** ("No songs found.") — Severity: low. The string is shown in two semantically different states: empty catalog (initial query="") and zero matches for a typed query. **Fix:** branch the empty text on whether `query` is empty: empty catalog → "Your library is empty"; non-empty query → `"No songs match \"$query\""`.
+- **`HomeScreen.kt:494-535` `ShortcutGrid` Liked tile uses gradient brush directly while playlist tile uses the surfaceVariant fallback.** Severity: low. The Liked tile is a Brush-painted box, the playlist tile is `MaterialTheme.colorScheme.surfaceVariant` with a `QueueMusic` icon. For an *auto* playlist in the shortcuts row this is now slightly out of step: `PlaylistCardSquare` at line 705 uses `autoPlaylistGradient(kind)` correctly, but `ShortcutTile` at line 552 falls through to plain surface. A user playlist tile could reasonably keep the surface look; an auto-playlist tile in shortcuts should pick up the gradient too. **Fix:** branch `is ShortcutItem.Playlist` on `playlist.isAuto` and apply `autoPlaylistGradient(kind)` for parity with the carousel.
 
-- **`AddToPlaylistSheet.kt:190`** ("No playlists yet. Create one above.") — Severity: low. Gestures at the `NewPlaylistRow` directly above, but the row sits inside a scrolling `LazyColumn` and the empty-message Box is a sibling to it. "Above" is true at first paint only. **Fix:** "Tap **+ New playlist** to create one."
+- **`PlaylistsScreen.kt:265-271` library grid uses `GridCells.Fixed(1)`** — i.e. a single-column "grid" — and `verticalArrangement = Arrangement.spacedBy(2.dp)` with `horizontalArrangement = Arrangement.spacedBy(0.dp)`. Severity: low. The original Spotify-tile 2-col layout was explicitly migrated away from. The 2dp vertical spacing reads as compressed compared to the 8dp default of every other list. **Fix:** if a list is intended (it is — `LikedSongsRow`/`PlaylistTile`/`ImportFromSpotifyRow` are all rows) replace the `LazyVerticalGrid` with a plain `LazyColumn` and drop `GridCells.Fixed(1)`/`GridItemSpan` ceremony.
 
-- **`HomeScreen.kt:323`** ("You're on the latest version") — Severity: low. Toast copy is fine but slightly inconsistent with the rest of the app's voice — elsewhere it says "What's new", this should likely echo "You're up to date".
+- **`NowPlayingSheet.kt:259-260` "IN RIPRODUZIONE DA" caption shows `current.album ?: current.artist`.** Severity: low. Carried from v0.8.0. When album is null, the source label says "IN RIPRODUZIONE DA" then renders the artist's name as if it were a venue. **Fix:** branch the caption to "DALL'ARTISTA" when `album == null`, or hide the caption row.
 
-- **`HomeScreen.kt:327`** — Severity: low. Update-error toast uses raw `r.message` — not run through `friendlyMessage`. Could surface a stack-trace-like string to user.
+- **`SearchScreen.kt:436-479` `GenreGrid` paints decorative `MHCover(kind = g.kind, palette = g.palette)` rotated 20° in the bottom-right corner of each tile.** Strong visual moment — and it's the only place outside Profile/ForYou where the generative cover system shows up in non-auto-playlist context. Worth noting for design-language coherence: the eight genre tiles each have a unique cover style + palette, which is faithful to mockup.
 
-- **`PlaylistDetailScreen.kt:207`** ("Removed from playlist") — Severity: low. Unique playlist context is lost; the add-to flow at line 231 says "Added to $playlistName". **Fix:** "Removed from \"<name>\"" mirroring the add path.
-
-- **`SpotifyImportScreen.kt:259`** — Severity: low. The string `"\n${state.queued} downloading — will be added when ready"` mixes copywriting with raw line breaks; renders as one paragraph in `bodyMedium`. **Fix:** put each line in its own `Text` row inside a `Column(spacedBy(4.dp))` for readable hierarchy.
-
-### Pillar 2: Visuals (3/4)
+### Pillar 3: Color (4/4)
 
 **Strong points:**
-- `SpotifyHero` (`SpotifyHero.kt`) is excellent: cover, palette-derived gradient, title/subtitle, play+shuffle action row, optional `extraActions` slot. Used by Liked, Album, Artist, Playlist Detail. Consistent visual identity for every detail screen.
-- `NowPlayingSheet` cover-driven backdrop (`NowPlayingSheet.kt:196-227`) with the dual-gradient overlay is the standout visual moment in the app.
-- `MiniPlayer` ↔ `NowPlayingSheet` shared-element cover transition (`NowPlayingSheet.kt:310-317`, `MiniPlayer.kt:96`) is a high-polish touch.
-- Browse tiles (`SearchScreen.kt:228-274`) with the Spotify pink/purple Albums/Artists pair land Spotify-faithfully.
-- Liked-songs purple gradient anchor is consistent across Home (`HomeScreen.kt:443`), Playlists (`PlaylistsScreen.kt:325`), and the Liked hero (`LikedScreen.kt:170`).
+- Dark palette locked in `Theme.kt:25-65` via `MHColors`, exhaustive Material3 mapping at `:67-87`. Light mode is opt-in and warned about (`profile/settings/ThemeScreen.kt:38-45`).
+- New `MHColors.OnHero` / `OnHeroMuted` / `OnHeroDim` / `OnHeroTrack` / `HeroScrim` tokens (`Theme.kt:54-65`) replace the v0.8.0 #4 finding's "35+ inline `Color.White` literals in NowPlayingSheet" — the file now uses tokens at lines 247/257/262/272/344/351/369/388/389/390/401/406/422/433/459/470/486/495/506/512/526/532/541/548/556. Inline literals in NowPlayingSheet are down to 1 (`Color.Black` for play-button content at line 442 — semantic, not drift).
+- Auto-playlist gradients are a first-class taxonomy, not a duplicated `Brush.linearGradient(...)` per call site (`GeneratedCover.kt:166-170`).
+- Browse tile colors (`MHColors.BrowseAlbumsTile`, `BrowseArtistsTile`) are tokenized.
+- `MHGradient.screenBg()` / `MHGradient.heroBg(top)` are the canonical screen-paint paths, used by ForYou, Login, Profile, Onboarding, all settings sub-screens.
+- The mono text scale `LocalMHMono` (eyebrow, badge, duration, caption, statValue) is consistently applied via the composition local — never hand-rolled.
+- Lime accent (`MHColors.Lime`) is used selectively: liked toggle, follow toggle, downloaded badge, lyrics active line, sleep timer active, primary buttons, brand monogram, stat numbers, eyebrow labels, slider thumbs in Crossfade, Switch active track. ~50 occurrences across a focused brand surface. Within the 60/30/10 expectation.
+
+**Findings (low severity):**
+
+- **`Color.White` / `Color.Black` count is 34 across 14 files.** Severity: low. Distribution:
+  - Cover-canvas internals (`MHCover.kt:5`, `GeneratedCover.kt:5`) — correct: cover renderer paints absolute colors regardless of theme.
+  - `NowPlayingSheet.kt:1` — `Color.Black` content tint on the white play button at `:442`. Semantic exception, captured in code as the inverse of the standard `onPrimary`-on-`primary` pattern. Worth promoting to `MHColors.OnNowPlayingPlay = Color.Black` for symmetry with `OnHero` but very low priority.
+  - `SearchScreen.kt:4` — `Color.White.copy(alpha = 0.08f)` for TextField surface and inactive tile chrome. Theme-neutral by design.
+  - `PlaylistShareDialog.kt:1` — `Color.White.copy(alpha = 0.04f)` for link-card backdrop. Same.
+  - `ForYouScreen.kt:3` — `Color.White.copy(alpha = 0.04f)` / `0.03f` for context rows + how-it-works card. Same.
+  - `HomeScreen.kt:4` — Liked-tile icon tint on a saturated gradient (correct), and one `surfaceVariant` Liked-tile alternative.
+  - `PlaylistsScreen.kt:2` — Liked-tile icon tint, auto-playlist icon tint over gradient (correct).
+  - `MiniPlayer.kt:1` — `Color.White.copy(alpha = 0.18f)` inactive progress track. Comment at `:143-147` explains why the theme alternative was wrong.
+  - `PillChip.kt:1` — unselected chip backdrop `0.08f`. Theme-neutral.
+  - `TrackActionSheet.kt:1` — `Color.Black.copy(alpha = 0.5f)` scrim. Standard ModalBottomSheet scrim pattern.
+  - `VideoPlayerSheet.kt:3` — `Color.Black` fullscreen backdrop and close-button tint over arbitrary video frame. Correct.
+  - `PlaylistDetailScreen.kt:1` — meta-card `Color.White.copy(alpha = 0.05f)` backdrop.
+
+  None of these are actually drift. The remaining clean-up is to capture the `White.alpha(0.04f-0.08f)` pattern into a single `MHColors.GlassPanel` token (used 7 times) so its meaning is explicit. **Fix (optional):** introduce `MHColors.GlassPanelDim = Color(0x0AFFFFFF)`, `GlassPanel = Color(0x14FFFFFF)` (already exists as `Divider`), `GlassPanelStrong = Color(0x29FFFFFF)`.
+
+- **`PillChip.kt:31` selected backdrop is `MHColors.Lime`, unselected is `Color.White.copy(alpha = 0.08f)`** — Severity: low. The unselected state could be `MHTheme.cardHigh` for theme-reactivity. Keep an eye on light-mode rendering — the 8% white over a near-white background may visually disappear.
+
+- **`ProfileScreen.kt:99/251`, `OnboardingScreen.kt:99` (red on `Color(0xFFFF4D2E)`), `LoginScreen.kt:118`, `DownloadOfflineScreen.kt:129`** — Severity: low. The "Disconnetti" / "Cancella tutti i download" / login error all use raw `Color(0xFFFF4D2E)` instead of `MaterialTheme.colorScheme.error` or a named `MHColors.Danger` token. **Fix:** introduce `MHColors.Danger = Color(0xFFFF4D2E)` and use the token.
+
+### Pillar 4: Typography (4/4)
+
+**Strong points:**
+- `MHType` (`Theme.kt:127-141`) declares 13 named text styles. `displayLarge` is now used (`CrossfadeScreen.kt:65`, `DownloadOfflineScreen.kt:81`) — was a dead token in v0.8.0.
+- `MHMonoTextStyles` + `LocalMHMono` (`Theme.kt:148-164`) gives the mockup's `// SECTION` mono eyebrows, `NEW`/`VEN`/`S18` badges, `3:42` durations, mockup captions, and 22sp stat-tile values their own scale. Consistently applied via composition local — never hand-rolled.
+- The five v0.8.0 `FontWeight.X` overrides on Material3 styles (`SongRow.kt:86` Normal-on-titleMedium, `FindScreen.kt:181/271/329` SemiBold-on-bodyMedium, `OnboardingScreen.kt:75` Bold-on-headlineMedium, `SpotifyImportScreen.kt:227` SemiBold-on-bodyMedium) are **all gone**. SongRow at `:74` now uses `titleSmall` directly; `FindScreen` rows at `:188/277` use `titleSmall`. OnboardingScreen at `:78` applies `headlineMedium` cleanly.
+
+**Findings (low severity, design-correct):**
+
+- **11 `fontWeight =` overrides remain in screens** (`ForYouScreen.kt:240/281/314/351`, `ProfileScreen.kt:252/277`, `LoginScreen.kt:72/101`, `AppUpdateBanner.kt:84`, `DownloadOfflineScreen.kt:83/130`, `PlaylistShareDialog.kt:132`, `CrossfadeScreen.kt:64`). Severity: low — design-correct, not drift. Each is on a *brand-emphasis* string outside the type scale's vocabulary: lime-coloured "RIPRODUCI" pill caps, the lime "M" monogram on Login, SemiBold "Disconnetti" red ribbon, ExtraBold lime stat numbers. The mockup specifies these weights per element. They aren't corrections to `MHType` — they're chrome on top of it. Worth documenting in a `// Brand emphasis — intentional override` comment if a future audit flags them.
+
+- **No `fontFamily` override anywhere** — every text uses Roboto (system sans) or system Monospace. `InterFamily = FontFamily.SansSerif` and `MonoFamily = FontFamily.Monospace` (`Theme.kt:124-125`) are aliases waiting for `res/font/` TTFs. Severity: low — accepted-as-designed per the comment at `Theme.kt:121-123`.
+
+### Pillar 5: Spacing (2/4 — biggest deviation, unchanged from v0.8.0)
+
+**Strong points:**
+- `MediaPlayerSpacing` adopted in 9 files at 36 occurrences (was 3 files at ~10 in v0.8.0). Heavy users: `HomeScreen` (2), `MiniPlayer` (4), `NowPlayingSheet` (6), `OnboardingSheet` (7), `ForYouScreen` (7), `ProfileScreen` (5), `SettingsSubScreen` (2), `VideoPlayerSheet` (2).
+- Where the token is used, the rhythm reads correctly. `HomeScreen.kt:180` `contentPadding = PaddingValues(top = MediaPlayerSpacing.M, bottom = MediaPlayerSpacing.L)` and `MiniPlayer.kt:81/89/98` `padding(horizontal = MediaPlayerSpacing.S, vertical = MediaPlayerSpacing.Xs)` are honest.
 
 **Findings:**
 
-- **`States.kt:94` `EmptyState` and `States.kt:203` `SongListShimmer` are unused** — Severity: high. See Top-5 #3. Every screen ships its own loading + empty pattern instead. Polish gap.
+- **467 raw `\d+\.dp` occurrences across 41 files** (was 281 across 29 in v0.8.0). The codebase grew faster than the token grew. Severity: high but design-blocked.
 
-- **`PlaylistsScreen.kt:397-487` `PlaylistRow` is dead code.** Severity: medium. The current grid layout uses `PlaylistTile` (line 491). `PlaylistRow` is private and has no callers — it's been left behind by the v0.4.3 grid migration. **Fix:** delete (or guard with a comment if it's expected to come back).
+- **`MediaPlayerSpacing` scale is too coarse for the rebrand mockup.** Severity: high. The mockup uses 6/10/12/14/20/36/48dp values at well-defined intent layers:
+  - 6dp — tight inline gaps (`OnboardingScreen.kt:171`, `SearchScreen.kt:351/489`, `SongRow.kt:82/105`)
+  - 10dp — grid tile gutters (`OnboardingScreen.kt:93/94`, `ForYouScreen.kt:152/253/256`, `SearchScreen.kt:442/476`, `PlaylistDetailScreen.kt:445`)
+  - 12dp — group inner padding (`AppUpdateBanner.kt:57`, `EqualizerSheet.kt:46`, `PlaylistShareDialog.kt:94`, `SearchScreen.kt:452`, `RotationHero.kt:236`, `MetaCard:495`)
+  - 14dp — card inner padding (`ProfileScreen.kt:295/341`, `ForYouScreen.kt:199`, `MetaCard:495`, `RotationHero.kt:208`, `DownloadOfflineScreen.kt:146`, `SettingsSubScreen.kt:109/144`)
+  - 20dp — section breaks within long columns (`HomeScreen.kt:181`, `OnboardingScreen.kt:71/87`, `SettingsSubScreen.kt:75`, `ForYouScreen.kt:127/146/164/173`, `Crossfade.kt:52`)
+  - 36/48dp — hero spacers (`LoginScreen.kt:89`, `NowPlayingSheet.kt:439`)
 
-- **`AlbumListScreen.kt:226-264` `AlbumCard` skips cover art entirely.** Severity: medium. The card draws a `surfaceContainerHigh` box with a `QueueMusic` icon — never an actual album cover, even though every song in the album has a `hasCoverArt` flag and `Network.coverUrl(songId)` would render. The album list page consequently looks identical regardless of catalog. Compare `PlaylistsScreen.kt:536-541` which does fetch a cover when `playlist.coverSongId != null`. **Fix:** join the first song's cover into `AlbumDto` (or fetch lazily) and render it instead of the placeholder.
+  Sweep-to-`Xs/S/M/L/Xl` would visibly damage the rebrand: `10.dp` → `S=8.dp` shrinks every tile gutter; `14.dp` → `M=16.dp` enlarges every settings card; `20.dp` → `L=24.dp` adds 25 % to every section break. The token has to expand. **Fix:** see Top-5 #1.
 
-- **`ArtistScreen.kt:292-330` `AlbumTile` (artist's album list) also paints only an icon, no cover.** Severity: medium. Same fix.
+- **`OnboardingScreen.kt:71` `padding(horizontal = 20.dp)`, `:73` `Spacer(Modifier.height(24.dp))`, `:81/87/108/116/143` mixed `4/8/20/12/12.dp`** — Severity: medium. Six unique values in 75 lines, none from the scale. Symptomatic.
 
-- **`HomeScreen.kt:548-580` PlaylistCardSquare — auto-playlist gradient is the same purple gradient as Liked.** Severity: medium. All 7 auto-playlist surfaces (Discover Daily, On Repeat, Release Radar, Daily Mix 1-6) get the same purple-blue gradient as the Liked tile. They become visually indistinguishable on the Home carousel. **Fix:** distinguish auto-playlist kinds — server-side `kind` field could drive a per-kind gradient pair (e.g. Daily Mix 1 = pink/red, On Repeat = green/teal, Release Radar = blue/cyan). Spotify itself does this.
+- **`NowPlayingSheet.kt:235` `padding(horizontal = 20.dp)`, `:240` `padding(top = 8.dp, bottom = 8.dp)`, `:289` `Spacer(MediaPlayerSpacing.L)`, `:334` `Spacer(MediaPlayerSpacing.Xl + MediaPlayerSpacing.Xs)` (token-derived 36dp), `:410` `Spacer(12.dp)`** — Mixed. The `Xl + Xs` composition at `:334` is a creative work-around that proves the scale lacks a 36dp slot.
 
-- **`NowPlayingSheet.kt:236-284` PLAYING FROM caption shows `current.album ?: current.artist`.** Severity: low. The label says "PLAYING FROM" but for a song with no album, it shows the artist's name, which doesn't read as a "from" source. **Fix:** when album is null, switch the label to "PLAYING FROM ARTIST" or hide the label entirely.
+- **Within-token consistency *is* good for outer screen padding** — `padding(horizontal = 16.dp)` across screens converges. The drift is concentrated in vertical spacing and grid gutters, where the mockup demands fine-grained 10/12/14/20.
 
-### Pillar 3: Color (3/4)
-
-**Strong points:**
-- Locked dark palette declared exhaustively in `Theme.kt:14-31` via `SpotifyColors`. No app-level light mode complications.
-- All semantic Material3 roles wired up correctly (`primary`, `surface`, `surfaceContainerHigh`, `onSurfaceVariant`).
-- Browse tile colors (`BrowseAlbumsTile = 0xFFE8115B`, `BrowseArtistsTile = 0xFF8400E7`) are first-class tokens.
-- Liked gradient (`LikedGradientStart` / `LikedGradientEnd`) is a token, not duplicated as literals.
-- Equalizer/Slider/FilterChip color overrides defer to theme roles where possible (`PlaylistsScreen.kt:239-244`).
-
-**Findings:**
-
-- **`Color.White` / `Color.Black` appear 35+ times in `NowPlayingSheet.kt`** (lines 245, 255, 260, 270, 342, 367, 386, 387, 388, 399, 404, 420, 431, 439, 440, 457, 468, 484, 493, 504, 510, 524, 530, 539, 546, 554; plus alpha variants). Severity: low — defensible because the cover-derived gradient backdrop can be any color (light pastel, dark vibrant) so the transport row needs absolute white on a darkened scrim, not theme `onSurface`. But this should be a design *decision* captured as a token (`SpotifyColors.OnHero = Color.White`) rather than 35 raw `Color.White` references that future devs might localize incorrectly. **Fix:** introduce `SpotifyColors.OnHero` and `SpotifyColors.OnHeroMuted = Color.White.copy(alpha = 0.85f)` and use those.
-
-- **`Color.White` in `SearchScreen.kt:233/241/268` Browse tiles** — Severity: low. Tile background is a saturated brand color; `onPrimary` would be wrong (it's black for the green primary). Same fix as above — introduce `SpotifyColors.OnBrowseTile = Color.White`.
-
-- **`MiniPlayer.kt:145` `Color.White.copy(alpha = 0.18f)`** for inactive progress track — Severity: low. The 6-line comment justifies it well (surfaceContainerHighest is too close to the mini-player background). The fix is the same — introduce a token (`OnSurfaceFaint`) so the literal isn't naked.
-
-- **`NowPlayingSheet.kt:439-440`** the play/pause `FilledIconButton` uses `containerColor = Color.White, contentColor = Color.Black`. This is *intentional* (Spotify's white round play button on the player) but it's the only place in the app where `onPrimary` (black on green) is overridden to white-on-black. **Fix:** capture as `SpotifyColors.NowPlayingPlay` / `OnNowPlayingPlay` so it's clear this is a deliberate exception, not drift.
-
-- **No accent overuse.** `MaterialTheme.colorScheme.primary` (Spotify Green) is used selectively: liked toggle, follow toggle, downloaded badge, lyrics active line, sleep timer active, primary buttons, brand mark in changelog. ~30 occurrences total — within the 60/30/10 expectation for a focused brand color.
-
-### Pillar 4: Typography (3/4)
+### Pillar 6: Experience Design (4/4)
 
 **Strong points:**
-- `SpotifyType` (`Theme.kt:55-69`) declares 13 named text styles — display, headline, title, body, label — each with size + weight, no missing roles. Cleanly mirrors Spotify's hierarchy.
-- ~99% of `Text` composables use `MaterialTheme.typography.X` (200+ matches across 19 files).
-
-**Findings:**
-
-- **`SongRow.kt:86` `fontWeight = FontWeight.Normal`** overriding `titleMedium`'s SemiBold — Severity: high. The comment at line 83-85 says "Spotify-style row title — 16sp Regular, lighter than the previous titleSmall (14sp Bold)". This means the type scale lacks a "16sp Regular" row style and the row resorts to manual override. **Fix:** see Top-5 #5. Either use `bodyLarge` (16sp Normal — matches exactly) or introduce a token. Manual `FontWeight.X` should be a code-review red flag.
-
-- **`FindScreen.kt:181, 271, 329`, `SpotifyImportScreen.kt:227`** — `bodyMedium` paired with `fontWeight = FontWeight.SemiBold` four times. Severity: medium. Same drift pattern. The right Material3 mapping for "14sp SemiBold" is `titleSmall` (`Theme.kt:62`). **Fix:** swap each to `MaterialTheme.typography.titleSmall`.
-
-- **`OnboardingScreen.kt:75`** — `style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold`. Severity: low. `headlineMedium` is already 26sp ExtraBold (`Theme.kt:58`); manually setting `Bold` is *weaker* than the style's default ExtraBold and silently demotes the heading weight. **Fix:** drop the `fontWeight =` line.
-
-- **No `displayLarge` use anywhere in the app.** `displayLarge` (36sp ExtraBold) is declared in `Theme.kt:56` but never referenced. Either it's a dead token or there's a missing hero moment that should use it (`LoginScreen.kt:46` "MediaPlayer" mark uses `headlineLarge` instead — could be `displayLarge` for stronger brand presence). **Fix:** either use it for LoginScreen brand or remove from the type scale.
-
-- **No fontFamily token.** Every text uses the system default (Roboto). Spotify's identity is partly its custom Circular font. No on-disk fonts under `app/src/main/res/font/`. This is fine for a personal app but a clear gap from "polished Spotify-style" intent. (Accept-as-designed unless the user wants to ship a font.)
-
-### Pillar 5: Spacing (2/4 — biggest deviation from spec)
-
-**Strong points:**
-- `MediaPlayerSpacing` (`Spacing.kt`) is a clean 5-step scale (Xs/S/M/L/Xl) with documented intent for each step.
-- Where it's used (`SongRow`, `MiniPlayer`, `OnboardingSheet`) the result reads correctly: `padding(horizontal = MediaPlayerSpacing.M, vertical = MediaPlayerSpacing.Xs + 2.dp)` is more honest than `padding(16.dp, 6.dp)`.
-
-**Findings:**
-
-- **`MediaPlayerSpacing` is used in only 3 of 23 UI source files** (≈10 total references) — Severity: high. Every other screen uses raw `dp` literals: `HomeScreen.kt` has 28 `.dp)` matches, `PlaylistsScreen.kt` has 28, `PlaylistDetailScreen.kt` has 4, `NowPlayingSheet.kt` has 17, `SearchScreen.kt` has 15, etc. **Fix:** see Top-5 #1. The token was introduced to stop drift; drift continued. Sweep + lint.
-
-- **`HomeScreen.kt:129-130` `contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)`** — three different spacing values in five lines, none from the scale. **Fix:** `top = MediaPlayerSpacing.M, bottom = MediaPlayerSpacing.L, spacedBy(MediaPlayerSpacing.L)` (or similar based on intent).
-
-- **`NowPlayingSheet.kt:286, 332, 372, 408, 473, 603` use `Spacer(Modifier.height(24.dp))` / `36.dp` / `16.dp` / `12.dp`** — six unique vertical-spacing values in one screen. Inconsistent rhythm. **Fix:** map each to a scale step. The 36dp gap (line 332) between hero cover and title row is intentional but should be `MediaPlayerSpacing.Xl + MediaPlayerSpacing.Xs` if a 36dp slot is wanted, or scale up to `Xl` (32dp).
-
-- **`PlaylistsScreen.kt:269` `contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 96.dp)`** — four unique values, none from scale. The 96dp bottom is FAB clearance, fine; the 4dp top is suspicious (would normally be `Xs=4` or `S=8`). **Fix:** named `MediaPlayerSpacing.FabClearance = 96.dp` if reused, the rest from scale.
-
-- **`OnboardingScreen.kt:90/91 horizontalArrangement = Arrangement.spacedBy(10.dp)`** — `10.dp` is not in the scale. Most likely should be `MediaPlayerSpacing.S` (8dp).
-
-- **`SpotifyHero.kt:103` `padding(top = 24.dp, bottom = 16.dp)` and `:115` `Spacer(Modifier.height(16.dp))`** — defines the hero's internal rhythm with raw values. Even the design-system component leaks raw `dp`.
-
-- **Horizontal padding does converge to `16.dp` across 19 files** (41 matches via grep). At least *that* convergence is correct — but `MediaPlayerSpacing.M` would make the convention legible and prevent the next screen from inventing 14.dp.
-
-### Pillar 6: Experience Design (3/4)
-
-**Strong points:**
-- Pull-to-refresh wired on Home, Liked, Playlists, PlaylistDetail, Album, Artist, ArtistList, AlbumList, Find. Every list-shaped surface refreshes.
-- Pagination consistent: `LikedScreen`, `ArtistListScreen`, `AlbumListScreen` all use the `PAGE_SIZE=30` + `snapshotFlow` threshold trigger pattern — drift-free across new screens.
-- `combinedClickable` long-press → `AddToPlaylistSheet` enforced everywhere SongRow renders (Search, Liked, Album, Artist, PlaylistDetail, Queue, AddSongs).
-- Optimistic flips used correctly: `ArtistViewModel.toggleFollow()` (line 127) flips state immediately, reverts on failure.
-- `friendlyMessage()` localizes 401/403/404/IO errors.
-- Haptic feedback on like-toggle in MiniPlayer (line 116) + SongRow (line 99) + NowPlaying (line 361).
-- Confirmation dialogs on destructive actions (delete playlist twice — `PlaylistsScreen.kt:471/569` — and re-download).
+- Pull-to-refresh wired on all 9 list-shaped surfaces (Home, Liked, Playlists, PlaylistDetail, Album, Artist, ArtistList, AlbumList, Find).
+- Pagination consistent: `LikedScreen`, `ArtistListScreen`, `AlbumListScreen` all use the `PAGE_SIZE=30` + `snapshotFlow`-on-`visibleItemsInfo.lastOrNull` pattern. Drift-free.
+- `combinedClickable` long-press → `AddToPlaylistSheet` enforced wherever SongRow renders (Search, Liked, Album, Artist, PlaylistDetail, Queue, AddSongs). Every site also wires the kebab `onMore`.
+- Optimistic flips used correctly: `ArtistViewModel.toggleFollow()` (`ArtistScreen.kt:128-139`) flips state immediately, reverts on failure.
+- `friendlyMessage()` localizes 401/403/404/IO errors across 21 sites.
+- Haptic feedback now on like-toggle in MiniPlayer (`:116`) + SongRow (`:90`) + NowPlaying (`:363`), and on MiniPlayer **central play/pause** (`:127` — added in v0.11.2).
+- Confirmation dialogs on destructive actions (delete playlist `PlaylistsScreen.kt:500-514`, sign-out `ProfileScreen.kt:84-108`, both redownload paths `NowPlayingSheet.kt:617-661`).
 - Sleep timer, equalizer, lyrics, queue, video player all coexist as bottom sheets with proper dismiss handling.
-- Anonymous banner (`AnonymousBanner.kt`) is reused on Home, Playlists; auto-hides for signed-in users via `LocalCurrentUser`.
-- Playlist swipe-to-dismiss with optimistic local removal (`PlaylistDetailScreen.kt:354-367`) is well-considered — including the comment justifying the choice.
-- Reorder library (`PlaylistDetailScreen.kt:284-294`) handles drag-end via snapshotFlow on `isAnyItemDragging` — clean.
+- Anonymous banner reused on Home + Playlists; auto-hides for signed-in users via `LocalCurrentUser`.
+- Playlist swipe-to-dismiss with optimistic local removal (`PlaylistDetailScreen.kt:362-374`) + server fallback. Excellent comment at `:358-374` justifying the pattern.
+- App-update banner (`HomeScreen.kt`) + non-modal install path (`AppUpdateBanner.kt`) — operator workflow is end-to-end.
+- Full Profile / Settings surface (`ProfileScreen` + `settings/`) replaces the v0.8.0 cramped Home dropdown. Tema, Crossfade, Download offline are first-class screens with toggles, sliders, info-rows, and "how it works" cards.
+- Sign-out is double-confirmed (`ProfileScreen.kt:84-108`) and explains state preservation ("I download e le playlist locali resteranno sul dispositivo").
+- Empty-state copy across the app is action-oriented, not "Nothing here".
 
 **Findings:**
 
-- **No skeleton/shimmer on list-loading paths.** Severity: high. `SongListShimmer` is built (`States.kt:203`) but `LikedScreen.kt:99`, `SearchScreen.kt:106`, `AlbumScreen.kt:143`, `ArtistScreen.kt:211`, `PlaylistDetailScreen.kt:191`, `PlaylistsScreen.kt:109`, `ArtistListScreen.kt:169`, `AlbumListScreen.kt:169` all show `CenteredSpinner` instead. A list-page spinner is the lowest-effort affordance; shimmer is the polished one. See Top-5 #3.
+- **`NowPlayingSheet.kt:438` central play/pause lacks haptic.** Severity: medium. Carried from v0.8.0. See Top-5 #3.
 
-- **`NowPlayingSheet.kt:436` central play/pause lacks haptic feedback** — Severity: low. The like toggle 25 lines below it has it. Spotify-style polish is haptic on the primary play/pause too. **Fix:** wrap `viewModel::togglePlayPause` in a haptic-emitting closure as the like button does.
+- **`PlaylistDetailScreen.kt:400-409` reorder drag handle paints on auto-playlists.** Severity: medium. Carried from v0.8.0. See Top-5 #4.
 
-- **`PlaylistDetailScreen.kt:392-411` Reorder drag handle is shown ALWAYS, even on auto-playlists.** Severity: medium. Auto-playlists are server-managed (the long-press delete is correctly suppressed at line 507), but the reorder handle still appears, and `onReorderSongs` will fail server-side or silently no-op. **Fix:** suppress `IconButton(modifier = Modifier.draggableHandle())` when `playlist.isAuto`.
+- **`AddSongsToPlaylistSheet.kt:77-91` initial mount waits 300ms before showing first results.** Severity: low. Carried from v0.8.0. The `LaunchedEffect(query)` at `:77` runs `delay(300)` regardless of whether `query` was just typed or initial-mount. **Fix:** branch the delay on `query` non-empty (only debounce *after* the user types).
 
-- **`AddSongsToPlaylistSheet.kt:75-88`** debounces with `delay(300)` then re-runs the search — fine. But on the *initial* mount the `LaunchedEffect(query)` fires too, so first paint also waits 300ms before showing results. Severity: low. **Fix:** branch initial fetch (no delay) vs query-change (300ms).
+- **`PlaylistDetailScreen.kt:160-172` Share IconButton wraps share intent in `enabled = !sharing`** — good. The chooser dialog itself doesn't auto-dismiss on cancel — a cancelled Share leaves a token live but unused (the comment at `:163-166` acknowledges this). Severity: low. Same trade-off as v0.8.0.
 
-- **`HomeScreen.kt:280-340` GreetingHeader Settings dropdown has three items: "What's new", "Check for updates", "Sign in/out".** Severity: low. The greeting bar's Settings cog is tied to a 3-item menu where 2 of 3 items are version/update related; a real "Settings" surface (theme/playback/storage/account) could live here later. (Accept-as-designed for v0.8.0.)
+- **`HomeScreen.kt:464` Settings cog opens `ProfileScreen`** (was a 3-item dropdown menu). Resolved from v0.8.0.
 
-- **`NowPlayingSheet.kt:309-329` Hero cover uses `CoverShapes.MiniPlayer` (`6.dp` corner radius) for a 280-360dp cover.** Severity: low. The shape was named for the mini-player; reusing it for the hero is technically fine but reads as a naming mismatch. **Fix:** rename `CoverShapes.MiniPlayer` to `CoverShapes.SmallSquare` or introduce `CoverShapes.Hero` (likely the same `6.dp` but semantically clear).
+- **`PlaylistsScreen.kt:110` is the only list-loading surface that drops to `CenteredSpinner`** instead of `SongListShimmer`. Severity: low. Top-5 #5.
 
-- **`PlaylistDetailScreen.kt:147-170` Share IconButton wraps the entire share intent in a button-disable (`enabled = !sharing`)** — good. The chooser dialog itself doesn't auto-dismiss on cancel — a cancelled Share leaves a token live but unused (the comment acknowledges this at line 161). The user gets no toast/snackbar on cancel. Severity: low. **Fix:** show a "Share dismissed" snackbar on chooser-cancel detection if you want belt-and-braces; not strictly needed.
+- **`HomeScreen.kt:132`, `AlbumListScreen.kt:170`, `ArtistListScreen.kt:170`, `ForYouScreen.kt:72`, `FindScreen.kt:94` also drop to `CenteredSpinner`** for grid/initial loads. Defensible (grid layouts can't reuse `SongRowShimmer`), but worth a `GridListShimmer` companion.
 
-- **`OnboardingScreen.kt:56-141` re-bumps to `headlineMedium` for the screen title**, while `LoginScreen.kt:46` uses `headlineLarge` for "MediaPlayer". Two adjacent first-run surfaces use different display levels; not strictly wrong but inconsistent.
+- **`OnboardingScreen.kt` `headlineMedium` for screen title** while `LoginScreen.kt:79-81` uses `headlineLarge` for "MusicHub". Two adjacent first-run surfaces still use different display levels. Severity: low. Carried from v0.8.0.
 
-- **`VideoPlayerSheet.kt:160-188` `VideoSurface` Close button at TopEnd has `padding(4.dp)`** — should be `MediaPlayerSpacing.Xs`.
+- **`VideoPlayerSheet.kt:181` Close button now uses `MediaPlayerSpacing.Xs`.** Resolved from v0.8.0.
 
 ---
 
-## Summary of Drift Patterns (Most Common)
+## Closed Since v0.8.0
 
-| Pattern | Occurrences | Fix |
-|---------|-------------|-----|
-| Raw `dp` literal in `padding()` instead of `MediaPlayerSpacing.*` | 41 in `padding(horizontal = N.dp)` alone; 281 `.dp)` total across 29 files | Sweep; lint rule |
-| Inline `RoundedCornerShape(N.dp)` instead of `CoverShapes.*` | 28 sites | Replace with named token |
-| `t.message ?: "Unknown error"` | 8 sites | Replace with `friendlyMessage(t)` |
-| Hand-rolled `Box(...) { Text("No ...") }` empty state | 9 sites | Replace with `EmptyState(...)` |
-| `CenteredSpinner` on list-page load | 8 sites | Replace with `SongListShimmer()` |
-| Manual `fontWeight = FontWeight.X` overriding a typography style | 5 sites | Use the right style |
-| `Color.White` / `Color.Black` literal | 35+ sites in NowPlaying alone | Define `OnHero`/`OnHeroMuted` tokens |
+The following findings from the previous audit are now resolved at HEAD:
+
+1. **Top-5 #2 — `RoundedCornerShape(N.dp)` → `CoverShapes` sweep.** `CoverShapes.Skeleton` (4dp) and `CoverShapes.Banner` (12dp) added in `Shapes.kt`. SongRow / Hero / MiniPlayer / Tile / Card all use named tokens. 28 inline-shape sites cited in v0.8.0 are now down to 16 (PlaylistShareDialog 20dp, decorative ForYou 14dp/12dp/10dp brand cards, the 999dp pill shape on lime CTAs, internal 4dp progress-bar clip in DownloadOffline, drag handle 2dp clip in TrackActionSheet) — all *intentional* design values rather than drift.
+2. **Top-5 #3 — `EmptyState` and `SongListShimmer` adoption.** `EmptyState` used in 8 sites, `SongListShimmer` used in 5 list-loading paths.
+3. **Top-5 #4 — Redownload dialog/menu mismatch.** `NowPlayingSheet.kt:564-578` overflow menu items "Re-download from source" and "Refresh local copy" now match dialog titles at `:620/643` and confirm-button labels at `:632/655`. Two distinct intents, two distinct copies, fully aligned.
+4. **Top-5 #5 — Manual `FontWeight` overrides on Material3 styles.** All 5 cycle-1 cited sites (`SongRow.kt:86`, `FindScreen.kt:181/271/329`, `OnboardingScreen.kt:75`, `SpotifyImportScreen.kt:227`) removed. `SongRow` row title now uses `titleSmall` directly.
+5. **Pillar 1 — `t.message ?: "Unknown error"` patterns.** 8 cited sites (`AlbumScreen.kt:83/94`, `ArtistScreen.kt:111/146`, `AlbumListScreen.kt:108`, `ArtistListScreen.kt:107`, `AddToPlaylistSheet.kt:91`, `AddSongsToPlaylistSheet.kt:85`) all routed through `friendlyMessage(t)`.
+6. **Pillar 1 — `AddSongsToPlaylistSheet` empty-text branching.** `:142-143` now branches on `query.isBlank()` between "Your library is empty" and "No songs match \"$query\"".
+7. **Pillar 1 — `AddToPlaylistSheet` "Create one above" copy.** `:188` now reads "Tap + New playlist to create one." — explicit reference to the row's actual label.
+8. **Pillar 2 — `PlaylistRow` dead code in `PlaylistsScreen`.** Removed (commit 7d0299b).
+9. **Pillar 2 — Auto-playlist gradient sameness.** `paletteFor(family)` + `autoPlaylistGradient(kind)` (commit 06f07ad) — 7 distinct family palettes.
+10. **Pillar 3 — `Color.White` literals in NowPlayingSheet.** 28 sites swapped to `MHColors.OnHero` / `OnHeroMuted` / `OnHeroDim` / `OnHeroTrack` / `HeroScrim` (commit 5026470).
+11. **Pillar 3 — `displayLarge` dead token.** Now used in `CrossfadeScreen.kt:65` and `DownloadOfflineScreen.kt:81` for hero numbers.
+12. **Pillar 6 — MiniPlayer central play/pause haptic.** Added (commit 7d0299b).
+13. **Pillar 6 — `PlaylistRow` dead delete callback.** Removed.
+14. **Pillar 6 — Settings dropdown on Home.** Replaced with full `ProfileScreen` + 3 settings sub-screens.
+15. **`VideoPlayerSheet.kt` Close button raw `4.dp`.** Now `MediaPlayerSpacing.Xs`.
+
+**Summary:** 15 findings closed of ~20 cited. The remaining 5 are: (i) MediaPlayerSpacing full sweep, (ii) AlbumDto coverSongId cross-repo, (iii) NowPlaying play/pause haptic, (iv) reorder handle on auto-playlists, (v) one stale `CenteredSpinner` site.
+
+---
+
+## Accepted-as-Designed (carry-over)
+
+These were noted in v0.8.0 and remain consciously deferred:
+
+- **No bundled `res/font/` Inter / JetBrains Mono TTFs.** `InterFamily` and `MonoFamily` are `FontFamily.SansSerif`/`Monospace` aliases (`Theme.kt:121-125`). Mockup specifies these fonts; system fallbacks render acceptably. Bundling adds APK size — accepted by user.
+- **`HomeScreen` ColdStart "Iniziamo"** vs OnboardingScreen "Cosa ascolti?" — two different first-time surfaces. Acceptable — onboarding is genre-pick, ColdStart is library-fill.
+- **Light theme is "best-effort"** — `Theme.kt:91-94` comment + `ThemeScreen.kt:38-45` warning explicitly tell the user. Accepted.
+- **`displayLarge`** was dead in v0.8.0; now used in two settings hero numbers. Resolved.
+- **`MediaPlayerSpacing` full sweep gated on token expansion.** Memory record acknowledges scale-coarseness; sweep needs design call before code change. Accepted as deferred, not closed.
+
+---
+
+## Summary of Drift Patterns (cycle-2 baseline)
+
+| Pattern | v0.8.0 | v0.11.3 | Direction |
+|---------|--------|---------|-----------|
+| Raw `\d+\.dp` literals across `ui/` | 281 / 29 files | **467 / 41 files** | Worse — mostly because rebrand added 14 new screens, scale unchanged |
+| `MediaPlayerSpacing` references | ~10 / 3 files | **36 / 9 files** | Better — but absolute usage dwarfed by raw literals |
+| Inline `RoundedCornerShape(N.dp)` in screens | 28 sites | **16 sites, all intentional** | Better — drift removed, intent-driven shapes remain |
+| `t.message ?: "..."` in **load** error paths | 8 sites | **0 sites** | Resolved |
+| `t.message ?: "..."` in **action** error paths | (not separately tracked) | 8 sites — contextually OK | Acceptable |
+| Hand-rolled empty `Box { Text("No...") }` | 9 sites | **0 sites** | Resolved (8 → `EmptyState`, 1 → contextual `Text` in HomeScreen filter hint) |
+| `CenteredSpinner` for list-row loads | 8 sites | **5 grid sites + 1 list site** | Better — list-shaped loads went to shimmer, grid still spinner |
+| Manual `FontWeight.X` on Material3 styles | 5 drift sites | **0 drift sites + 11 design-correct brand-emphasis overrides** | Resolved |
+| `Color.White` / `Color.Black` literals | 35+ in NowPlayingSheet alone | **34 across 14 files, all intentional** | Resolved at the NowPlayingSheet hot spot; remaining are cover-canvas / scrim / chrome-on-arbitrary-image (correct usage) |
 
 ---
 
@@ -207,7 +258,21 @@
 - `app/src/main/kotlin/com/mediaplayer/android/ui/theme/Theme.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/theme/Spacing.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/theme/Shapes.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/common/States.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/common/SongCover.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/common/GeneratedCover.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/common/MHCover.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/common/SpotifyHero.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/common/SectionHeader.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/common/EyebrowText.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/common/AnonymousBanner.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/common/AppUpdateBanner.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/common/PillChip.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/common/TrackActionSheet.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/common/UserState.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/home/HomeScreen.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/foryou/ForYouScreen.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/foryou/ForYouViewModel.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/search/SearchScreen.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/search/SongRow.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/find/FindScreen.kt`
@@ -216,6 +281,7 @@
 - `app/src/main/kotlin/com/mediaplayer/android/ui/playlists/AddToPlaylistSheet.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/playlists/AddSongsToPlaylistSheet.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/playlists/SpotifyImportScreen.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/playlists/PlaylistShareDialog.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/playlists/PlaylistShareImporter.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/liked/LikedScreen.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/artists/ArtistScreen.kt`
@@ -230,14 +296,11 @@
 - `app/src/main/kotlin/com/mediaplayer/android/ui/player/VideoPlayerSheet.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/auth/LoginScreen.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/onboarding/OnboardingScreen.kt`
-- `app/src/main/kotlin/com/mediaplayer/android/ui/onboarding/OnboardingSheet.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/changelog/ChangelogSheet.kt`
-- `app/src/main/kotlin/com/mediaplayer/android/ui/common/States.kt`
-- `app/src/main/kotlin/com/mediaplayer/android/ui/common/SectionHeader.kt`
-- `app/src/main/kotlin/com/mediaplayer/android/ui/common/SongCover.kt`
-- `app/src/main/kotlin/com/mediaplayer/android/ui/common/SpotifyHero.kt`
-- `app/src/main/kotlin/com/mediaplayer/android/ui/common/AnonymousBanner.kt`
-- `app/src/main/kotlin/com/mediaplayer/android/ui/common/UserState.kt`
-- `app/src/main/res/values/strings.xml`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/profile/ProfileScreen.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/profile/settings/SettingsSubScreen.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/profile/settings/ThemeScreen.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/profile/settings/CrossfadeScreen.kt`
+- `app/src/main/kotlin/com/mediaplayer/android/ui/profile/settings/DownloadOfflineScreen.kt`
 
 ## UI REVIEW COMPLETE
