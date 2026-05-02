@@ -1,0 +1,22 @@
+# Template for local.properties (gitignored).
+# Copy to `local.properties` and fill in real values.
+
+# Android SDK location (auto-set by Android Studio on first sync).
+# sdk.dir=C:\\Users\\<user>\\AppData\\Local\\Android\\Sdk
+
+# Optional: per-machine BASE_URL overrides.
+# Used by app/build.gradle.kts -> resolveBaseUrl(...).
+# base.url=http://my-lan-ip:8080
+# base.url.debug=http://10.0.2.2:8080
+# base.url.release=http://194.116.60.68:8090
+
+# Optional: Google Sign-In web client ID override.
+# google.web.client.id=<your-web-client-id>.apps.googleusercontent.com
+
+# Release signing keystore. All four keys required for signing to apply;
+# without them debug builds fall back to Android's auto-generated debug
+# keystore and release builds produce unsigned APKs.
+keystore.file=C:\\path\\to\\keystore
+keystore.password=<store-password>
+keystore.alias=<key-alias>
+keystore.key.password=<key-password>

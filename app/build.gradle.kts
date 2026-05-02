@@ -35,17 +35,42 @@ fun resolveBaseUrl(variantKey: String, fallback: String): String {
     return cliSpecific ?: cliGeneric ?: propSpecific ?: propGeneric ?: fallback
 }
 
+/**
+ * Signing config resolution. All four keys must be present in
+ * `local.properties` (gitignored) for `myConfig` to register; otherwise
+ * the signing block is skipped — debug builds fall back to Android's
+ * auto-generated debug keystore, and release assembly fails loudly,
+ * which is the desired posture (release must be signed by the real cert).
+ *
+ * Keys:
+ *   keystore.file=<absolute path>
+ *   keystore.password=<store password>
+ *   keystore.alias=<key alias>
+ *   keystore.key.password=<key password>
+ */
+val keystoreFile = localProps.getProperty("keystore.file")
+val keystorePassword = localProps.getProperty("keystore.password")
+val keystoreAlias = localProps.getProperty("keystore.alias")
+val keystoreKeyPassword = localProps.getProperty("keystore.key.password")
+val hasKeystore = keystoreFile != null &&
+    keystorePassword != null &&
+    keystoreAlias != null &&
+    keystoreKeyPassword != null &&
+    file(keystoreFile).exists()
+
 android {
     namespace = "com.mediaplayer.android"
     compileSdk = 36
 
 
     signingConfigs {
-        create("myConfig") {
-            storeFile = file("C:\\Users\\Antonio\\android-keystore")
-            storePassword = "ivenutalt" // Sostituisci con la tua password
-            keyAlias = "app"
-            keyPassword = "ivenutalt" // Sostituisci con la tua password
+        if (hasKeystore) {
+            create("myConfig") {
+                storeFile = file(keystoreFile!!)
+                storePassword = keystorePassword
+                keyAlias = keystoreAlias
+                keyPassword = keystoreKeyPassword
+            }
         }
     }
 
@@ -65,14 +90,14 @@ android {
             "447608520923-gcuoeisusmvvjgh0g0pe2jc8ickctmcc.apps.googleusercontent.com"
         )
         debug {
-            signingConfig = signingConfigs.getByName("myConfig")
+            if (hasKeystore) signingConfig = signingConfigs.getByName("myConfig")
             val baseUrl = resolveBaseUrl("debug", fallback = "http://10.0.2.2:8080")
             buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
             buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$GOOGLE_WEB_CLIENT_ID\"")
             isMinifyEnabled = false
         }
         release {
-            signingConfig = signingConfigs.getByName("myConfig")
+            if (hasKeystore) signingConfig = signingConfigs.getByName("myConfig")
             val baseUrl = resolveBaseUrl("release", fallback = RELEASE_URL_DEFAULT)
             buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
             buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$GOOGLE_WEB_CLIENT_ID\"")
