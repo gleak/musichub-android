@@ -147,6 +147,10 @@ interface MediaPlayerApi {
 
     // ---------- Playlist share (M15a) ----------
 
+    /** Recompute Daily Mix on demand. Backend returns {userId, refreshed} — caller can ignore. */
+    @POST("api/playlists/auto/daily-mix/refresh")
+    suspend fun refreshDailyMix(): Map<String, Any?>
+
     @POST("api/playlists/{id}/share")
     suspend fun createPlaylistShare(
         @Path("id") id: Long,

@@ -8,6 +8,10 @@ import com.mediaplayer.android.data.dto.RenamePlaylistRequest
 import com.mediaplayer.android.data.dto.ReorderSongsRequest
 import com.mediaplayer.android.data.dto.ShareLinkDto
 import com.mediaplayer.android.data.dto.SharePreviewDto
+import com.mediaplayer.android.data.sync.ReadCache
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.serializer
+import java.io.IOException
 
 /**
  * Thin wrapper over [MediaPlayerApi]'s playlist endpoints. Exists so
@@ -24,12 +28,28 @@ class PlaylistRepository(
      * invisible otherwise.
      */
     suspend fun list(): List<PlaylistDto> {
-        val auto = runCatching { api.listPlaylists(kind = "auto") }.getOrDefault(emptyList())
-        val user = api.listPlaylists()
-        return auto + user
+        return try {
+            val auto = runCatching { api.listPlaylists(kind = "auto") }.getOrDefault(emptyList())
+            val user = api.listPlaylists()
+            val combined = auto + user
+            ReadCache.putJson(ReadCache.Keys.PLAYLISTS_ALL, combined, ListSerializer(serializer()))
+            combined
+        } catch (_: IOException) {
+            // Offline — show whatever the cache has, empty if user has
+            // never opened this screen online.
+            ReadCache.getOrNull(ReadCache.Keys.PLAYLISTS_ALL, ListSerializer(serializer<PlaylistDto>())) ?: emptyList()
+        }
     }
 
-    suspend fun detail(id: Long): PlaylistDetailDto = api.getPlaylist(id)
+    suspend fun detail(id: Long): PlaylistDetailDto {
+        return try {
+            val fresh = api.getPlaylist(id)
+            ReadCache.putJson(ReadCache.Keys.playlistDetail(id), fresh, serializer())
+            fresh
+        } catch (e: IOException) {
+            ReadCache.getOrNull(ReadCache.Keys.playlistDetail(id), serializer<PlaylistDetailDto>()) ?: throw e
+        }
+    }
 
     suspend fun create(name: String): PlaylistDto =
         api.createPlaylist(CreatePlaylistRequest(name.trim()))
@@ -58,4 +78,10 @@ class PlaylistRepository(
 
     suspend fun acceptShare(token: String): PlaylistDetailDto =
         api.acceptPlaylistShare(token)
+
+    /** Triggers a manual Daily Mix recompute. Returns the number of refreshed entries. */
+    suspend fun refreshDailyMix(): Int {
+        val resp = api.refreshDailyMix()
+        return (resp["refreshed"] as? Number)?.toInt() ?: 0
+    }
 }

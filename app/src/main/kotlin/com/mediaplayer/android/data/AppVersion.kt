@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.11.5"
+    const val VERSION = "0.11.6"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,17 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.11.6",
+            title = "Sincronizzazione offline e rifinitura del precaricamento",
+            highlights = listOf(
+                "Sincronizzazione offline: i Mi piace, i \"Segui artista\" e le riproduzioni vengono ora salvati sul telefono se la rete cade e inviati al server quando torna la connessione. Niente più ascolti persi quando suoni in metropolitana, in aereo o con il segnale a singhiozzo. La coda è persistente — sopravvive alla chiusura dell'app e al riavvio del telefono.",
+                "Schermate consultabili offline: Playlist, dettagli di una playlist, brani preferiti (prima pagina), Ascoltati di recente e elenco artisti seguiti mostrano l'ultimo stato visto anche senza rete. Niente più liste vuote quando entri in un tunnel.",
+                "Profilo → Riproduzione → Daily Mix: nuova voce per forzare la rigenerazione del Daily Mix manualmente, senza aspettare il refresh automatico del server.",
+                "Profilo → App → Eventi in coda: mostra in tempo reale quanti eventi sono in attesa di essere inviati. Quando il numero scende a zero significa che il server è di nuovo allineato.",
+                "Risparmio energetico: rimosso il blocco al precaricamento del prossimo brano introdotto nella 0.11.5. Adesso la transizione tra brani resta istantanea anche con Risparmio batteria attivo (l'unico gate che resta è la rete a consumo, perché lì la bandwidth ha un costo reale).",
+            ),
+        ),
         ChangelogEntry(
             version = "0.11.5",
             title = "HTTPS, Android Auto sistemato, prestazioni e ritocchi",

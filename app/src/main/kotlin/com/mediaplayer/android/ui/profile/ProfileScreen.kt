@@ -30,9 +30,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+import com.mediaplayer.android.data.PlaylistRepository
+import com.mediaplayer.android.data.sync.EventQueue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,6 +80,13 @@ fun ProfileScreen(
     val stats by statsViewModel.state.collectAsStateWithLifecycle()
     val crossfadeSec by com.mediaplayer.android.data.PlayerSettings.instance
         .crossfadeSeconds.collectAsStateWithLifecycle(initialValue = 0)
+
+    // Manual Daily Mix refresh — fire-and-forget POST. Detail label
+    // doubles as transient status: idle / In corso… / count or error.
+    val playlistRepo = remember { PlaylistRepository() }
+    val scope = rememberCoroutineScope()
+    var dailyMixDetail by remember { mutableStateOf("Aggiorna ora") }
+    var dailyMixBusy by remember { mutableStateOf(false) }
 
     // Confirmation gate for sign-out — both Disconnetti and Cambia
     // account funnel through here so an accidental tap doesn't drop
@@ -212,6 +223,26 @@ fun ProfileScreen(
                     detail = "Gestisci",
                     onClick = { onOpenSetting("profile/download") },
                 )
+                val onDailyMixClick: (() -> Unit)? = if (dailyMixBusy) null else {
+                    {
+                        dailyMixBusy = true
+                        dailyMixDetail = "In corso…"
+                        scope.launch {
+                            val result = runCatching { playlistRepo.refreshDailyMix() }
+                            dailyMixDetail = result.fold(
+                                onSuccess = { n -> "Aggiornato ($n)" },
+                                onFailure = { "Errore — riprova" },
+                            )
+                            dailyMixBusy = false
+                        }
+                        Unit
+                    }
+                }
+                SettingsRow(
+                    label = "Daily Mix",
+                    detail = dailyMixDetail,
+                    onClick = onDailyMixClick,
+                )
             }
         }
         item {
@@ -222,11 +253,16 @@ fun ProfileScreen(
                 "system" -> "Sistema"
                 else -> "Scuro"
             }
+            val pending by EventQueue.pending.collectAsStateWithLifecycle()
             SettingsSection(title = "APP") {
                 SettingsRow(label = "Tema", detail = themeLabel,
                     onClick = { onOpenSetting("profile/theme") })
                 SettingsRow(label = "Cosa c'è di nuovo", onClick = onShowChangelog)
                 SettingsRow(label = "Controlla aggiornamenti", onClick = onCheckUpdates)
+                SettingsRow(
+                    label = "Eventi in coda",
+                    detail = if (pending == 0) "Tutto sincronizzato" else "$pending in attesa",
+                )
                 SettingsRow(label = "Versione", detail = "v${AppVersion.VERSION}")
             }
         }

@@ -762,14 +762,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             (listened.toDouble() / duration).coerceAtMost(1.0)
         else null
         viewModelScope.launch {
-            try {
-                historyRepository.record(
-                    songId = id,
-                    durationListenedMs = listened,
-                    completionRatio = ratio,
-                    wasSkipped = !countsAsFullPlay,
-                )
-            } catch (_: Throwable) {}
+            historyRepository.record(
+                songId = id,
+                durationListenedMs = listened,
+                completionRatio = ratio,
+                wasSkipped = !countsAsFullPlay,
+            )
         }
         // Auto-download every song the user actually starts (listened > 0,
         // already gated above). Setting toggles whether we cache at all.
@@ -806,14 +804,14 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         val ratio = if (duration > 0)
             (listened.toDouble() / duration).coerceAtMost(1.0)
         else null
-        try {
-            historyRepository.record(
-                songId = id,
-                durationListenedMs = listened,
-                completionRatio = ratio,
-                wasSkipped = false,
-            )
-        } catch (_: Throwable) {}
+        // Direct POST so /recent reflects this play on the next refresh.
+        // Falls back to the queue inside recordImmediate if offline.
+        historyRepository.recordImmediate(
+            songId = id,
+            durationListenedMs = listened,
+            completionRatio = ratio,
+            wasSkipped = false,
+        )
         if (PlayerSettings.instance.downloadAutoNow() &&
             !DownloadRepository.isDownloaded(id)
         ) {

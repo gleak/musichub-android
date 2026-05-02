@@ -14,6 +14,8 @@ import com.mediaplayer.android.data.AuthTokenHolder
 import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.Network
+import com.mediaplayer.android.data.sync.EventQueue
+import com.mediaplayer.android.data.sync.ReadCache
 import com.mediaplayer.android.playback.PlayerConnection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +50,12 @@ class MediaPlayerApp : Application(), SingletonImageLoader.Factory {
             AuthRepository.instance.anonymousId().also { AuthTokenHolder.anonymousId = it }
         }
         ConnectivityObserver.init()
+        // Offline write-queue: open the SQLite file synchronously (cheap —
+        // no schema change, no read), then start the drainer coroutine
+        // which blocks on ConnectivityObserver until the network is up.
+        EventQueue.init(this)
+        ReadCache.init(this)
+        EventQueue.start()
         PlayerConnection.connect(this)
         DownloadRepository.init()
     }
