@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.11.0"
+    const val VERSION = "0.11.1"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,13 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.11.1",
+            title = "Risparmio batteria: stop al precaricamento quando serve",
+            highlights = listOf(
+                "Quando attivi il Risparmio energetico di sistema, l'app sospende automaticamente il precaricamento del prossimo brano. Riprende da sola appena disattivi il risparmio. La riproduzione del brano corrente non è influenzata.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.11.0",
             title = "Connessione cifrata + cover più rapide",

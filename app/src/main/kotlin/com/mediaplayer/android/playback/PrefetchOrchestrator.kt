@@ -1,11 +1,15 @@
 package com.mediaplayer.android.playback
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.Network as AndroidNetwork
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Handler
+import android.os.PowerManager
 import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -46,6 +50,13 @@ import java.util.concurrent.ConcurrentHashMap
  * next transition. Actual playback is unaffected — the user opted
  * into that bandwidth.
  *
+ * # Battery gate
+ * Prefetch also pauses while the device is in [PowerManager.isPowerSaveMode].
+ * Once the user has explicitly asked the OS to extend battery life,
+ * background bytes for "the next track that might play" stop being a
+ * good trade. A broadcast receiver on [PowerManager.ACTION_POWER_SAVE_MODE_CHANGED]
+ * flips this gate live, mirroring the network-gate behaviour.
+ *
  * # Threading
  * [Player] methods must be invoked on `player.applicationLooper`.
  * `Player.Listener` callbacks already fire on that looper, but the
@@ -68,6 +79,7 @@ class PrefetchOrchestrator(
 
     private val appContext = context.applicationContext
     private val connectivity = appContext.getSystemService(ConnectivityManager::class.java)
+    private val powerManager = appContext.getSystemService(PowerManager::class.java)
 
     /**
      * SupervisorJob so one failed prefetch (e.g. 404 on a stale id)
@@ -78,10 +90,13 @@ class PrefetchOrchestrator(
     /** URI → in-flight CacheWriter job. Keyed by the String URI so it matches the diff set. */
     private val jobs = ConcurrentHashMap<String, Job>()
 
-    @Volatile private var allowed: Boolean = !connectivity.isActiveNetworkMetered
+    @Volatile private var unmetered: Boolean = !connectivity.isActiveNetworkMetered
+    @Volatile private var powerSave: Boolean = powerManager.isPowerSaveMode
+    private val allowed: Boolean get() = unmetered && !powerSave
 
     private var player: Player? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var powerSaveReceiver: BroadcastReceiver? = null
     private var looperHandler: Handler? = null
 
     fun install(player: Player) {
@@ -94,20 +109,20 @@ class PrefetchOrchestrator(
                 network: AndroidNetwork,
                 caps: NetworkCapabilities,
             ) {
-                val unmetered =
+                val nowUnmetered =
                     caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
                 postToPlayerLooper {
-                    if (unmetered != allowed) {
-                        allowed = unmetered
-                        if (!unmetered) cancelAll() else reschedule()
+                    if (nowUnmetered != unmetered) {
+                        unmetered = nowUnmetered
+                        applyGate()
                     }
                 }
             }
 
             override fun onLost(network: AndroidNetwork) {
                 postToPlayerLooper {
-                    allowed = !connectivity.isActiveNetworkMetered
-                    if (!allowed) cancelAll()
+                    unmetered = !connectivity.isActiveNetworkMetered
+                    applyGate()
                 }
             }
         }
@@ -116,6 +131,23 @@ class PrefetchOrchestrator(
             .build()
         connectivity.registerNetworkCallback(request, cb)
         networkCallback = cb
+
+        val pwr = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, intent: Intent) {
+                val nowSave = powerManager.isPowerSaveMode
+                postToPlayerLooper {
+                    if (nowSave != powerSave) {
+                        powerSave = nowSave
+                        applyGate()
+                    }
+                }
+            }
+        }
+        appContext.registerReceiver(
+            pwr,
+            IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED),
+        )
+        powerSaveReceiver = pwr
 
         // Kick once in case a queue is already loaded (e.g. after resumption).
         reschedule()
@@ -126,6 +158,10 @@ class PrefetchOrchestrator(
             runCatching { connectivity.unregisterNetworkCallback(it) }
         }
         networkCallback = null
+        powerSaveReceiver?.let {
+            runCatching { appContext.unregisterReceiver(it) }
+        }
+        powerSaveReceiver = null
         player?.removeListener(this)
         player = null
         cancelAll()
@@ -147,6 +183,15 @@ class PrefetchOrchestrator(
 
     private fun postToPlayerLooper(block: () -> Unit) {
         looperHandler?.post(block) ?: block()
+    }
+
+    /**
+     * Network or battery gate just changed; cancel in-flight work if we
+     * lost permission, otherwise re-derive the desired window. Caller
+     * must already be on the player's looper.
+     */
+    private fun applyGate() {
+        if (!allowed) cancelAll() else reschedule()
     }
 
     /**
