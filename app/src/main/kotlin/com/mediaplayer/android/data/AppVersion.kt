@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.11.3"
+    const val VERSION = "0.11.4"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,14 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.11.4",
+            title = "Android Auto: ricerca e \"Hey Google\" tornano a funzionare",
+            highlights = listOf(
+                "Android Auto: la lente di ingrandimento riappare nella barra in alto e ricerca davvero per titolo, artista o album. Mancava un flag (SEARCH_SUPPORTED) sul nodo radice del browse tree e Auto la nascondeva, anche se il backend rispondeva alle query.",
+                "Android Auto: \"Hey Google, metti <brano> su MediaPlayer\" adesso parte direttamente. Il servizio dichiara MEDIA_PLAY_FROM_SEARCH e risolve la query vocale in una coda di brani prima di iniziare la riproduzione.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.11.3",
             title = "Playlist generate: ognuna ha il suo colore",

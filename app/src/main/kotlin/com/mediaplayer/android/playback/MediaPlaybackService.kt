@@ -623,6 +623,32 @@ class MediaPlaybackService : MediaLibraryService() {
             startPositionMs: Long,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> =
             serviceScope.future {
+                // Voice-search path: AA / Google Assistant deliver
+                // "Hey Google, play X on MediaPlayer" as a single MediaItem
+                // whose only payload is RequestMetadata.searchQuery. Resolve
+                // the query into a song queue so playback starts immediately
+                // instead of failing with "no media to play".
+                if (mediaItems.size == 1) {
+                    val searchQuery = mediaItems[0].requestMetadata.searchQuery
+                    if (!searchQuery.isNullOrBlank() &&
+                        mediaItems[0].mediaId.isEmpty()
+                    ) {
+                        val hits = LibraryTree.search(searchQuery, page = 0, pageSize = 50)
+                        val playable = hits.mapNotNull { item ->
+                            item.mediaId.removePrefix("song:").toLongOrNull()?.let { sid ->
+                                LibraryTree.playableForSong(sid)
+                            }
+                        }
+                        if (playable.isNotEmpty()) {
+                            return@future MediaSession.MediaItemsWithStartPosition(
+                                playable, 0, C.TIME_UNSET
+                            )
+                        }
+                        // Fall through to the default handling below if the
+                        // search produced nothing; AA will surface "no results".
+                    }
+                }
+
                 if (mediaItems.size == 1) {
                     val id = mediaItems[0].mediaId
 

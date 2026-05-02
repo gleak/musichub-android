@@ -114,12 +114,19 @@ internal object LibraryTree {
         "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT"
     private const val CONTENT_STYLE_LIST = 1
     private const val CONTENT_STYLE_GRID = 2
+    /**
+     * Setting this on the root LibraryParams is what gates AA's search
+     * affordance. Without it, AA hides the magnifying-glass icon even when
+     * the service implements `onSearch` / `onGetSearchResult`.
+     */
+    private const val SEARCH_SUPPORTED = "android.media.browse.SEARCH_SUPPORTED"
 
-    /** Bundle returned in LibraryParams root so AA enables per-folder hints. */
+    /** Bundle returned in LibraryParams root so AA enables per-folder hints + search. */
     fun rootExtras(): Bundle = Bundle().apply {
         putBoolean(CONTENT_STYLE_SUPPORTED, true)
         putInt(CONTENT_STYLE_BROWSABLE_HINT, CONTENT_STYLE_LIST)
         putInt(CONTENT_STYLE_PLAYABLE_HINT, CONTENT_STYLE_LIST)
+        putBoolean(SEARCH_SUPPORTED, true)
     }
 
     // --- public API ----------------------------------------------------------

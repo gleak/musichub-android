@@ -91,6 +91,11 @@
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
                 <action android:name="android.media.browse.MediaBrowserService" />
+                <!-- Lets Google Assistant in cars route "Hey Google, play X
+                     on MediaPlayer" voice queries to this service. The query
+                     surfaces in onSetMediaItems via the
+                     MediaItem.RequestMetadata.searchQuery field. -->
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
             </intent-filter>
         </service>
         <!-- M13: foreground service for explicit song downloads. -->
