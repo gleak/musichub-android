@@ -147,7 +147,13 @@ private fun familyEyebrow(f: AutoPlaylistFamily): String = when (f) {
     AutoPlaylistFamily.Next -> "NEXT"
 }
 
-private fun paletteFor(f: AutoPlaylistFamily): Pair<Color, Color> = when (f) {
+/**
+ * Two-color palette per auto-playlist family. Reused by call sites that
+ * paint a small icon-on-gradient tile (Home carousel, library list rows)
+ * so each kind reads visually distinct in a row of seven, instead of all
+ * sharing the Liked-purple duotone.
+ */
+fun paletteFor(f: AutoPlaylistFamily): Pair<Color, Color> = when (f) {
     AutoPlaylistFamily.Rotation -> Color(0xFF1A1A1A) to MHColors.Lime
     AutoPlaylistFamily.Daily -> Color(0xFF1E3A8A) to Color(0xFF06B6D4)
     AutoPlaylistFamily.Releases -> MHColors.Lime to Color(0xFF0A0A0A)
@@ -155,6 +161,12 @@ private fun paletteFor(f: AutoPlaylistFamily): Pair<Color, Color> = when (f) {
     AutoPlaylistFamily.Radar -> Color(0xFF06B6D4) to Color(0xFF1E3A8A)
     AutoPlaylistFamily.Mood -> Color(0xFF3A0CA3) to Color(0xFFF72585)
     AutoPlaylistFamily.Next -> Color(0xFFFFC857) to Color(0xFF3A1F8A)
+}
+
+/** Convenience: linear-gradient brush sized for icon-on-tile use, derived from the family palette. */
+fun autoPlaylistGradient(kind: String?): Brush {
+    val (a, b) = paletteFor(familyOf(kind))
+    return Brush.linearGradient(listOf(a, b))
 }
 
 private fun DrawScope.drawRotation(a: Color, b: Color) {

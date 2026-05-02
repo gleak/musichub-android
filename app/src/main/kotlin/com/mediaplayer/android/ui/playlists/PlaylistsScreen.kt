@@ -441,12 +441,7 @@ private fun PlaylistTile(
                 .clip(CoverShapes.SongRow)
                 .background(
                     if (playlist.isAuto) {
-                        Brush.linearGradient(
-                            listOf(
-                                MHColors.LikedGradientStart,
-                                MHColors.LikedGradientEnd,
-                            )
-                        )
+                        com.mediaplayer.android.ui.common.autoPlaylistGradient(playlist.kind)
                     } else {
                         Brush.linearGradient(
                             listOf(

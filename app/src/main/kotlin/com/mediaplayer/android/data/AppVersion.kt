@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.11.2"
+    const val VERSION = "0.11.3"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,13 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.11.3",
+            title = "Playlist generate: ognuna ha il suo colore",
+            highlights = listOf(
+                "Le playlist generate (Discover Daily, On Repeat, Release Radar, Daily Mix, Time Capsule, Mood, Next) avevano tutte lo stesso sfondo viola di Brani preferiti su Home e Libreria. Ora ogni famiglia ha la sua coppia di colori, così le distingui a colpo d'occhio in una riga di sette.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.11.2",
             title = "Piccoli ritocchi: vibrazione play/pausa, errori più chiari",
