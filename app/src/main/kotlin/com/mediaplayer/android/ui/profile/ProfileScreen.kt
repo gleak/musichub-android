@@ -160,15 +160,14 @@ fun ProfileScreen(
                 Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = user?.name ?: user?.email ?: "Ospite",
+                        text = user?.name ?: user?.email ?: "—",
                         style = MaterialTheme.typography.titleLarge,
                         color = MHTheme.textHi,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = if (user?.anonymous == true) "Sessione ospite"
-                        else user?.email ?: "—",
+                        text = user?.email ?: "—",
                         style = mono.caption,
                         color = MHTheme.textLo,
                         modifier = Modifier.padding(top = 4.dp),
@@ -199,7 +198,7 @@ fun ProfileScreen(
 
         item {
             SettingsSection(title = "ACCOUNT") {
-                SettingsRow(label = "Profilo", detail = user?.email ?: "Ospite")
+                SettingsRow(label = "Profilo", detail = user?.email ?: "—")
                 // Same callback as Disconnetti — signOut clears the
                 // credential + flips AuthState so LoginScreen comes back,
                 // and the user picks a different Google account (or

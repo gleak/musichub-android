@@ -65,7 +65,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mediaplayer.android.data.dto.PlaylistDto
-import com.mediaplayer.android.ui.common.AnonymousBanner
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.EmptyState
 import com.mediaplayer.android.ui.common.ErrorWithRetry
@@ -98,7 +97,6 @@ fun PlaylistsScreen(
                 onAdd = { createOpen = true },
                 onProfileClick = onProfileClick,
             )
-            AnonymousBanner()
             FilterRow(filter = filter, onChange = { filter = it })
 
             PullToRefreshBox(
@@ -155,7 +153,6 @@ private fun LibraryTopBar(
     onProfileClick: () -> Unit,
 ) {
     val currentUser = LocalCurrentUser.current
-    val isAnonymous = currentUser?.user?.anonymous == true
     val initial = currentUser?.user?.displayInitial().orEmpty()
 
     Row(
@@ -171,10 +168,10 @@ private fun LibraryTopBar(
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh),
             contentAlignment = Alignment.Center,
         ) {
-            if (isAnonymous || initial.isEmpty()) {
+            if (initial.isEmpty()) {
                 Icon(
                     imageVector = Icons.Filled.Person,
-                    contentDescription = if (isAnonymous) "Guest" else "Account",
+                    contentDescription = "Account",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp),
                 )
@@ -271,15 +268,16 @@ private fun LibraryList(
     ) {
         when (filter) {
             LibraryFilter.Playlists -> {
+                val userPlaylists = playlists.filterNot { it.isAuto }
                 item(key = "liked", span = { GridItemSpan(maxLineSpan) }) {
                     LikedSongsRow(onClick = onLikedSongsClick)
                 }
-                if (playlists.isEmpty()) {
+                if (userPlaylists.isEmpty()) {
                     item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                         EmptyPlaylistMessage()
                     }
                 }
-                items(items = playlists, key = { it.id }) { p ->
+                items(items = userPlaylists, key = { it.id }) { p ->
                     PlaylistTile(
                         playlist = p,
                         onClick = { onPlaylistClick(p) },
@@ -478,9 +476,26 @@ private fun PlaylistTile(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            val subtitle = buildString {
+                append(if (playlist.isAuto) "Per te" else "Playlist")
+                append(" · ")
+                append(pluralizeSongs(playlist.songCount))
+                if (!playlist.isAuto) {
+                    if (!playlist.isOwner && !playlist.ownerName.isNullOrBlank()) {
+                        // Member of someone else's playlist — surface whose it is
+                        // so the user remembers why it's in their library.
+                        append(" · Condivisa da ${playlist.ownerName}")
+                    } else if (playlist.isOwner && playlist.memberCount > 0) {
+                        // You shared this playlist with N other users.
+                        append(
+                            if (playlist.memberCount == 1) " · Condivisa con 1 persona"
+                            else " · Condivisa con ${playlist.memberCount} persone"
+                        )
+                    }
+                }
+            }
             Text(
-                text = if (playlist.isAuto) "Per te · ${pluralizeSongs(playlist.songCount)}"
-                else "Playlist · ${pluralizeSongs(playlist.songCount)}",
+                text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -497,15 +512,27 @@ private fun PlaylistTile(
     }
 
     if (confirmDelete) {
+        // Members see "Remove from library" — their action just drops the
+        // membership row server-side; the playlist keeps living for the
+        // owner and other members. Owners see the destructive "Delete"
+        // copy because their action cascades.
+        val isMember = !playlist.isOwner
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete playlist?") },
-            text = { Text("\"${playlist.name}\" will be permanently removed.") },
+            title = { Text(if (isMember) "Rimuovi dalla libreria?" else "Delete playlist?") },
+            text = {
+                Text(
+                    if (isMember) "\"${playlist.name}\" sparirà dalla tua libreria. " +
+                        "Continuerà ad esistere per ${playlist.ownerName ?: "il proprietario"} " +
+                        "e gli altri membri."
+                    else "\"${playlist.name}\" will be permanently removed."
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
                     onDelete()
-                }) { Text("Delete") }
+                }) { Text(if (isMember) "Rimuovi" else "Delete") }
             },
             dismissButton = {
                 TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }

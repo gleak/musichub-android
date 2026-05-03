@@ -27,6 +27,18 @@ data class PlaylistDto(
      */
     val coverSongIds: List<Long> = emptyList(),
     val autoSync: Boolean = false,
+    /**
+     * Sharing fields — populated by collaborative-playlist backends (≥0.13.0).
+     * Defaulted so older backends that don't emit these still parse: in that
+     * case [isOwner] = true matches the legacy "every playlist you can see is
+     * yours" assumption, and the shared-by indicator stays hidden.
+     */
+    val ownerId: Long? = null,
+    val ownerName: String? = null,
+    val isOwner: Boolean = true,
+    val memberCount: Int = 0,
 ) {
     val isAuto: Boolean get() = kind != "USER"
+    /** True when the playlist is shared (owner has at least one member, or current user is a member). */
+    val isShared: Boolean get() = !isOwner || memberCount > 0
 }

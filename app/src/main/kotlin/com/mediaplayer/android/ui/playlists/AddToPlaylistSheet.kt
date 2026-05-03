@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddToPhotos
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.PersonOff
+import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material3.AlertDialog
@@ -77,6 +78,7 @@ fun AddToPlaylistSheet(
     onDownload: (() -> Unit)? = null,
     onDislikeSong: (() -> Unit)? = null,
     onDislikeArtist: (() -> Unit)? = null,
+    onFlagWrong: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onAdded: (playlistName: String) -> Unit = {},
 ) {
@@ -87,12 +89,13 @@ fun AddToPlaylistSheet(
     var playlists by remember { mutableStateOf<List<PlaylistDto>>(emptyList()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var createOpen by remember { mutableStateOf(false) }
+    var flagConfirmOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         loading = true
         errorMessage = null
         try {
-            playlists = repository.list()
+            playlists = repository.list().filterNot { it.isAuto }
         } catch (t: Throwable) {
             errorMessage = friendlyMessage(t)
         } finally {
@@ -177,6 +180,20 @@ fun AddToPlaylistSheet(
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
+            if (onFlagWrong != null) {
+                QueueActionRow(
+                    label = "Report wrong song",
+                    icon = {
+                        Icon(
+                            Icons.Filled.ReportProblem,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    },
+                    onClick = { flagConfirmOpen = true },
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
             // New-playlist row always pinned at the top for discoverability.
             NewPlaylistRow(onClick = { createOpen = true })
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -230,6 +247,31 @@ fun AddToPlaylistSheet(
 
             Spacer(Modifier.size(8.dp))
         }
+    }
+
+    if (flagConfirmOpen && onFlagWrong != null) {
+        AlertDialog(
+            onDismissRequest = { flagConfirmOpen = false },
+            title = { Text("Report wrong song?") },
+            text = {
+                Text(
+                    "“$songTitle” will be removed from your playlists, likes, and history, and " +
+                            "the file will be deleted from the server. This is permanent."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        flagConfirmOpen = false
+                        onFlagWrong()
+                        onDismiss()
+                    },
+                ) { Text("Report") }
+            },
+            dismissButton = {
+                TextButton(onClick = { flagConfirmOpen = false }) { Text("Cancel") }
+            },
+        )
     }
 
     if (createOpen) {

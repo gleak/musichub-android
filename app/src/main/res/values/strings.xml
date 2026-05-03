@@ -37,4 +37,7 @@
     <string name="download_channel_name">Download</string>
     <string name="download_finishing">Sto completando…</string>
     <string name="download_in_progress">Sto scaricando…</string>
+    <string name="download_in_progress_count">Scarico %1$d brani…</string>
+    <string name="download_in_progress_one">Scarico: %1$s</string>
+    <string name="download_in_progress_with_more">Scarico: %1$s · +%2$d in coda</string>
 </resources>

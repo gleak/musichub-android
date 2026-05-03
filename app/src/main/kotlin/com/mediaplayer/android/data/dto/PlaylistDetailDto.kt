@@ -16,6 +16,18 @@ data class PlaylistDetailDto(
     val kind: String = "USER",
     val lastRefreshedAt: String? = null,
     val autoSync: Boolean = false,
+    /**
+     * Sharing fields — see [PlaylistDto] for forward-compat rationale.
+     * The detail screen uses these to: (a) show "Shared by X" sub-header,
+     * (b) hide the auto-sync card for non-owners, (c) flip the destructive
+     * action label between "Delete playlist" (owner) and "Remove from
+     * library" (member).
+     */
+    val ownerId: Long? = null,
+    val ownerName: String? = null,
+    val isOwner: Boolean = true,
+    val memberCount: Int = 0,
 ) {
     val isAuto: Boolean get() = kind != "USER"
+    val isShared: Boolean get() = !isOwner || memberCount > 0
 }

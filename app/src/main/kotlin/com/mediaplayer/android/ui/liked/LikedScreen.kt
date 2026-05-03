@@ -120,11 +120,16 @@ fun LikedScreen(
 
     sheetSong?.let { song ->
         val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(song.id, song.artist)
+        val flagWrong = com.mediaplayer.android.ui.common.rememberFlagWrongAction(
+            songId = song.id,
+            onFlagged = { viewModel.refresh() },
+        )
         AddToPlaylistSheet(
             songTitle = song.title,
             songId = song.id,
             onDislikeSong = dislike.song(),
             onDislikeArtist = dislike.artist(),
+            onFlagWrong = flagWrong,
             onDismiss = { sheetSong = null },
             onAdded = { playlistName ->
                 addedToast = "Added to $playlistName"
@@ -193,7 +198,6 @@ private fun LikedBody(
                     isLiked = true,
                     isDownloaded = song.id in downloadedIds,
                     onClick = { onPlayFromIndex(songs, idx) },
-                    onLongPress = { onLongPress(song) },
                     onToggleLike = { onUnlike(song.id) },
                     onMore = { onLongPress(song) },
                 )

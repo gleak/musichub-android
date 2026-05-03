@@ -17,7 +17,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -35,7 +34,6 @@ import com.mediaplayer.android.ui.theme.MHGradient
 fun LoginScreen(
     state: AuthViewModel.State,
     onSignIn: (Context) -> Unit,
-    onContinueAsGuest: () -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -99,16 +97,6 @@ fun LoginScreen(
                             .height(48.dp),
                     ) {
                         Text("Accedi con Google", fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = onContinueAsGuest,
-                        shape = RoundedCornerShape(999.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                    ) {
-                        Text("Continua come ospite", color = MHColors.TextHi)
                     }
                     if (state is AuthViewModel.State.Error) {
                         Spacer(Modifier.height(16.dp))

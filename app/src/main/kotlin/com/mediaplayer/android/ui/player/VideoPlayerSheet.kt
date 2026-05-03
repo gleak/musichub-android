@@ -60,13 +60,10 @@ fun VideoPlayerInline(
             .build()
         val upstream = OkHttpDataSource.Factory(longRead).apply {
             val token = AuthTokenHolder.idToken
-            val anonId = AuthTokenHolder.anonymousId
             val headers = buildMap {
                 put("X-Api-Key", Network.API_KEY)
                 if (token != null) {
                     put("Authorization", "Bearer $token")
-                } else if (anonId != null) {
-                    put("X-Anonymous-Id", anonId)
                 }
             }
             setDefaultRequestProperties(headers)
@@ -116,6 +113,16 @@ fun VideoPlayerInline(
             DisposableEffect(view) {
                 val window = (view.parent as? DialogWindowProvider)?.window
                 if (window != null) {
+                    // Force the dialog window itself to fill the screen.
+                    // usePlatformDefaultWidth=false alone leaves the window
+                    // sized to its content's measured bounds — on some
+                    // devices that ends up smaller than the screen, which
+                    // is why pressing PlayerView's fullscreen button left
+                    // the video looking stuck at its inline size.
+                    window.setLayout(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
                     WindowCompat.setDecorFitsSystemWindows(window, false)
                     val controller = WindowInsetsControllerCompat(window, view)
                     controller.hide(WindowInsetsCompat.Type.systemBars())

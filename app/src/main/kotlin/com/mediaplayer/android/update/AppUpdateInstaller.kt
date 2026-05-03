@@ -18,9 +18,9 @@ import java.security.MessageDigest
  * Drives the download → integrity-check → install flow for the
  * self-hosted update channel. Uses the system DownloadManager so the
  * download survives the activity being torn down + shows in the
- * notification shade. Auth headers (X-Api-Key + Authorization /
- * X-Anonymous-Id) are attached to the request so the protected backend
- * endpoint accepts the fetch without a separate public route.
+ * notification shade. Auth headers (X-Api-Key + Authorization Bearer)
+ * are attached to the request so the protected backend endpoint accepts
+ * the fetch without a separate public route.
  */
 object AppUpdateInstaller {
 
@@ -43,7 +43,6 @@ object AppUpdateInstaller {
         if (target.exists()) target.delete()
 
         val token = AuthTokenHolder.idToken
-        val anonId = AuthTokenHolder.anonymousId
         val request = DownloadManager.Request(Uri.parse(url))
             .setTitle("MediaPlayer update")
             .setDescription("Downloading new version…")
@@ -52,8 +51,6 @@ object AppUpdateInstaller {
             .addRequestHeader("X-Api-Key", Network.API_KEY)
         if (token != null) {
             request.addRequestHeader("Authorization", "Bearer $token")
-        } else if (anonId != null) {
-            request.addRequestHeader("X-Anonymous-Id", anonId)
         }
 
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager

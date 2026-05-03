@@ -68,7 +68,6 @@ import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.update.AppUpdateChecker
 import kotlinx.coroutines.launch
 import com.mediaplayer.android.data.dto.SongDto
-import com.mediaplayer.android.ui.common.AnonymousBanner
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.LocalCurrentUser
@@ -190,10 +189,6 @@ private fun HomeContent(
 
         item(key = "filter_chips") {
             HomeFilterChips(selected = filter, onSelect = { filter = it })
-        }
-
-        item(key = "anonymous_banner") {
-            AnonymousBanner()
         }
 
         val autoPlaylists = playlists.filter { it.isAuto }

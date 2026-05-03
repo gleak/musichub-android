@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.12.1"
+    const val VERSION = "0.13.0"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,77 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.13.0",
+            title = "Playlist condivise davvero, in tempo reale",
+            highlights = listOf(
+                "Le playlist condivise sono ora collaborative. Quando qualcuno apre il tuo link e accetta, finisce nella stessa playlist — non in una copia. Le tue modifiche (brani aggiunti, rimossi, riordinati, rinominata) compaiono nella sua libreria al prossimo refresh, e viceversa.",
+                "Niente più duplicati: se apri un link di una playlist che è già tua, l'app ti porta direttamente sulla playlist esistente invece di creare una seconda copia. Stessa cosa se il link te l'avevi già accettato.",
+                "Indicatore \"Condivisa da <nome>\" sotto la copertina della playlist e nel sottotitolo della riga in libreria, così riconosci subito quali playlist sono tue e quali ti sono state condivise.",
+                "La sincronizzazione automatica delle playlist è una preferenza per dispositivo: ogni membro (e il proprietario) decide se il proprio telefono deve scaricare i brani della playlist condivisa, senza coinvolgere gli altri. Se attivi il tuo, il telefono di chi ha condiviso resta com'è.",
+                "Il pulsante elimina di una playlist condivisa diventa \"Rimuovi dalla libreria\": rimuove la playlist solo da te, mentre il proprietario e gli altri membri continuano a vederla. Se sei tu il proprietario e la elimini, sparisce per tutti.",
+                "Solo il proprietario può generare nuovi link di condivisione. I membri che vogliono invitare un terzo utente devono chiedere al proprietario.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.12.9",
+            title = "Solo accesso autenticato",
+            highlights = listOf(
+                "L'app richiede ora l'accesso con Google: la modalità ospite è stata rimossa. Apri l'app, premi \"Accedi con Google\" e riprendi da dove avevi lasciato.",
+                "Il server ora memorizza l'ultima attività del tuo account a ogni richiesta — utile per capire quando un dispositivo ha smesso di sincronizzare senza dover ispezionare i log.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.12.8",
+            title = "Segnala brano sbagliato",
+            highlights = listOf(
+                "Nuovo: dal menu kebab di un brano (in ricerca, playlist, album, artisti, Mi piace, coda) e dal menu del player puoi scegliere \"Report wrong song\". Il brano segnalato sparisce subito da ricerche, playlist, Mi piace e cronologia su tutti i dispositivi; il file audio, la copertina e l'eventuale video vengono cancellati dal server. La segnalazione è permanente e protegge anche dai futuri scarichi automatici: il sistema riconosce il contenuto già marcato come sbagliato e si rifiuta di riscaricarlo.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.12.7",
+            title = "Riga brano più leggibile e riordino con tocco prolungato",
+            highlights = listOf(
+                "La riga di un brano è stata ripulita: nel sottotitolo ora c'è solo il nome dell'artista seguito dalla durata (\"Artista • 3:42\"). Il nome dell'album è stato tolto perché ridondante con la copertina e affollava la riga.",
+                "Il pulsante \"mi piace\" è stato spostato accanto al menu kebab, così le azioni della riga sono raggruppate.",
+                "Se il titolo del brano è troppo lungo per stare su una riga, adesso scorre orizzontalmente in automatico così puoi leggerlo per intero senza doverlo aprire.",
+                "Nei dettagli di una playlist non c'è più la maniglia di trascinamento dedicata: tieni premuto su un brano per iniziare a riordinarlo. Tocco singolo riproduce, kebab apre il menu come prima.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.12.6",
+            title = "Download trasparenti e mini-player chiudibile",
+            highlights = listOf(
+                "La notifica di download adesso mostra cosa sta scaricando: \"Scarico: <titolo brano>\" invece del generico \"Sto scaricando…\". Quando ci sono più brani in coda compare anche il conteggio (\"+N in coda\").",
+                "Profilo → Riproduzione → Download offline → Download automatico è ora disattivato per impostazione predefinita. Prima ogni brano che ascoltavi veniva scaricato in automatico, anche senza nessuna playlist con la sincronizzazione automatica attiva. Adesso i download partono solo se attivi questa opzione o la sincronizzazione automatica di una playlist.",
+                "Mini-player chiudibile: trascina il mini-player a destra o a sinistra per fermare la riproduzione e nasconderlo. Prima si poteva solo mettere in pausa, restava sempre visibile.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.12.5",
+            title = "Player video più coerente",
+            highlights = listOf(
+                "Quando guardi il video di un brano, la barra di avanzamento e i comandi di riproduzione audio (play/pausa, avanti/indietro, shuffle, repeat) spariscono: l'audio è in pausa per far suonare il video, quindi quei controlli erano scollegati dal video stesso. Restano i controlli del player video sopra l'immagine.",
+                "L'icona del video nella barra delle azioni adesso indica lo stato: video spento → icona libreria video; video acceso → nota musicale colorata, come scorciatoia per tornare alla copertina audio.",
+                "Il pulsante schermo intero dentro al player video adesso porta davvero a tutto schermo. Prima la finestra di dialogo non veniva forzata a coprire l'intero schermo, quindi il video restava grande quanto il riquadro inline.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.12.3",
+            title = "Recupero automatico dei brani danneggiati",
+            highlights = listOf(
+                "Quando provi a far partire un brano e non parte (file scaricato troncato, container malformato, decoder che si arrende), l'app ora ti dice cosa è successo invece di restare in silenzio: appare un avviso \"<brano> risulta danneggiato. Lo sto riscaricando…\" e la copia locale viene buttata e ripresa dal server in automatico. Quando i nuovi byte arrivano la riproduzione riparte da sola.",
+                "Se anche dopo il riscarico automatico il brano continua a non partire (di solito significa che anche il file sul server è guasto), l'app suggerisce di usare \"Riscarica dalla sorgente\" dal menu del brano, che rifà il download da YouTube.",
+                "Per gli errori di rete (connessione assente, timeout) l'app mostra il codice di errore senza riscaricare nulla — riscaricare con la rete giù non aiuterebbe.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.12.2",
+            title = "Pull-to-refresh in \"Per te\"",
+            highlights = listOf(
+                "Nella schermata \"Per te\" puoi adesso trascinare verso il basso per ricaricare le playlist generate dal sistema, come già fai in \"Mi piace\" e nelle altre liste.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.12.1",
             title = "Sincronizzazione automatica più chiara",

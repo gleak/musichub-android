@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.dp
  *  - [Tile]       — grid tile container / browse tiles (~120dp+)
  *  - [MiniPlayer] — mini-player chip cover (alias of SongRow radius — kept for semantic clarity)
  *  - [Card]       — promo cards / onboarding pick tiles
- *  - [Banner]     — full-width inline banners (anonymous, etc.)
+ *  - [Banner]     — full-width inline banners
  */
 object CoverShapes {
     val Skeleton = RoundedCornerShape(4.dp)

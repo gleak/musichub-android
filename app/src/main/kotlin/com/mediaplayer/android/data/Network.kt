@@ -2,8 +2,6 @@ package com.mediaplayer.android.data
 
 import com.mediaplayer.android.BuildConfig
 import com.mediaplayer.android.MediaPlayerApp
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Cache
 import okhttp3.ConnectionPool
@@ -18,12 +16,6 @@ import java.util.concurrent.TimeUnit
 
 object AuthTokenHolder {
     @Volatile var idToken: String? = null
-    @Volatile var anonymousId: String? = null
-    // Resolved off main during MediaPlayerApp.onCreate; the OkHttp interceptor
-    // awaits this on the OkHttp dispatcher thread when [anonymousId] is still
-    // unset for the very first request after cold start. Subsequent requests
-    // see [anonymousId] populated and skip the await entirely.
-    @Volatile var anonymousIdDeferred: Deferred<String>? = null
 }
 
 object Network {
@@ -37,7 +29,8 @@ object Network {
     }
 
     // Client identification key — always sent so the backend can gate by allowed client.
-    // User identity is layered on top via Bearer (signed-in) or X-Anonymous-Id (anon device).
+    // User identity is layered on top via the Bearer token (Google ID token); requests
+    // without a token are rejected by the backend.
     const val API_KEY = "cf3ea1ea-f12a-4557-b926-1ac32a5ac4e2"
 
     // Single host (one backend) handles every API call, every cover image,
@@ -75,20 +68,10 @@ object Network {
             .cache(responseCache)
             .addInterceptor { chain ->
                 val token = AuthTokenHolder.idToken
-                val anonId = AuthTokenHolder.anonymousId ?: run {
-                    // Cold-start race: the resolver coroutine hasn't completed yet.
-                    // Block this OkHttp dispatcher thread (never main) until it does;
-                    // a completed Deferred returns instantly thereafter.
-                    AuthTokenHolder.anonymousIdDeferred?.let { d ->
-                        runBlocking { d.await() }
-                    }
-                }
                 val req = chain.request().newBuilder().apply {
                     header("X-Api-Key", API_KEY)
                     if (token != null) {
                         header("Authorization", "Bearer $token")
-                    } else if (anonId != null) {
-                        header("X-Anonymous-Id", anonId)
                     }
                 }.build()
                 try {

@@ -30,9 +30,9 @@ object PlaylistAutoSyncRunner {
             for (p in flagged) {
                 val detail = runCatching { repository.detail(p.id) }.getOrNull() ?: continue
                 val missing = detail.songs
-                    .map { it.song.id }
-                    .filterNot { DownloadRepository.isDownloaded(it) }
-                if (missing.isNotEmpty()) DownloadRepository.downloadAll(missing)
+                    .filterNot { DownloadRepository.isDownloaded(it.song.id) }
+                    .map { it.song.id to it.song.title }
+                if (missing.isNotEmpty()) DownloadRepository.downloadAllLabeled(missing)
             }
         }
     }

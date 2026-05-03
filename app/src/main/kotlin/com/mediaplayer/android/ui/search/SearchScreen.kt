@@ -204,12 +204,10 @@ fun SearchScreen(
                                 SongRow(
                                     song = song,
                                     onClick = { onSongClick(song) },
-                                    onLongPress = { sheetSong = song },
                                     isLiked = song.id in likedIds,
                                     onToggleLike = { viewModel.toggleLike(song.id) },
                                     isDownloaded = song.id in downloadedIds,
                                     onArtistClick = onArtistClick,
-                                    onAlbumClick = onAlbumClick,
                                     onMore = { sheetSong = song },
                                 )
                             }
@@ -231,14 +229,19 @@ fun SearchScreen(
 
     sheetSong?.let { song ->
         val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(song.id, song.artist)
+        val flagWrong = com.mediaplayer.android.ui.common.rememberFlagWrongAction(
+            songId = song.id,
+            onFlagged = { viewModel.retry() },
+        )
         AddToPlaylistSheet(
             songTitle = song.title,
             songId = song.id,
             onPlayNext = onPlayNext?.let { cb -> { cb(song); sheetSong = null } },
             onAddToQueue = onAddToQueue?.let { cb -> { cb(song); sheetSong = null } },
-            onDownload = { viewModel.toggleDownload(song.id) },
+            onDownload = { viewModel.toggleDownload(song.id, song.title) },
             onDislikeSong = dislike.song(),
             onDislikeArtist = dislike.artist(),
+            onFlagWrong = flagWrong,
             onDismiss = { sheetSong = null },
             onAdded = { playlistName ->
                 lastAdded = "Added to $playlistName"

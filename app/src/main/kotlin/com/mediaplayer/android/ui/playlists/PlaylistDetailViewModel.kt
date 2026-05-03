@@ -90,8 +90,10 @@ class PlaylistDetailViewModel(
 
     fun downloadPlaylist() {
         val entries = (state.value as? PlaylistDetailUiState.Success)?.playlist?.songs ?: return
-        val missing = entries.map { it.song.id }.filterNot { DownloadRepository.isDownloaded(it) }
-        DownloadRepository.downloadAll(missing)
+        val missing = entries
+            .filterNot { DownloadRepository.isDownloaded(it.song.id) }
+            .map { it.song.id to it.song.title }
+        DownloadRepository.downloadAllLabeled(missing)
     }
 
     fun removePlaylistDownloads() {
@@ -111,9 +113,10 @@ class PlaylistDetailViewModel(
                 // If the toggle just turned on, kick the runner so the user
                 // doesn't have to wait for the next cold launch.
                 if (next) {
-                    val missing = current.songs.map { it.song.id }
-                        .filterNot { DownloadRepository.isDownloaded(it) }
-                    DownloadRepository.downloadAll(missing)
+                    val missing = current.songs
+                        .filterNot { DownloadRepository.isDownloaded(it.song.id) }
+                        .map { it.song.id to it.song.title }
+                    DownloadRepository.downloadAllLabeled(missing)
                 }
             } catch (_: Throwable) {
                 refresh()

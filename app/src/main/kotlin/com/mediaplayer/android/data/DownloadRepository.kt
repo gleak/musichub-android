@@ -67,13 +67,18 @@ object DownloadRepository {
         }
     }
 
-    fun download(songId: Long) {
+    fun download(songId: Long, label: String? = null) {
         val uri = Uri.parse(Network.streamUrl(songId))
-        val request = DownloadRequest.Builder(songId.toString(), uri).build()
+        val builder = DownloadRequest.Builder(songId.toString(), uri)
+        label?.takeIf { it.isNotBlank() }?.let {
+            // Carried into the foreground notification by MediaDownloadService
+            // so the user sees what's downloading instead of a generic label.
+            builder.setData(it.toByteArray(Charsets.UTF_8))
+        }
         DownloadService.sendAddDownload(
             MediaPlayerApp.instance,
             MediaDownloadService::class.java,
-            request,
+            builder.build(),
             /* foreground = */ false,
         )
     }
@@ -88,6 +93,13 @@ object DownloadRepository {
     }
 
     fun downloadAll(songIds: List<Long>) = songIds.forEach { download(it) }
+
+    /**
+     * Submit each (id, label) pair so the foreground notification can show
+     * the actual song title that's downloading instead of a generic message.
+     */
+    fun downloadAllLabeled(items: List<Pair<Long, String>>) =
+        items.forEach { (id, label) -> download(id, label) }
 
     fun removeAll(songIds: List<Long>) = songIds.forEach { remove(it) }
 

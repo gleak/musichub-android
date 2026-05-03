@@ -1,9 +1,8 @@
 package com.mediaplayer.android.ui.search
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -42,22 +40,19 @@ import com.mediaplayer.android.ui.theme.LocalMHMono
 fun SongRow(
     song: SongDto,
     onClick: () -> Unit = {},
-    onLongPress: (() -> Unit)? = null,
     isLiked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
     isDownloaded: Boolean = false,
     onArtistClick: ((String) -> Unit)? = null,
-    onAlbumClick: ((String, String) -> Unit)? = null,
     onMore: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    rowGestureModifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongPress,
-            )
+            .then(rowGestureModifier)
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -74,9 +69,15 @@ fun SongRow(
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .basicMarquee(),
             )
-            SubtitleRow(song = song, onArtistClick = onArtistClick, onAlbumClick = onAlbumClick, isDownloaded = isDownloaded)
+            SubtitleRow(
+                song = song,
+                onArtistClick = onArtistClick,
+                isDownloaded = isDownloaded,
+            )
         }
 
         Spacer(Modifier.width(6.dp))
@@ -102,16 +103,6 @@ fun SongRow(
             }
         }
 
-        Spacer(Modifier.width(6.dp))
-
-        Text(
-            text = formatDuration(song.durationMs),
-            style = LocalMHMono.current.duration,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(36.dp),
-            maxLines = 1,
-        )
-
         if (onMore != null) {
             IconButton(onClick = onMore, modifier = Modifier.size(32.dp)) {
                 Icon(
@@ -129,7 +120,6 @@ fun SongRow(
 private fun SubtitleRow(
     song: SongDto,
     onArtistClick: ((String) -> Unit)?,
-    onAlbumClick: ((String, String) -> Unit)?,
     isDownloaded: Boolean,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -148,25 +138,22 @@ private fun SubtitleRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = if (onArtistClick != null)
+            modifier = (if (onArtistClick != null)
                 Modifier.clickable { onArtistClick(song.artist) }
-            else Modifier,
+            else Modifier).weight(1f, fill = false),
         )
-        if (!song.album.isNullOrBlank()) {
+        val duration = formatDuration(song.durationMs)
+        if (duration.isNotEmpty()) {
             Text(
                 text = " • ",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = song.album,
-                style = MaterialTheme.typography.bodySmall,
+                text = duration,
+                style = LocalMHMono.current.duration,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = if (onAlbumClick != null)
-                    Modifier.clickable { onAlbumClick(song.album, song.artist) }
-                else Modifier,
             )
         }
     }

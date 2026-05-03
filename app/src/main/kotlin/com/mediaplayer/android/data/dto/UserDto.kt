@@ -7,7 +7,6 @@ data class UserDto(
     val id: Long,
     val email: String? = null,
     val name: String? = null,
-    val anonymous: Boolean = false,
     /**
      * True once the user has any GENRE row in `user_taste` — either seeded
      * via the M14e onboarding tag picker or accumulated otherwise. The

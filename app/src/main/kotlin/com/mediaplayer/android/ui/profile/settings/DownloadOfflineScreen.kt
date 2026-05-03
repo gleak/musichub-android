@@ -54,7 +54,7 @@ fun DownloadOfflineScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
 
     val wifiOnly by settings.downloadWifiOnly.collectAsState(initial = true)
-    val autoDownload by settings.downloadAuto.collectAsState(initial = true)
+    val autoDownload by settings.downloadAuto.collectAsState(initial = false)
 
     var usedBytes by remember { mutableLongStateOf(0L) }
     var refreshTick by remember { mutableLongStateOf(0L) }
@@ -117,7 +117,7 @@ fun DownloadOfflineScreen(onBack: () -> Unit) {
             )
             SettingsToggleRow(
                 label = "Download automatico",
-                detail = "Scarica automaticamente ogni brano che ascolti",
+                detail = "Scarica automaticamente ogni brano che ascolti. Disattivato per impostazione predefinita.",
                 checked = autoDownload,
                 onCheckedChange = { v -> scope.launch { settings.setDownloadAuto(v) } },
             )

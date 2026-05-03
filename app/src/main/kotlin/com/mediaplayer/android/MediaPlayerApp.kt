@@ -9,8 +9,6 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
-import com.mediaplayer.android.data.AuthRepository
-import com.mediaplayer.android.data.AuthTokenHolder
 import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.Network
@@ -18,10 +16,6 @@ import com.mediaplayer.android.data.PlaylistAutoSyncRunner
 import com.mediaplayer.android.data.sync.EventQueue
 import com.mediaplayer.android.data.sync.ReadCache
 import com.mediaplayer.android.playback.PlayerConnection
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 
 /**
  * Application class — single place where app-wide singletons get wired:
@@ -38,18 +32,9 @@ class MediaPlayerApp : Application(), SingletonImageLoader.Factory {
             private set
     }
 
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
     override fun onCreate() {
         super.onCreate()
         instance = this
-        // Resolve the persistent anonymous device id off the main thread; the
-        // OkHttp interceptor awaits this Deferred on its dispatcher thread for
-        // the very first cold-start request and skips the await once resolved.
-        // Replaces a runBlocking call that was blocking onCreate on DataStore IO.
-        AuthTokenHolder.anonymousIdDeferred = applicationScope.async {
-            AuthRepository.instance.anonymousId().also { AuthTokenHolder.anonymousId = it }
-        }
         ConnectivityObserver.init()
         // Offline write-queue: open the SQLite file synchronously (cheap —
         // no schema change, no read), then start the drainer coroutine

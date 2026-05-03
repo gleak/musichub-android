@@ -30,8 +30,11 @@ class PlayerSettings private constructor(private val context: Context) {
     val downloadWifiOnly: Flow<Boolean> = context.playerSettingsDataStore.data
         .map { it[DOWNLOAD_WIFI_ONLY] ?: true }
 
+    // Default OFF — auto-downloading every played song surprised users who
+    // saw a foreground "Sto scaricando…" notification without having opted
+    // in. Per-playlist autoSync is the explicit, visible alternative.
     val downloadAuto: Flow<Boolean> = context.playerSettingsDataStore.data
-        .map { it[DOWNLOAD_AUTO] ?: true }
+        .map { it[DOWNLOAD_AUTO] ?: false }
 
     /** "dark" | "light" | "system". Defaults to "dark" — the design assumes dark. */
     val theme: Flow<String> = context.playerSettingsDataStore.data

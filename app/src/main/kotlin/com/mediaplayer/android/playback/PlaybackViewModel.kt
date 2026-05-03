@@ -13,6 +13,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
@@ -116,6 +117,13 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     private val _videoReinitializeError = MutableStateFlow<String?>(null)
     val videoReinitializeError: StateFlow<String?> = _videoReinitializeError.asStateFlow()
 
+    // Per-session set of song IDs we've already auto-recovered after a
+    // playback error. Prevents an infinite refresh→error→refresh loop when
+    // the corruption is server-side (refreshLocalDownload only re-fetches
+    // from backend, not from YouTube). One auto-attempt per song; after
+    // that we tell the user to use "Re-download from source" manually.
+    private val autoFixedSongs = mutableSetOf<Long>()
+
     sealed class AlarmExportState {
         data object Idle : AlarmExportState()
         data object Exporting : AlarmExportState()
@@ -125,6 +133,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     // Play-time tracking for history reporting
     private var trackedSongId: Long? = null
+    private var trackedSongTitle: String? = null
     private var trackedDurationMs: Long = 0L
     private var listenedMs: Long = 0L
     private var playingStartWall: Long = -1L
@@ -162,10 +171,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 playingStartWall = if (controller?.isPlaying == true) System.currentTimeMillis() else -1L
             }
             maybeRecordPlay()
+            val nextDto = mediaItem?.toSongDto()
             trackedSongId = mediaItem?.mediaId?.toLongOrNull()
+            trackedSongTitle = nextDto?.title
             trackedDurationMs = 0L
             listenedMs = 0L
-            _currentSong.value = mediaItem?.toSongDto()
+            _currentSong.value = nextDto
             pushDuration()
             pushQueueAvailability()
         }
@@ -228,6 +239,73 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     playbackPrefs.edit { it[PREF_REPEAT_KEY] = repeatMode }
                 }
             }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            handlePlaybackError(error)
+        }
+    }
+
+    /**
+     * Some songs silently fail to start — most often because the local cached
+     * bytes got truncated or the container is malformed (background download
+     * killed by the OS, partial write to disk, decoder couldn't handle the
+     * frame). Without this handler the player just sits idle and the user has
+     * no idea why nothing happened.
+     *
+     * For codes that point at corruption / missing-bytes (parsing, decoding,
+     * file-not-found, truncated reads) we automatically drop the local copy
+     * and refetch from the backend via [refreshLocalDownload], which also
+     * re-prepares the player from position 0 so playback retries on the
+     * fresh bytes. We toast the user so they know what happened.
+     *
+     * For network / transport codes (no internet, bad HTTP status, timeout)
+     * a re-download wouldn't help — we just report it and let the user retry.
+     *
+     * Each song id is auto-fixed at most once per VM lifetime so a server-side
+     * corruption (where the backend file is also bad) doesn't spin into a
+     * refresh→error→refresh loop. After that single attempt we point the user
+     * at "Re-download from source" which goes back to YouTube.
+     */
+    private fun handlePlaybackError(error: PlaybackException) {
+        val current = _currentSong.value
+        val title = current?.title?.takeIf { it.isNotBlank() } ?: "questo brano"
+        val songId = current?.id
+        val recoverable = isCorruptionLikeError(error)
+
+        if (recoverable && songId != null && autoFixedSongs.add(songId)) {
+            toast("\"$title\" risulta danneggiato. Lo sto riscaricando…")
+            refreshLocalDownload()
+            return
+        }
+
+        if (recoverable) {
+            toast(
+                "\"$title\" non riesce a partire neanche dopo il riscarico. " +
+                    "Prova \"Riscarica dalla sorgente\" dal menu del brano."
+            )
+            return
+        }
+
+        toast("Impossibile riprodurre \"$title\" (${error.errorCodeName}).")
+    }
+
+    private fun isCorruptionLikeError(e: PlaybackException): Boolean = when (e.errorCode) {
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_DECODING_FAILED,
+        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
+        PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE,
+        PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> true
+        else -> false
+    }
+
+    private fun toast(message: String) {
+        val ctx = getApplication<Application>()
+        android.os.Handler(ctx.mainLooper).post {
+            android.widget.Toast.makeText(ctx, message, android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
@@ -323,6 +401,18 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     fun pause() { controller?.pause() }
     fun play() { controller?.play() }
+
+    /**
+     * Stop playback and clear the timeline so the MiniPlayer hides itself
+     * (currentSong → null). Triggered by swipe-to-dismiss on the bar.
+     */
+    fun dismissPlayback() {
+        val c = controller ?: return
+        c.pause()
+        c.clearMediaItems()
+        _currentSong.value = null
+        _queue.value = emptyList()
+    }
 
     fun seekTo(positionMs: Long) {
         controller?.seekTo(positionMs)
@@ -467,7 +557,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 runCatching {
                     val wasDownloaded = DownloadRepository.isDownloaded(fresh.id)
                     DownloadRepository.remove(fresh.id)
-                    if (wasDownloaded) DownloadRepository.download(fresh.id)
+                    if (wasDownloaded) DownloadRepository.download(fresh.id, fresh.title)
                 }
                 runCatching {
                     val loader = SingletonImageLoader.get(ctx)
@@ -506,6 +596,55 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun consumeRedownloadError() { _redownloadError.value = null }
+
+    /**
+     * Report a song as "wrong" globally — the backend wipes the audio,
+     * cover, and video files from disk, hard-removes references from
+     * playlists/likes/history, and tombstones the row so the importer
+     * refuses to re-download the same content. Locally we drop every
+     * matching item from the current Media3 timeline; if the flagged
+     * song is the one playing, playback advances to the next item (or
+     * stops if the queue is empty).
+     */
+    @Suppress("TooGenericExceptionCaught")
+    fun flagWrong(songId: Long) {
+        if (songId <= 0L) return
+        viewModelScope.launch {
+            runCatching { songRepository.flagWrong(songId) }
+            val c = controller ?: return@launch
+            val total = c.mediaItemCount
+            val playingIdx = c.currentMediaItemIndex
+            val playingMatches = playingIdx in 0 until total
+                    && c.getMediaItemAt(playingIdx).mediaId == songId.toString()
+            // Walk back-to-front so removing earlier items doesn't shift
+            // indexes we still need to inspect.
+            for (i in (total - 1) downTo 0) {
+                if (i == playingIdx && playingMatches) continue
+                if (c.getMediaItemAt(i).mediaId == songId.toString()) {
+                    c.removeMediaItem(i)
+                }
+            }
+            if (playingMatches) {
+                if (c.hasNextMediaItem()) {
+                    c.seekToNextMediaItem()
+                    c.removeMediaItem(playingIdx)
+                } else {
+                    c.pause()
+                    c.clearMediaItems()
+                    _currentSong.value = null
+                    _queue.value = emptyList()
+                }
+            }
+            // Cover cache will refetch and 404 once the row is flagged.
+            runCatching {
+                val ctx = getApplication<Application>()
+                val coverUrl = Network.coverUrl(songId)
+                val loader = SingletonImageLoader.get(ctx)
+                loader.diskCache?.remove(coverUrl)
+                loader.memoryCache?.remove(MemoryCache.Key(coverUrl))
+            }
+        }
+    }
 
     /**
      * Kick off the backend's async video download and poll for completion.
@@ -642,7 +781,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         runCatching {
             val wasDownloaded = DownloadRepository.isDownloaded(current.id)
             DownloadRepository.remove(current.id)
-            if (wasDownloaded) DownloadRepository.download(current.id)
+            if (wasDownloaded) DownloadRepository.download(current.id, current.title)
         }
         runCatching {
             val loader = SingletonImageLoader.get(ctx)
@@ -771,11 +910,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         }
         // Auto-download every song the user actually starts (listened > 0,
         // already gated above). Setting toggles whether we cache at all.
+        val title = trackedSongTitle
         viewModelScope.launch {
             if (PlayerSettings.instance.downloadAutoNow() &&
                 !DownloadRepository.isDownloaded(id)
             ) {
-                DownloadRepository.download(id)
+                DownloadRepository.download(id, title)
             }
         }
     }
@@ -815,7 +955,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         if (PlayerSettings.instance.downloadAutoNow() &&
             !DownloadRepository.isDownloaded(id)
         ) {
-            DownloadRepository.download(id)
+            DownloadRepository.download(id, trackedSongTitle)
         }
         listenedMs = 0L
     }

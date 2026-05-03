@@ -67,26 +67,6 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
         }
     }
 
-    /**
-     * Enters the app as an anonymous guest. No Google sign-in dialog — the network
-     * layer's persistent {@code X-Anonymous-Id} header carries the device identity,
-     * and the backend creates (or returns) the corresponding anonymous user row.
-     */
-    fun signInAnonymously() {
-        viewModelScope.launch {
-            _state.value = State.Loading
-            AuthTokenHolder.idToken = null
-            try {
-                val user = Network.api.getMe()
-                _state.value = State.SignedIn(user)
-            } catch (e: Exception) {
-                _state.value = State.Error(
-                    e.message?.takeIf { it.isNotBlank() } ?: "Couldn't reach the server"
-                )
-            }
-        }
-    }
-
     fun signOut() {
         viewModelScope.launch {
             authRepository.signOut()

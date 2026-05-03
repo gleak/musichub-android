@@ -20,7 +20,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.PlayArrow
@@ -55,6 +54,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
+import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.PlaylistRepository
 import com.mediaplayer.android.playback.PlaybackViewModel
 import android.content.Intent
@@ -145,45 +145,53 @@ fun PlaylistDetailScreen(
                                 Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
                             }
                         }
-                        IconButton(
-                            onClick = {
-                                if (sharing) return@IconButton
-                                sharing = true
-                                scope.launch {
-                                    try {
-                                        val link = playlistRepository.createShare(playlistId)
-                                        val intent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(
-                                                Intent.EXTRA_SUBJECT,
-                                                "Listen to ${successState.playlist.name}",
+                        // Only the owner can mint share links — members of a
+                        // shared playlist must ask the owner to invite a third
+                        // user. Hiding the icon for non-owners avoids the user
+                        // getting a 404 when they try.
+                        if (successState.playlist.isOwner) {
+                            IconButton(
+                                onClick = {
+                                    if (sharing) return@IconButton
+                                    sharing = true
+                                    scope.launch {
+                                        try {
+                                            val link = playlistRepository.createShare(playlistId)
+                                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(
+                                                    Intent.EXTRA_SUBJECT,
+                                                    "Listen to ${successState.playlist.name}",
+                                                )
+                                                putExtra(Intent.EXTRA_TEXT, link.url)
+                                            }
+                                            // Wrap in chooser so the user picks WhatsApp /
+                                            // Messages / etc. Each tap mints a new token,
+                                            // so cancelling the chooser leaves a token
+                                            // alive but unused — harmless.
+                                            context.startActivity(
+                                                Intent.createChooser(intent, "Share playlist")
                                             )
-                                            putExtra(Intent.EXTRA_TEXT, link.url)
+                                        } catch (t: Throwable) {
+                                            snackMessage = t.message ?: "Couldn't create share link"
+                                        } finally {
+                                            sharing = false
                                         }
-                                        // Wrap in chooser so the user picks WhatsApp /
-                                        // Messages / etc. Each tap mints a new token,
-                                        // so cancelling the chooser leaves a token
-                                        // alive but unused — harmless.
-                                        context.startActivity(
-                                            Intent.createChooser(intent, "Share playlist")
-                                        )
-                                    } catch (t: Throwable) {
-                                        snackMessage = t.message ?: "Couldn't create share link"
-                                    } finally {
-                                        sharing = false
                                     }
+                                },
+                                enabled = !sharing,
+                            ) {
+                                if (sharing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Filled.Share, contentDescription = "Share playlist")
                                 }
-                            },
-                            enabled = !sharing,
-                        ) {
-                            if (sharing) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Filled.Share, contentDescription = "Share playlist")
                             }
                         }
-                        IconButton(onClick = { addSongsOpen = true }) {
-                            Icon(Icons.Filled.Add, contentDescription = "Add songs")
+                        if (!successState.playlist.isAuto) {
+                            IconButton(onClick = { addSongsOpen = true }) {
+                                Icon(Icons.Filled.Add, contentDescription = "Add songs")
+                            }
                         }
                     }
                 },
@@ -230,11 +238,16 @@ fun PlaylistDetailScreen(
 
     sheetSong?.let { song ->
         val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(song.id, song.artist)
+        val flagWrong = com.mediaplayer.android.ui.common.rememberFlagWrongAction(
+            songId = song.id,
+            onFlagged = { viewModel.refresh() },
+        )
         AddToPlaylistSheet(
             songTitle = song.title,
             songId = song.id,
             onDislikeSong = dislike.song(),
             onDislikeArtist = dislike.artist(),
+            onFlagWrong = flagWrong,
             onDismiss = { sheetSong = null },
             onAdded = { playlistName ->
                 snackMessage = "Added to $playlistName"
@@ -316,15 +329,36 @@ private fun PlaylistDetailBody(
         item(key = "header") {
             val total = playlist.songs.size
             val allDownloaded = total > 0 && downloadedCount == total
-            val subtitleStr = if (playlist.isAuto) {
-                "${com.mediaplayer.android.ui.common.familyOf(playlist.kind).label} · ${pluralizeSongsDetail(total)}"
-            } else if (downloadedCount > 0 && !allDownloaded)
-                "Playlist · ${pluralizeSongsDetail(total)} · $downloadedCount scaricati"
-            else "Playlist · ${pluralizeSongsDetail(total)}"
+            val subtitleStr = buildString {
+                if (playlist.isAuto) {
+                    append(com.mediaplayer.android.ui.common.familyOf(playlist.kind).label)
+                    append(" · ")
+                    append(pluralizeSongsDetail(total))
+                } else {
+                    append("Playlist · ")
+                    append(pluralizeSongsDetail(total))
+                    if (downloadedCount > 0 && !allDownloaded) {
+                        append(" · $downloadedCount scaricati")
+                    }
+                    if (!playlist.isOwner && !playlist.ownerName.isNullOrBlank()) {
+                        append(" · Condivisa da ${playlist.ownerName}")
+                    } else if (playlist.isOwner && playlist.memberCount > 0) {
+                        append(
+                            if (playlist.memberCount == 1) " · Condivisa con 1 persona"
+                            else " · Condivisa con ${playlist.memberCount} persone"
+                        )
+                    }
+                }
+            }
+            // Auto-playlists keep their stylized gradient (matches PlaylistTile);
+            // user playlists adopt the first song-with-cover as the hero artwork —
+            // the same convention PlaylistDto.coverSongId uses on the list view.
+            val heroCoverSongId = if (playlist.isAuto) null
+                else playlist.songs.firstOrNull { it.song.hasCoverArt }?.song?.id
             SpotifyHero(
                 title = playlist.name,
                 subtitle = subtitleStr,
-                coverModel = null,
+                coverModel = heroCoverSongId?.let { Network.coverUrl(it) },
                 onPlay = {
                     if (playingFromHere) playbackVm.togglePlayPause()
                     else if (entries.isNotEmpty()) onPlayFromIndex(songsForPlayback, 0)
@@ -358,6 +392,11 @@ private fun PlaylistDetailBody(
                 )
             }
         } else {
+            // Auto-sync is a per-user preference for collaborative playlists
+            // since v0.13.0 — owner persists to playlists.auto_sync, members
+            // persist to playlist_members.auto_sync. Each user's toggle is
+            // independent: my "always download" doesn't surprise your phone
+            // into doing the same.
             item(key = "auto_sync") {
                 AutoSyncCard(
                     enabled = playlist.autoSync,
@@ -425,33 +464,18 @@ private fun PlaylistDetailBody(
                             }
                         },
                     ) {
-                        Row(
+                        SongRow(
+                            song = song,
+                            isDownloaded = song.id in downloadedIds,
+                            onClick = { onPlayFromIndex(songsForPlayback, idx) },
+                            onMore = { onLongPressSong(song) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(MaterialTheme.colorScheme.surface),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (!playlist.isAuto) {
-                                IconButton(
-                                    modifier = Modifier.draggableHandle(),
-                                    onClick = {},
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.DragHandle,
-                                        contentDescription = "Reorder",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                            SongRow(
-                                song = song,
-                                isDownloaded = song.id in downloadedIds,
-                                onClick = { onPlayFromIndex(songsForPlayback, idx) },
-                                onLongPress = { onLongPressSong(song) },
-                                onMore = { onLongPressSong(song) },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
+                            rowGestureModifier = if (!playlist.isAuto)
+                                Modifier.longPressDraggableHandle()
+                            else Modifier,
+                        )
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }

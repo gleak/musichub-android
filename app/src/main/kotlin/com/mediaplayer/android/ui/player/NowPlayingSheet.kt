@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Alarm
@@ -160,6 +161,7 @@ private fun NowPlayingContent(
     val videoReinitializeError by viewModel.videoReinitializeError.collectAsStateWithLifecycle()
     var confirmRedownload by remember { mutableStateOf(false) }
     var confirmMarkBroken by remember { mutableStateOf(false) }
+    var confirmFlagWrong by remember { mutableStateOf(false) }
     var overflowOpen by remember { mutableStateOf(false) }
 
     val current = song ?: run {
@@ -373,109 +375,117 @@ private fun NowPlayingContent(
 
             Spacer(Modifier.height(MediaPlayerSpacing.M))
 
-            val sliderMax = duration.takeIf { it > 0 }?.toFloat() ?: 1f
-            val sliderValue = scrubValue ?: position.toFloat().coerceIn(0f, sliderMax)
-            Slider(
-                value = sliderValue,
-                onValueChange = { scrubValue = it },
-                onValueChangeFinished = {
-                    scrubValue?.let { viewModel.seekTo(it.toLong()) }
-                    scrubValue = null
-                },
-                valueRange = 0f..sliderMax,
-                enabled = duration > 0,
-                colors = SliderDefaults.colors(
-                    thumbColor = MHColors.OnHero,
-                    activeTrackColor = MHColors.OnHero,
-                    inactiveTrackColor = MHColors.OnHeroTrack,
-                ),
-                modifier = Modifier.semantics { contentDescription = "Playback position" },
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = formatMs(sliderValue.toLong()),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MHColors.OnHeroMuted,
-                )
-                Text(
-                    text = formatMs(duration.coerceAtLeast(0)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MHColors.OnHeroMuted,
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = viewModel::toggleShuffle) {
-                    Icon(
-                        imageVector = Icons.Filled.Shuffle,
-                        contentDescription = "Shuffle",
-                        tint = if (shuffleEnabled) MaterialTheme.colorScheme.primary
-                               else MHColors.OnHeroMuted,
-                    )
-                }
-                IconButton(
-                    onClick = viewModel::skipPrevious,
-                    enabled = hasPrevious,
-                    modifier = Modifier.size(56.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.SkipPrevious,
-                        contentDescription = "Previous",
-                        tint = MHColors.OnHero,
-                        modifier = Modifier.size(40.dp),
-                    )
-                }
-                FilledIconButton(
-                    onClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        viewModel.togglePlayPause()
+            // Audio progress + transport are hidden while the inline video is
+            // showing — the video plays in its own ExoPlayer (audio is paused
+            // for the duration), so the audio slider/transport would be
+            // disconnected from what the user sees and just confuse them.
+            // The PlayerView's own controller exposes scrub/play/pause for
+            // the video stream.
+            if (!showVideo) {
+                val sliderMax = duration.takeIf { it > 0 }?.toFloat() ?: 1f
+                val sliderValue = scrubValue ?: position.toFloat().coerceIn(0f, sliderMax)
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { scrubValue = it },
+                    onValueChangeFinished = {
+                        scrubValue?.let { viewModel.seekTo(it.toLong()) }
+                        scrubValue = null
                     },
-                    modifier = Modifier.size(72.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MHColors.OnHero,
-                        contentColor = Color.Black,
+                    valueRange = 0f..sliderMax,
+                    enabled = duration > 0,
+                    colors = SliderDefaults.colors(
+                        thumbColor = MHColors.OnHero,
+                        activeTrackColor = MHColors.OnHero,
+                        inactiveTrackColor = MHColors.OnHeroTrack,
                     ),
+                    modifier = Modifier.semantics { contentDescription = "Playback position" },
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play",
-                        modifier = Modifier.size(40.dp),
+                    Text(
+                        text = formatMs(sliderValue.toLong()),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MHColors.OnHeroMuted,
+                    )
+                    Text(
+                        text = formatMs(duration.coerceAtLeast(0)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MHColors.OnHeroMuted,
                     )
                 }
-                IconButton(
-                    onClick = viewModel::skipNext,
-                    enabled = hasNext,
-                    modifier = Modifier.size(56.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.SkipNext,
-                        contentDescription = "Next",
-                        tint = MHColors.OnHero,
-                        modifier = Modifier.size(40.dp),
-                    )
-                }
-                IconButton(onClick = viewModel::cycleRepeat) {
-                    Icon(
-                        imageVector = if (repeatMode == Player.REPEAT_MODE_ONE)
-                            Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                        contentDescription = "Repeat",
-                        tint = if (repeatMode != Player.REPEAT_MODE_OFF)
-                            MaterialTheme.colorScheme.primary
-                        else MHColors.OnHeroMuted,
-                    )
-                }
-            }
 
-            Spacer(Modifier.height(MediaPlayerSpacing.M))
+                Spacer(Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = viewModel::toggleShuffle) {
+                        Icon(
+                            imageVector = Icons.Filled.Shuffle,
+                            contentDescription = "Shuffle",
+                            tint = if (shuffleEnabled) MaterialTheme.colorScheme.primary
+                                   else MHColors.OnHeroMuted,
+                        )
+                    }
+                    IconButton(
+                        onClick = viewModel::skipPrevious,
+                        enabled = hasPrevious,
+                        modifier = Modifier.size(56.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.SkipPrevious,
+                            contentDescription = "Previous",
+                            tint = MHColors.OnHero,
+                            modifier = Modifier.size(40.dp),
+                        )
+                    }
+                    FilledIconButton(
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.togglePlayPause()
+                        },
+                        modifier = Modifier.size(72.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MHColors.OnHero,
+                            contentColor = Color.Black,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            modifier = Modifier.size(40.dp),
+                        )
+                    }
+                    IconButton(
+                        onClick = viewModel::skipNext,
+                        enabled = hasNext,
+                        modifier = Modifier.size(56.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.SkipNext,
+                            contentDescription = "Next",
+                            tint = MHColors.OnHero,
+                            modifier = Modifier.size(40.dp),
+                        )
+                    }
+                    IconButton(onClick = viewModel::cycleRepeat) {
+                        Icon(
+                            imageVector = if (repeatMode == Player.REPEAT_MODE_ONE)
+                                Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                            contentDescription = "Repeat",
+                            tint = if (repeatMode != Player.REPEAT_MODE_OFF)
+                                MaterialTheme.colorScheme.primary
+                            else MHColors.OnHeroMuted,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(MediaPlayerSpacing.M))
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -491,11 +501,14 @@ private fun NowPlayingContent(
                 }
                 if (current.hasVideo) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { showVideo = true }) {
+                        IconButton(onClick = { showVideo = !showVideo }) {
                             Icon(
-                                imageVector = Icons.Filled.VideoLibrary,
-                                contentDescription = "Watch video",
-                                tint = MHColors.OnHeroMuted,
+                                imageVector = if (showVideo) Icons.Filled.MusicNote
+                                              else Icons.Filled.VideoLibrary,
+                                contentDescription = if (showVideo) "Back to audio"
+                                                     else "Watch video",
+                                tint = if (showVideo) MaterialTheme.colorScheme.primary
+                                       else MHColors.OnHeroMuted,
                             )
                         }
                         IconButton(
@@ -593,6 +606,13 @@ private fun NowPlayingContent(
                                 viewModel.saveCurrentAsAlarmSound()
                             },
                         )
+                        DropdownMenuItem(
+                            text = { Text("Report wrong song") },
+                            onClick = {
+                                overflowOpen = false
+                                confirmFlagWrong = true
+                            },
+                        )
                     }
                 }
             }
@@ -636,6 +656,28 @@ private fun NowPlayingContent(
             },
             dismissButton = {
                 TextButton(onClick = { confirmRedownload = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (confirmFlagWrong) {
+        AlertDialog(
+            onDismissRequest = { confirmFlagWrong = false },
+            title = { Text("Report wrong song?") },
+            text = {
+                Text(
+                    "“${current.title}” will be removed from your playlists, likes, and history, " +
+                        "and the file will be deleted from the server. This is permanent."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmFlagWrong = false
+                    viewModel.flagWrong(current.id)
+                }) { Text("Report") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmFlagWrong = false }) { Text("Cancel") }
             },
         )
     }

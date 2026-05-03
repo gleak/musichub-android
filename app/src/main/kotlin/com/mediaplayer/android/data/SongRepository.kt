@@ -32,6 +32,9 @@ class SongRepository(
 
     suspend fun redownload(songId: Long): SongDto = api.redownloadSong(songId)
 
+    /** Report a song as "wrong"; backend wipes the file + references. Irreversible. */
+    suspend fun flagWrong(songId: Long) = api.flagSongWrong(songId)
+
     suspend fun downloadVideo(songId: Long) = api.downloadVideo(songId)
 
     suspend fun getDownloadVideoStatus(songId: Long) = api.getDownloadVideoStatus(songId)

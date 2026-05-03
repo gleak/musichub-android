@@ -24,10 +24,12 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -56,6 +58,7 @@ import com.mediaplayer.android.ui.theme.MHColors
 import com.mediaplayer.android.ui.theme.MHGradient
 import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ForYouScreen(
     onPlaylistClick: (PlaylistDto) -> Unit = {},
@@ -63,16 +66,23 @@ fun ForYouScreen(
     viewModel: ForYouViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MHGradient.heroBg(Color(0xFF1A2010))),
     ) {
-        when (val s = state) {
-            ForYouUiState.Loading -> CenteredSpinner()
-            is ForYouUiState.Error -> ErrorWithRetry(s.message, viewModel::refresh)
-            is ForYouUiState.Ready -> ForYouContent(s.autoPlaylists, onPlaylistClick, onProfileClick)
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = viewModel::pullRefresh,
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            when (val s = state) {
+                ForYouUiState.Loading -> CenteredSpinner()
+                is ForYouUiState.Error -> ErrorWithRetry(s.message, viewModel::refresh)
+                is ForYouUiState.Ready -> ForYouContent(s.autoPlaylists, onPlaylistClick, onProfileClick)
+            }
         }
     }
 }

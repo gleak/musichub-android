@@ -180,7 +180,6 @@ private fun AuthGate(
                 else -> {
                     val currentUser = CurrentUser(
                         user = s.user,
-                        onSignIn = authVm::signOut, // upgrading from anon → drop anon state, return to LoginScreen
                         onSignOut = authVm::signOut,
                     )
                     CompositionLocalProvider(LocalCurrentUser provides currentUser) {
@@ -196,7 +195,6 @@ private fun AuthGate(
         else -> LoginScreen(
             state = authState,
             onSignIn = authVm::signIn,
-            onContinueAsGuest = authVm::signInAnonymously,
         )
     }
 }

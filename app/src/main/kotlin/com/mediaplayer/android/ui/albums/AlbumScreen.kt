@@ -162,11 +162,16 @@ fun AlbumScreen(
 
     sheetSong?.let { song ->
         val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(song.id, song.artist)
+        val flagWrong = com.mediaplayer.android.ui.common.rememberFlagWrongAction(
+            songId = song.id,
+            onFlagged = { viewModel.retry() },
+        )
         AddToPlaylistSheet(
             songTitle = song.title,
             songId = song.id,
             onDislikeSong = dislike.song(),
             onDislikeArtist = dislike.artist(),
+            onFlagWrong = flagWrong,
             onDismiss = { sheetSong = null },
         )
     }

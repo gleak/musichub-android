@@ -132,6 +132,7 @@ fun QueueSheet(
             songId = song.id,
             onDislikeSong = dislike.song(),
             onDislikeArtist = dislike.artist(),
+            onFlagWrong = { viewModel.flagWrong(song.id) },
             onDismiss = { sheetSong = null },
         )
     }

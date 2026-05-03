@@ -42,16 +42,28 @@ class MediaDownloadService : DownloadService(
         downloads: MutableList<Download>,
         notMetRequirements: Int,
     ): Notification {
-        val active = downloads.count {
+        val pending = downloads.filter {
             it.state == Download.STATE_DOWNLOADING || it.state == Download.STATE_QUEUED
+        }
+        val active = pending.size
+        val labelNow = pending.firstOrNull { it.state == Download.STATE_DOWNLOADING }
+            ?.request?.data
+            ?.toString(Charsets.UTF_8)
+            ?.takeIf { it.isNotBlank() }
+        val text = when {
+            active == 0 -> getString(R.string.download_finishing)
+            labelNow != null && active == 1 ->
+                getString(R.string.download_in_progress_one, labelNow)
+            labelNow != null ->
+                getString(R.string.download_in_progress_with_more, labelNow, active - 1)
+            active > 1 ->
+                getString(R.string.download_in_progress_count, active)
+            else -> getString(R.string.download_in_progress)
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(getString(R.string.download_channel_name))
-            .setContentText(
-                if (active == 0) getString(R.string.download_finishing)
-                else getString(R.string.download_in_progress)
-            )
+            .setContentText(text)
             .setOngoing(true)
             .setSilent(true)
             .build()

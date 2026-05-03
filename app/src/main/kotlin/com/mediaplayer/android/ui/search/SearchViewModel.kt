@@ -163,9 +163,9 @@ class SearchViewModel(
         }
     }
 
-    fun toggleDownload(songId: Long) {
+    fun toggleDownload(songId: Long, label: String? = null) {
         if (DownloadRepository.isDownloaded(songId)) DownloadRepository.remove(songId)
-        else DownloadRepository.download(songId)
+        else DownloadRepository.download(songId, label)
     }
 
     private suspend fun fetch(query: String, genre: String?): SearchUiState = try {

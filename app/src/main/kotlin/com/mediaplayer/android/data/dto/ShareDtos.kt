@@ -17,4 +17,11 @@ data class SharePreviewDto(
     val songCount: Int,
     val ownerName: String,
     val coverSongId: Long? = null,
+    /**
+     * True when the current user already owns the playlist or has previously
+     * accepted the share. Lets the client skip the "Add to library" CTA and
+     * navigate straight to the existing playlist instead of producing a
+     * duplicate. Defaulted so older backends still parse.
+     */
+    val alreadyAccessible: Boolean = false,
 )

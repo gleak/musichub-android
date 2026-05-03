@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.runtime.LaunchedEffect
 import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 import androidx.compose.material.icons.Icons
@@ -74,11 +78,31 @@ fun MiniPlayer(
     val current = song ?: return  // mini-player hidden until a track loads
     val haptics = LocalHapticFeedback.current
 
+    val dismissState = rememberSwipeToDismissBoxState(
+        // Re-key per track so dismissing one song doesn't pre-arm the bar
+        // for the next track that gets queued up.
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.StartToEnd ||
+                value == SwipeToDismissBoxValue.EndToStart
+            ) {
+                viewModel.dismissPlayback()
+                true
+            } else false
+        },
+    )
+    LaunchedEffect(current.id) { dismissState.reset() }
+
     val cardShape = CoverShapes.Card
-    Column(
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {},
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = MediaPlayerSpacing.S, vertical = MediaPlayerSpacing.Xs)
+            .padding(horizontal = MediaPlayerSpacing.S, vertical = MediaPlayerSpacing.Xs),
+    ) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
             .clip(cardShape)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable { onExpand() },
@@ -147,6 +171,7 @@ fun MiniPlayer(
             // background colour the mini-player ever sits on.
             trackColor = Color.White.copy(alpha = 0.18f),
         )
+    }
     }
 }
 

@@ -23,13 +23,19 @@ import kotlinx.coroutines.launch
 
 /**
  * Dialog flow for importing a shared playlist. Driven by a token coming
- * out of MainActivity's incoming-intent handler. Three phases:
- *  1. Loading — fetch the preview.
- *  2. Confirm — show owner + name + song count, ask user to import.
- *  3. Done / error — toast-equivalent then dismiss.
+ * out of MainActivity's incoming-intent handler.
  *
- * The recipient gets a *copy* of the playlist; the link does not grant
- * editing rights to the original.
+ * Phases:
+ *  1. Loading — fetch the preview.
+ *  2a. Already accessible — preview reports the user already owns the
+ *      playlist or is already a member; navigate straight in instead of
+ *      asking to "import" (the model is collaborative since 0.13.0, so a
+ *      second accept would be a no-op anyway).
+ *  2b. Confirm — show owner + name + song count, ask user to join.
+ *  3. Done / error — surface the error inline then let user dismiss.
+ *
+ * Joining grants edit rights — the recipient and owner edit the same row,
+ * not a snapshot copy.
  */
 @Composable
 fun PlaylistShareImporter(
@@ -45,7 +51,16 @@ fun PlaylistShareImporter(
 
     LaunchedEffect(token) {
         try {
-            preview = repository.previewShare(token)
+            val p = repository.previewShare(token)
+            if (p.alreadyAccessible) {
+                // Already in your library — accept() returns the existing
+                // detail without creating a duplicate. Skip the dialog and
+                // route the user straight to the playlist they already have.
+                val detail = repository.acceptShare(token)
+                onImported(detail.id, detail.name)
+            } else {
+                preview = p
+            }
         } catch (t: Throwable) {
             error = t.message ?: "Couldn't load shared playlist"
         }
@@ -53,7 +68,7 @@ fun PlaylistShareImporter(
 
     AlertDialog(
         onDismissRequest = { if (!importing) onDismiss() },
-        title = { Text("Import playlist?") },
+        title = { Text("Aggiungi alla libreria?") },
         text = {
             when {
                 error != null -> Text(
@@ -65,14 +80,14 @@ fun PlaylistShareImporter(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
-                    Text("Loading shared playlist…")
+                    Text("Carico la playlist condivisa…")
                 }
                 else -> {
                     val p = preview!!
-                    val songs = if (p.songCount == 1) "1 song" else "${p.songCount} songs"
+                    val songs = if (p.songCount == 1) "1 brano" else "${p.songCount} brani"
                     Text(
-                        text = "${p.ownerName} shared \"${p.playlistName}\" ($songs).\n" +
-                                "A copy will be added to your library.",
+                        text = "${p.ownerName} ha condiviso \"${p.playlistName}\" ($songs).\n" +
+                                "Vedrai gli aggiornamenti in tempo reale e potrai modificarla insieme a ${p.ownerName}.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -101,13 +116,13 @@ fun PlaylistShareImporter(
                             strokeWidth = 2.dp,
                         )
                     } else {
-                        Text("Import")
+                        Text("Aggiungi")
                     }
                 }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !importing) { Text("Close") }
+            TextButton(onClick = onDismiss, enabled = !importing) { Text("Chiudi") }
         },
     )
 }

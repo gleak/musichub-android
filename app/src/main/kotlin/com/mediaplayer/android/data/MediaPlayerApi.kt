@@ -79,6 +79,16 @@ interface MediaPlayerApi {
     suspend fun redownloadSong(@Path("id") id: Long): SongDto
 
     /**
+     * Report a song as "wrong" (mismatched audio for the title/artist).
+     * Backend hard-removes references from playlists/likes/history,
+     * deletes the audio/cover/video files from disk, and keeps the row
+     * as a tombstone so the YouTube importer refuses to re-download the
+     * same content. Global, irreversible.
+     */
+    @POST("api/songs/{id}/flag-wrong")
+    suspend fun flagSongWrong(@Path("id") id: Long)
+
+    /**
      * Kick off async MP4 video download. Backend returns 202 immediately and
      * runs yt-dlp on a virtual thread; clients poll
      * {@link #getDownloadVideoStatus} until DONE/ERROR. Replaces the prior
@@ -297,4 +307,12 @@ interface MediaPlayerApi {
 
     @GET("api/songs/{id}/lyrics")
     suspend fun getLyrics(@Path("id") id: Long): List<LyricLineDto>
+
+    /**
+     * On-demand lyric fetch for a single song. The backend no longer
+     * auto-downloads lyrics — the user has to ask for them via this call.
+     * Returns the imported lines on success; 404 if nothing was found.
+     */
+    @POST("api/songs/{id}/lyrics/import")
+    suspend fun importLyrics(@Path("id") id: Long): List<LyricLineDto>
 }
