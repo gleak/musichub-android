@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.13.0"
+    const val VERSION = "0.13.1"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,13 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.13.1",
+            title = "Errori di riproduzione spiegati",
+            highlights = listOf(
+                "Quando un brano non parte ora compare un dialog che spiega il motivo (file danneggiato, codec non supportato, server irraggiungibile, ecc.) invece di un toast generico. Resta in vista finché non lo chiudi e include il codice di errore tecnico per chi vuole approfondire.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.13.0",
             title = "Playlist condivise davvero, in tempo reale",

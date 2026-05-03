@@ -456,6 +456,70 @@ private fun AppScaffold(
             onDismiss = { AppUpdateChecker.dismiss(ctx, manifest) },
         )
     }
+
+    val playbackError by playbackVm.playbackError.collectAsStateWithLifecycle()
+    playbackError?.let { info ->
+        PlaybackErrorDialog(
+            info = info,
+            onDismiss = playbackVm::dismissPlaybackError,
+        )
+    }
+}
+
+@Composable
+private fun PlaybackErrorDialog(
+    info: com.mediaplayer.android.playback.PlaybackErrorInfo,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Filled.CloudOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+            )
+        },
+        title = { Text("Impossibile riprodurre") },
+        text = {
+            Column {
+                Text(
+                    text = info.songTitle,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                androidx.compose.foundation.layout.Spacer(
+                    modifier = Modifier.size(8.dp)
+                )
+                Text(
+                    text = info.reason,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                info.recoveryHint?.let { hint ->
+                    androidx.compose.foundation.layout.Spacer(
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        text = hint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                androidx.compose.foundation.layout.Spacer(
+                    modifier = Modifier.size(12.dp)
+                )
+                Text(
+                    text = "Codice: ${info.errorCodeName}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("OK")
+            }
+        },
+    )
 }
 
 @Composable

@@ -53,6 +53,18 @@ private val Context.playbackDataStore: DataStore<Preferences> by preferencesData
 private val PREF_SHUFFLE_KEY = booleanPreferencesKey("shuffle")
 private val PREF_REPEAT_KEY = intPreferencesKey("repeat")
 
+/**
+ * One playback failure surfaced to the UI as a dialog: human-readable [reason]
+ * for the user, raw [errorCodeName] for the curious, optional [recoveryHint]
+ * when the VM is already kicking off (or recommending) a retry.
+ */
+data class PlaybackErrorInfo(
+    val songTitle: String,
+    val reason: String,
+    val errorCodeName: String,
+    val recoveryHint: String? = null,
+)
+
 @UnstableApi
 class PlaybackViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -116,6 +128,15 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     private val _videoReinitializeError = MutableStateFlow<String?>(null)
     val videoReinitializeError: StateFlow<String?> = _videoReinitializeError.asStateFlow()
+
+    // Playback error surfaced to the UI as an AlertDialog. Replaces the older
+    // toast surface so the user sees *why* a song failed (codec / network /
+    // corruption) instead of just a generic "couldn't play" line that
+    // disappears on its own. Cleared when the user dismisses the dialog.
+    private val _playbackError = MutableStateFlow<PlaybackErrorInfo?>(null)
+    val playbackError: StateFlow<PlaybackErrorInfo?> = _playbackError.asStateFlow()
+
+    fun dismissPlaybackError() { _playbackError.value = null }
 
     // Per-session set of song IDs we've already auto-recovered after a
     // playback error. Prevents an infinite refresh→error→refresh loop when
@@ -272,22 +293,72 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         val title = current?.title?.takeIf { it.isNotBlank() } ?: "questo brano"
         val songId = current?.id
         val recoverable = isCorruptionLikeError(error)
+        val reason = humanReason(error)
 
         if (recoverable && songId != null && autoFixedSongs.add(songId)) {
-            toast("\"$title\" risulta danneggiato. Lo sto riscaricando…")
+            _playbackError.value = PlaybackErrorInfo(
+                songTitle = title,
+                reason = reason,
+                errorCodeName = error.errorCodeName,
+                recoveryHint = "Sto riscaricando il file dal server. Prova a riavviare il brano tra qualche secondo.",
+            )
             refreshLocalDownload()
             return
         }
 
         if (recoverable) {
-            toast(
-                "\"$title\" non riesce a partire neanche dopo il riscarico. " +
-                    "Prova \"Riscarica dalla sorgente\" dal menu del brano."
+            _playbackError.value = PlaybackErrorInfo(
+                songTitle = title,
+                reason = reason,
+                errorCodeName = error.errorCodeName,
+                recoveryHint = "Il riscarico dal server non ha risolto il problema. Prova \"Riscarica dalla sorgente\" dal menu del brano per recuperarlo da YouTube.",
             )
             return
         }
 
-        toast("Impossibile riprodurre \"$title\" (${error.errorCodeName}).")
+        _playbackError.value = PlaybackErrorInfo(
+            songTitle = title,
+            reason = reason,
+            errorCodeName = error.errorCodeName,
+        )
+    }
+
+    private fun humanReason(e: PlaybackException): String = when (e.errorCode) {
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
+            "Nessuna connessione di rete o server irraggiungibile."
+        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
+            "Il server ha rifiutato la richiesta dello stream (HTTP error)."
+        PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE ->
+            "Risposta del server non valida per uno stream audio."
+        PlaybackException.ERROR_CODE_IO_NO_PERMISSION ->
+            "Permesso negato per leggere il file audio."
+        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ->
+            "File audio non trovato sul dispositivo."
+        PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE ->
+            "Lettura del file audio fallita: dimensioni inattese (file probabilmente troncato)."
+        PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED ->
+            "Connessione in chiaro bloccata dalle policy di rete."
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ->
+            "File audio danneggiato (container malformato)."
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED ->
+            "Formato del file non riconosciuto."
+        PlaybackException.ERROR_CODE_DECODING_FAILED,
+        PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED ->
+            "Decodifica fallita: il flusso audio è corrotto o il codec ha rinunciato."
+        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ->
+            "Inizializzazione del decoder fallita: codec non supportato dal dispositivo."
+        PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
+        PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED ->
+            "Errore dell'output audio del dispositivo."
+        PlaybackException.ERROR_CODE_TIMEOUT ->
+            "Timeout durante la riproduzione."
+        PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW ->
+            "Posizione fuori dalla finestra di riproduzione live."
+        else -> e.localizedMessage?.takeIf { it.isNotBlank() }
+            ?: "Errore di riproduzione sconosciuto."
     }
 
     private fun isCorruptionLikeError(e: PlaybackException): Boolean = when (e.errorCode) {
@@ -300,13 +371,6 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE,
         PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> true
         else -> false
-    }
-
-    private fun toast(message: String) {
-        val ctx = getApplication<Application>()
-        android.os.Handler(ctx.mainLooper).post {
-            android.widget.Toast.makeText(ctx, message, android.widget.Toast.LENGTH_LONG).show()
-        }
     }
 
     init {
