@@ -71,9 +71,24 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Playlist share deep link. Recipients tap a `mediaplayer://share/<token>`
-                 URL from another app's share sheet and land here; MainActivity reads
-                 the token and shows the import preview. -->
+            <!-- Playlist share deep link — Android App Link over https.
+                 Messaging apps (WhatsApp/Telegram/SMS/Gmail) only auto-linkify
+                 http(s):// URLs, so the share text must be an https URL or
+                 recipients see plain text. `autoVerify=true` makes the system
+                 fetch /.well-known/assetlinks.json from the host on install
+                 and bind this filter to the app — a verified link opens
+                 directly in MainActivity, no chooser. If verification fails
+                 the filter still works (with a chooser). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https"
+                      android:host="92b70eb3-9758-47a7-a830-744a9d61f809.duckdns.org"
+                      android:pathPrefix="/share/" />
+            </intent-filter>
+            <!-- Back-compat for any `mediaplayer://share/<token>` links already
+                 sent before the https switch. Same MainActivity entry point. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

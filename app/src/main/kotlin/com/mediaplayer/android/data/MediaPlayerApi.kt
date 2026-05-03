@@ -21,6 +21,7 @@ import com.mediaplayer.android.data.dto.RequestDto
 import com.mediaplayer.android.data.dto.RequestSummaryDto
 import com.mediaplayer.android.data.dto.ReorderSongsRequest
 import com.mediaplayer.android.data.dto.SelectCandidateBody
+import com.mediaplayer.android.data.dto.SetAutoSyncRequest
 import com.mediaplayer.android.data.dto.ReinitStatusDto
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.data.dto.SpotifyImportResultDto
@@ -128,6 +129,12 @@ interface MediaPlayerApi {
     @DELETE("api/playlists/{id}")
     suspend fun deletePlaylist(@Path("id") id: Long)
 
+    @PATCH("api/playlists/{id}/auto-sync")
+    suspend fun setPlaylistAutoSync(
+        @Path("id") id: Long,
+        @Body body: SetAutoSyncRequest,
+    ): PlaylistDto
+
     @POST("api/playlists/{id}/songs")
     suspend fun addSongToPlaylist(
         @Path("id") id: Long,
@@ -226,6 +233,32 @@ interface MediaPlayerApi {
 
     @GET("api/liked/status")
     suspend fun getLikedStatus(@Query("ids") ids: List<Long>): List<Long>
+
+    // ---------- Dislikes ----------
+
+    @GET("api/dislikes/songs")
+    suspend fun getDislikedSongs(
+        @Query("page") page: Int = 0,
+        @Query("size") size: Int = 20,
+    ): PageResponse<SongDto>
+
+    @POST("api/dislikes/songs/{songId}")
+    suspend fun dislikeSong(@Path("songId") songId: Long)
+
+    @DELETE("api/dislikes/songs/{songId}")
+    suspend fun undislikeSong(@Path("songId") songId: Long)
+
+    @GET("api/dislikes/songs/status")
+    suspend fun getDislikedSongStatus(@Query("ids") ids: List<Long>): List<Long>
+
+    @GET("api/dislikes/artists")
+    suspend fun getDislikedArtists(): List<String>
+
+    @POST("api/dislikes/artists/{artist}")
+    suspend fun dislikeArtist(@Path("artist") artist: String)
+
+    @DELETE("api/dislikes/artists/{artist}")
+    suspend fun undislikeArtist(@Path("artist") artist: String)
 
     // ---------- Albums + Artists (M11b) ----------
 

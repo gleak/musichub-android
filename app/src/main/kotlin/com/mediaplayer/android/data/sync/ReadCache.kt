@@ -44,6 +44,8 @@ object ReadCache {
         const val LIKED_STATUS = "liked:status"
         const val HISTORY_RECENT = "history:recent"
         const val FOLLOW_LIST = "follow:list"
+        const val DISLIKED_SONGS_PAGE0 = "disliked-songs:page0"
+        const val DISLIKED_ARTISTS = "disliked-artists"
         fun playlistDetail(id: Long) = "playlist:detail:$id"
     }
 

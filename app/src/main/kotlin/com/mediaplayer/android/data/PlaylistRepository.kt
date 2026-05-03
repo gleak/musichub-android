@@ -6,6 +6,7 @@ import com.mediaplayer.android.data.dto.PlaylistDetailDto
 import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.data.dto.RenamePlaylistRequest
 import com.mediaplayer.android.data.dto.ReorderSongsRequest
+import com.mediaplayer.android.data.dto.SetAutoSyncRequest
 import com.mediaplayer.android.data.dto.ShareLinkDto
 import com.mediaplayer.android.data.dto.SharePreviewDto
 import com.mediaplayer.android.data.sync.ReadCache
@@ -60,6 +61,9 @@ class PlaylistRepository(
     suspend fun delete(id: Long) {
         api.deletePlaylist(id)
     }
+
+    suspend fun setAutoSync(id: Long, enabled: Boolean): PlaylistDto =
+        api.setPlaylistAutoSync(id, SetAutoSyncRequest(enabled))
 
     suspend fun addSong(playlistId: Long, songId: Long): PlaylistDetailDto =
         api.addSongToPlaylist(playlistId, AddSongRequest(songId))

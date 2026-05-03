@@ -20,6 +20,13 @@ data class PlaylistDto(
     val coverSongId: Long? = null,
     val kind: String = "USER",
     val lastRefreshedAt: String? = null,
+    /**
+     * Up to four track ids backing a 2×2 cover collage on auto-playlist
+     * tiles. Defaulted to empty so the field is forward-compatible with
+     * older backend builds that don't emit it.
+     */
+    val coverSongIds: List<Long> = emptyList(),
+    val autoSync: Boolean = false,
 ) {
     val isAuto: Boolean get() = kind != "USER"
 }

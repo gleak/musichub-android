@@ -91,11 +91,15 @@ import kotlinx.coroutines.launch
 
 @UnstableApi
 class MainActivity : ComponentActivity() {
-    // Pending share token from a `mediaplayer://share/<token>` deep link.
-    // Held as Compose state so the AppScaffold can pop the import dialog
-    // as soon as it lands. `singleTask` launchMode means a deep link
-    // tapped while the app is alive routes through onNewIntent — both
-    // entry points feed this same state.
+    // Pending share token from a playlist share deep link. Two link
+    // shapes feed this: the new `https://<host>/share/<token>` App Link
+    // (auto-linkified in chats and verified at install time) and the
+    // legacy `mediaplayer://share/<token>` custom-scheme URL still alive
+    // in messages sent before the https switch. Held as Compose state so
+    // the AppScaffold can pop the import dialog as soon as it lands.
+    // `singleTask` launchMode means a deep link tapped while the app is
+    // alive routes through onNewIntent — both entry points feed this
+    // same state.
     private val pendingShareToken = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -121,7 +125,14 @@ class MainActivity : ComponentActivity() {
 
     private fun consumeShareIntent(intent: Intent?) {
         val data = intent?.data ?: return
-        if (data.scheme != "mediaplayer" || data.host != "share") return
+        // Accept either the legacy custom scheme (`mediaplayer://share/<t>`)
+        // or the App Link form (`https://.../share/<t>`). The path layout is
+        // identical in both cases — the token is the last segment after a
+        // `/share/` (or `share` host for the custom scheme) prefix.
+        val matchesLegacy = data.scheme == "mediaplayer" && data.host == "share"
+        val matchesAppLink = data.scheme == "https" &&
+            data.pathSegments.firstOrNull() == "share"
+        if (!matchesLegacy && !matchesAppLink) return
         val token = data.lastPathSegment?.takeIf { it.isNotBlank() } ?: return
         pendingShareToken.value = token
     }
@@ -200,6 +211,7 @@ internal object Routes {
     const val SETTINGS_CROSSFADE = "profile/crossfade"
     const val SETTINGS_DOWNLOAD = "profile/download"
     const val SETTINGS_THEME = "profile/theme"
+    const val SETTINGS_DISLIKED = "profile/disliked"
     const val FIND = "find"
     const val LIBRARY = "library"
     const val PLAYLIST_DETAIL = "playlists/{playlistId}"
@@ -547,6 +559,11 @@ private fun NavHostBody(
             }
             composable(Routes.SETTINGS_THEME) {
                 com.mediaplayer.android.ui.profile.settings.ThemeScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.SETTINGS_DISLIKED) {
+                com.mediaplayer.android.ui.profile.settings.DislikedScreen(
                     onBack = { navController.popBackStack() },
                 )
             }

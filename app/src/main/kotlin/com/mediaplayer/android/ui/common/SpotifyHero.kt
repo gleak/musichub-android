@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.FilledIconButton
@@ -88,6 +89,7 @@ fun SpotifyHero(
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     playEnabled: Boolean = true,
+    isPlaying: Boolean = false,
     extraActions: @Composable () -> Unit = {},
 ) {
     var dominant by remember(coverModel) {
@@ -191,8 +193,8 @@ fun SpotifyHero(
                     ),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = "Play",
+                        imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
                         modifier = Modifier.size(32.dp),
                     )
                 }

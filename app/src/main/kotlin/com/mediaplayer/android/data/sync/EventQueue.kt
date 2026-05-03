@@ -107,7 +107,10 @@ internal class SyncDb(context: Context) :
     }
 }
 
-enum class EventType { PLAY, LIKE, UNLIKE, FOLLOW, UNFOLLOW }
+enum class EventType {
+    PLAY, LIKE, UNLIKE, FOLLOW, UNFOLLOW,
+    DISLIKE_SONG, UNDISLIKE_SONG, DISLIKE_ARTIST, UNDISLIKE_ARTIST,
+}
 
 private data class Row(
     val id: Long,
@@ -167,6 +170,22 @@ object EventQueue {
     suspend fun enqueueUnfollow(artist: String) =
         insert(EventType.UNFOLLOW, artist,
             dedupeKey = "UNFOLLOW:$artist", replaceKey = "FOLLOW:$artist")
+
+    suspend fun enqueueDislikeSong(songId: Long) =
+        insert(EventType.DISLIKE_SONG, songId.toString(),
+            dedupeKey = "DISLIKE_SONG:$songId", replaceKey = "UNDISLIKE_SONG:$songId")
+
+    suspend fun enqueueUndislikeSong(songId: Long) =
+        insert(EventType.UNDISLIKE_SONG, songId.toString(),
+            dedupeKey = "UNDISLIKE_SONG:$songId", replaceKey = "DISLIKE_SONG:$songId")
+
+    suspend fun enqueueDislikeArtist(artist: String) =
+        insert(EventType.DISLIKE_ARTIST, artist,
+            dedupeKey = "DISLIKE_ARTIST:$artist", replaceKey = "UNDISLIKE_ARTIST:$artist")
+
+    suspend fun enqueueUndislikeArtist(artist: String) =
+        insert(EventType.UNDISLIKE_ARTIST, artist,
+            dedupeKey = "UNDISLIKE_ARTIST:$artist", replaceKey = "DISLIKE_ARTIST:$artist")
 
     private suspend fun insert(
         type: EventType,
@@ -241,6 +260,10 @@ object EventQueue {
             EventType.UNLIKE -> api.unlikeSong(row.payload.toLong())
             EventType.FOLLOW -> api.followArtist(row.payload)
             EventType.UNFOLLOW -> api.unfollowArtist(row.payload)
+            EventType.DISLIKE_SONG -> api.dislikeSong(row.payload.toLong())
+            EventType.UNDISLIKE_SONG -> api.undislikeSong(row.payload.toLong())
+            EventType.DISLIKE_ARTIST -> api.dislikeArtist(row.payload)
+            EventType.UNDISLIKE_ARTIST -> api.undislikeArtist(row.payload)
         }
     }
 

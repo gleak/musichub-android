@@ -18,7 +18,9 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddToPhotos
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -73,6 +75,8 @@ fun AddToPlaylistSheet(
     onPlayNext: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
     onDownload: (() -> Unit)? = null,
+    onDislikeSong: (() -> Unit)? = null,
+    onDislikeArtist: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onAdded: (playlistName: String) -> Unit = {},
 ) {
@@ -154,6 +158,22 @@ fun AddToPlaylistSheet(
                     label = "Download",
                     icon = { Icon(Icons.Filled.FileDownload, contentDescription = null) },
                     onClick = { onDownload(); onDismiss() },
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            if (onDislikeSong != null) {
+                QueueActionRow(
+                    label = "Non consigliarmi questo brano",
+                    icon = { Icon(Icons.Filled.ThumbDown, contentDescription = null) },
+                    onClick = { onDislikeSong(); onDismiss() },
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            if (onDislikeArtist != null) {
+                QueueActionRow(
+                    label = "Non consigliarmi questo artista",
+                    icon = { Icon(Icons.Filled.PersonOff, contentDescription = null) },
+                    onClick = { onDislikeArtist(); onDismiss() },
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }

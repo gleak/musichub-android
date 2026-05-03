@@ -243,6 +243,11 @@ fun ProfileScreen(
                     detail = dailyMixDetail,
                     onClick = onDailyMixClick,
                 )
+                SettingsRow(
+                    label = "Non consigliarmi",
+                    detail = "Brani e artisti esclusi",
+                    onClick = { onOpenSetting("profile/disliked") },
+                )
             }
         }
         item {

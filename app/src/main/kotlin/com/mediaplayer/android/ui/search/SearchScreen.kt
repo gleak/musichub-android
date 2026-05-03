@@ -230,12 +230,15 @@ fun SearchScreen(
     }
 
     sheetSong?.let { song ->
+        val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(song.id, song.artist)
         AddToPlaylistSheet(
             songTitle = song.title,
             songId = song.id,
             onPlayNext = onPlayNext?.let { cb -> { cb(song); sheetSong = null } },
             onAddToQueue = onAddToQueue?.let { cb -> { cb(song); sheetSong = null } },
             onDownload = { viewModel.toggleDownload(song.id) },
+            onDislikeSong = dislike.song(),
+            onDislikeArtist = dislike.artist(),
             onDismiss = { sheetSong = null },
             onAdded = { playlistName ->
                 lastAdded = "Added to $playlistName"

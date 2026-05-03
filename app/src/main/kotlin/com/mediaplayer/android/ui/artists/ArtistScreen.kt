@@ -226,9 +226,12 @@ fun ArtistScreen(
     }
 
     sheetSong?.let { song ->
+        val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(song.id, song.artist)
         AddToPlaylistSheet(
             songTitle = song.title,
             songId = song.id,
+            onDislikeSong = dislike.song(),
+            onDislikeArtist = dislike.artist(),
             onDismiss = { sheetSong = null },
         )
     }

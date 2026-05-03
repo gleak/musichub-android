@@ -41,6 +41,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
@@ -54,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
 import com.mediaplayer.android.data.PlaylistRepository
+import com.mediaplayer.android.playback.PlaybackViewModel
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -201,6 +204,7 @@ fun PlaylistDetailScreen(
                         playlist = s.playlist,
                         downloadedCount = downloadedCount,
                         downloadedIds = downloadedIds,
+                        playlistSongIds = songIds.toSet(),
                         onPlayFromIndex = onPlayFromIndex,
                         onShufflePlay = onShufflePlay,
                         onRemoveSong = { songId ->
@@ -217,6 +221,7 @@ fun PlaylistDetailScreen(
                             if (!onWifi) snackMessage = "Download queued — will start on Wi-Fi"
                         },
                         onRemoveDownloads = viewModel::removePlaylistDownloads,
+                        onToggleAutoSync = viewModel::toggleAutoSync,
                     )
                 }
             }
@@ -224,9 +229,12 @@ fun PlaylistDetailScreen(
     }
 
     sheetSong?.let { song ->
+        val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(song.id, song.artist)
         AddToPlaylistSheet(
             songTitle = song.title,
             songId = song.id,
+            onDislikeSong = dislike.song(),
+            onDislikeArtist = dislike.artist(),
             onDismiss = { sheetSong = null },
             onAdded = { playlistName ->
                 snackMessage = "Added to $playlistName"
@@ -252,6 +260,7 @@ private fun PlaylistDetailBody(
     playlist: PlaylistDetailDto,
     downloadedCount: Int,
     downloadedIds: Set<Long>,
+    playlistSongIds: Set<Long>,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
     onShufflePlay: (List<SongDto>) -> Unit,
     onRemoveSong: (Long) -> Unit,
@@ -259,7 +268,16 @@ private fun PlaylistDetailBody(
     onLongPressSong: (SongDto) -> Unit,
     onDownload: () -> Unit,
     onRemoveDownloads: () -> Unit,
+    onToggleAutoSync: () -> Unit,
 ) {
+    val playbackVm: PlaybackViewModel = viewModel()
+    val playerIsPlaying by playbackVm.isPlaying.collectAsStateWithLifecycle()
+    val playerCurrentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
+    // "Playing this playlist" = player is in a play state AND its current
+    // track belongs to this playlist. Drives the hero's play→pause toggle
+    // so a tap visibly switches to the pause icon instead of relooping
+    // playback from track 0.
+    val playingFromHere = playerIsPlaying && (playerCurrentSong?.id in playlistSongIds)
     val lazyListState = rememberLazyListState()
     // `entries` holds PlaylistSongEntryDto so each row carries its
     // playlist_songs.id — that's the stable per-occurrence key the
@@ -307,9 +325,13 @@ private fun PlaylistDetailBody(
                 title = playlist.name,
                 subtitle = subtitleStr,
                 coverModel = null,
-                onPlay = { if (entries.isNotEmpty()) onPlayFromIndex(songsForPlayback, 0) },
+                onPlay = {
+                    if (playingFromHere) playbackVm.togglePlayPause()
+                    else if (entries.isNotEmpty()) onPlayFromIndex(songsForPlayback, 0)
+                },
                 onShuffle = { onShufflePlay(songsForPlayback) },
                 playEnabled = entries.isNotEmpty(),
+                isPlaying = playingFromHere,
                 extraActions = {
                     if (playlist.songs.isNotEmpty()) {
                         IconButton(
@@ -333,6 +355,13 @@ private fun PlaylistDetailBody(
                     family = com.mediaplayer.android.ui.common.familyOf(playlist.kind),
                     songCount = playlist.songs.size,
                     lastRefreshedAt = playlist.lastRefreshedAt,
+                )
+            }
+        } else {
+            item(key = "auto_sync") {
+                AutoSyncCard(
+                    enabled = playlist.autoSync,
+                    onToggle = onToggleAutoSync,
                 )
             }
         }
@@ -434,6 +463,55 @@ private fun PlaylistDetailBody(
 
 private fun pluralizeSongsDetail(count: Int): String =
     if (count == 1) "1 brano" else "$count brani"
+
+@Composable
+private fun AutoSyncCard(
+    enabled: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(com.mediaplayer.android.ui.theme.MHColors.Card)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.CloudDownload,
+            contentDescription = null,
+            tint = if (enabled) com.mediaplayer.android.ui.theme.MHColors.Lime
+                   else com.mediaplayer.android.ui.theme.MHColors.TextLo,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Sincronizzazione automatica",
+                style = MaterialTheme.typography.bodyMedium,
+                color = com.mediaplayer.android.ui.theme.MHColors.TextHi,
+            )
+            Text(
+                text = "Scarica i nuovi brani all'apertura dell'app. Disattivata per impostazione predefinita.",
+                style = MaterialTheme.typography.bodySmall,
+                color = com.mediaplayer.android.ui.theme.MHColors.TextLo,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Switch(
+            checked = enabled,
+            onCheckedChange = { onToggle() },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = com.mediaplayer.android.ui.theme.MHColors.TextHi,
+                checkedTrackColor = com.mediaplayer.android.ui.theme.MHColors.Lime,
+                uncheckedThumbColor = com.mediaplayer.android.ui.theme.MHColors.TextLo,
+                uncheckedTrackColor = com.mediaplayer.android.ui.theme.MHColors.Card,
+            ),
+        )
+    }
+}
 
 @Composable
 private fun AutoPlaylistMetaStrip(

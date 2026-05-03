@@ -2,8 +2,12 @@ package com.mediaplayer.android.ui.common
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -16,11 +20,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.ui.theme.LocalMHMono
 import com.mediaplayer.android.ui.theme.MHColors
 import com.mediaplayer.android.ui.theme.MonoFamily
@@ -239,4 +246,118 @@ private fun DrawScope.drawMood(a: Color, b: Color) {
 
 private fun DrawScope.drawNext(a: Color, b: Color) {
     drawRect(Brush.linearGradient(0f to a, 1f to b))
+}
+
+/**
+ * Auto-playlist cover composed of up to four track artworks in a 2×2
+ * grid, with the family gradient as the background fill. Empty grid
+ * cells (when fewer than four ids are supplied) leave the gradient
+ * showing through. The numbered badge sits bottom-right so it doesn't
+ * land dead-center over an artwork tile, and the family eyebrow stays
+ * top-left for parity with [GeneratedCover]. Falls through to
+ * [GeneratedCover] when [songIds] is empty.
+ */
+@Composable
+fun CollageCover(
+    kind: String?,
+    badge: String,
+    songIds: List<Long>,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 8.dp,
+) {
+    if (songIds.isEmpty()) {
+        GeneratedCover(
+            family = familyOf(kind),
+            badge = badge,
+            subtitle = subtitle,
+            modifier = modifier,
+            cornerRadius = cornerRadius,
+        )
+        return
+    }
+    val mono = LocalMHMono.current
+    val cells = (0 until 4).map { i -> songIds.getOrNull(i) }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(autoPlaylistGradient(kind)),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            CollageRow(cells[0], cells[1], Modifier.weight(1f).fillMaxWidth())
+            CollageRow(cells[2], cells[3], Modifier.weight(1f).fillMaxWidth())
+        }
+        // 60% black scrim only behind the bottom-right badge so it stays
+        // legible against bright artwork without darkening the whole tile.
+        Text(
+            text = "// ${familyEyebrowFor(kind)}",
+            style = mono.eyebrow.copy(color = Color.White.copy(alpha = 0.85f)),
+            modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+        )
+        if (badge.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = badge,
+                    style = TextStyle(
+                        fontFamily = MonoFamily,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        letterSpacing = (-1).sp,
+                    ),
+                )
+            }
+        }
+        if (subtitle != null) {
+            Text(
+                text = subtitle,
+                color = Color.White,
+                style = TextStyle(
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+                maxLines = 2,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CollageRow(left: Long?, right: Long?, modifier: Modifier) {
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+        CollageCell(left, Modifier.weight(1f).fillMaxSize())
+        CollageCell(right, Modifier.weight(1f).fillMaxSize())
+    }
+}
+
+@Composable
+private fun CollageCell(songId: Long?, modifier: Modifier) {
+    if (songId == null) {
+        Box(modifier)
+        return
+    }
+    AsyncImage(
+        model = Network.coverUrl(songId),
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = modifier,
+    )
+}
+
+private fun familyEyebrowFor(kind: String?): String = when (familyOf(kind)) {
+    AutoPlaylistFamily.Rotation -> "ROTATION"
+    AutoPlaylistFamily.Daily -> "MIX"
+    AutoPlaylistFamily.Releases -> "DROP"
+    AutoPlaylistFamily.Capsule -> "CAPSULE"
+    AutoPlaylistFamily.Radar -> "RADAR"
+    AutoPlaylistFamily.Mood -> "MOOD"
+    AutoPlaylistFamily.Next -> "NEXT"
 }

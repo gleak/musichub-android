@@ -42,20 +42,20 @@ import com.mediaplayer.android.ui.theme.LocalMHMono
 import com.mediaplayer.android.ui.theme.MHColors
 
 /**
- * Dialog shown when the user taps "Condividi" on a playlist. Generates
- * a `mediaplayer://share/<token>` link, lets the user copy or open the
- * system share sheet. One-shot copy semantics — the recipient receives
- * a snapshot, no live sync.
+ * Dialog shown when the user taps "Condividi" on a playlist. Displays
+ * the share URL minted by the backend (an `https://<host>/share/<token>`
+ * App Link, auto-linkified by messaging apps) and lets the user copy
+ * or open the system share sheet. One-shot copy semantics — the
+ * recipient receives a snapshot, no live sync.
  */
 @Composable
 fun PlaylistShareDialog(
     playlistName: String,
-    shareToken: String,
+    link: String,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
     val mono = LocalMHMono.current
-    val link = "mediaplayer://share/$shareToken"
 
     Dialog(
         onDismissRequest = onDismiss,

@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.11.7"
+    const val VERSION = "0.12.1"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,41 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.12.1",
+            title = "Sincronizzazione automatica più chiara",
+            highlights = listOf(
+                "Nella schermata di una playlist trovi adesso una scheda \"Sincronizzazione automatica\" sotto la copertina, con interruttore esplicito e descrizione (\"Scarica i nuovi brani all'apertura dell'app\"). Prima la stessa funzione era nascosta dietro un'icona di sincronizzazione in alto a destra che pochi notavano.",
+                "Comportamento confermato: l'interruttore è disattivato per impostazione predefinita su tutte le playlist. La sincronizzazione automatica parte solo quando lo attivi tu.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.12.0",
+            title = "\"Non consigliarmi\" — escludi brani e artisti dai consigli",
+            highlights = listOf(
+                "Nuovo: dal menu kebab di un brano puoi scegliere \"Non consigliarmi questo brano\" o \"Non consigliarmi questo artista\". Le playlist generate dal sistema (Discover Daily, On Repeat, Release Radar, Daily Mix 1–6, Time Capsule, Mood, Up Next, Radar) saltano da subito quei brani e quegli artisti, anche quando il segnale di ascolto è forte.",
+                "Quando segni un artista come \"Non consigliarmi\", il server toglie automaticamente il \"Segui artista\" se attivo — segnali contraddittori non convivono.",
+                "Profilo → Riproduzione → Non consigliarmi: schermata con due tab (Brani / Artisti) per vedere cosa hai escluso e ripristinare con un tap.",
+                "On Repeat ora pesa ogni ascolto in base al completion ratio: una traccia ascoltata 50× con il 30% di completamento finisce sotto a una ascoltata 20× fino in fondo. Gli skip pesano in negativo invece di essere semplicemente ignorati.",
+                "I dislike vengono inviati al server con la stessa coda offline di Mi piace e Segui — premili senza rete e si sincronizzano da soli quando la connessione torna.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.11.9",
+            title = "Sincronizzazione automatica delle playlist",
+            highlights = listOf(
+                "Nuova icona di sincronizzazione (in alto a destra nella schermata di una playlist) per attivare la sincronizzazione automatica. Quando è attiva, ogni volta che apri l'app i brani della playlist vengono confrontati con quelli già scaricati sul telefono e i mancanti vengono messi automaticamente in coda di download. La preferenza è salvata sul server, quindi vale per ogni dispositivo collegato allo stesso account.",
+                "Comportamento: il download rispetta i toggle esistenti di Profilo → Riproduzione → Download offline (Solo Wi-Fi e Download automatico).",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.11.8",
+            title = "Link di condivisione playlist cliccabili",
+            highlights = listOf(
+                "I link generati da \"Condividi playlist\" sono ora URL https cliccabili nelle chat (WhatsApp, Telegram, Messaggi, Gmail). Prima erano un indirizzo `mediaplayer://...` che le app di messaggistica trattavano come testo semplice e il destinatario non poteva toccare per importare. Adesso il sistema riconosce il link, lo apre direttamente nell'app se installata, altrimenti mostra una pagina con il pulsante \"Apri nell'app\".",
+                "I link condivisi prima della 0.11.8 (formato `mediaplayer://share/...`) continuano a funzionare — l'app accetta entrambi i formati.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.11.6",
             title = "Sincronizzazione offline e rifinitura del precaricamento",

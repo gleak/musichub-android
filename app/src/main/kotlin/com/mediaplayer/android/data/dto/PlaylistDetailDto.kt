@@ -15,6 +15,7 @@ data class PlaylistDetailDto(
     val songs: List<PlaylistSongEntryDto>,
     val kind: String = "USER",
     val lastRefreshedAt: String? = null,
+    val autoSync: Boolean = false,
 ) {
     val isAuto: Boolean get() = kind != "USER"
 }

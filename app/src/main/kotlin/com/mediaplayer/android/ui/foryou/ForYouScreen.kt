@@ -44,6 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.ui.common.AutoPlaylistFamily
 import com.mediaplayer.android.ui.common.CenteredSpinner
+import com.mediaplayer.android.ui.common.CollageCover
 import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.EyebrowText
 import com.mediaplayer.android.ui.common.GeneratedCover
@@ -266,9 +267,10 @@ private fun MixGrid(mixes: List<PlaylistDto>, onClick: (PlaylistDto) -> Unit) {
 @Composable
 private fun MixTile(pl: PlaylistDto, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier = modifier.clickable(onClick = onClick)) {
-        GeneratedCover(
-            family = AutoPlaylistFamily.Daily,
+        CollageCover(
+            kind = pl.kind,
             badge = badgeFor(pl.kind),
+            songIds = pl.coverSongIds,
             subtitle = pl.name,
             modifier = Modifier
                 .fillMaxWidth()

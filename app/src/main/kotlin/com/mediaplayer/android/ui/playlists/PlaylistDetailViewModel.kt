@@ -98,4 +98,26 @@ class PlaylistDetailViewModel(
         val entries = (state.value as? PlaylistDetailUiState.Success)?.playlist?.songs ?: return
         DownloadRepository.removeAll(entries.map { it.song.id })
     }
+
+    fun toggleAutoSync() {
+        val current = (state.value as? PlaylistDetailUiState.Success)?.playlist ?: return
+        val next = !current.autoSync
+        // Optimistic flip so the icon doesn't lag the tap; on failure we
+        // refresh() and the server's value reasserts.
+        _state.value = PlaylistDetailUiState.Success(current.copy(autoSync = next))
+        viewModelScope.launch {
+            try {
+                repository.setAutoSync(playlistId, next)
+                // If the toggle just turned on, kick the runner so the user
+                // doesn't have to wait for the next cold launch.
+                if (next) {
+                    val missing = current.songs.map { it.song.id }
+                        .filterNot { DownloadRepository.isDownloaded(it) }
+                    DownloadRepository.downloadAll(missing)
+                }
+            } catch (_: Throwable) {
+                refresh()
+            }
+        }
+    }
 }
