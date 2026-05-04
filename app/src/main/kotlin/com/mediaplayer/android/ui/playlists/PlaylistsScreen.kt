@@ -125,7 +125,7 @@ fun PlaylistsScreen(
         ExtendedFloatingActionButton(
             onClick = { createOpen = true },
             icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-            text = { Text("New") },
+            text = { Text("Nuova") },
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier
@@ -519,23 +519,23 @@ private fun PlaylistTile(
         val isMember = !playlist.isOwner
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text(if (isMember) "Rimuovi dalla libreria?" else "Delete playlist?") },
+            title = { Text(if (isMember) "Rimuovi dalla libreria?" else "Eliminare la playlist?") },
             text = {
                 Text(
                     if (isMember) "\"${playlist.name}\" sparirà dalla tua libreria. " +
                         "Continuerà ad esistere per ${playlist.ownerName ?: "il proprietario"} " +
                         "e gli altri membri."
-                    else "\"${playlist.name}\" will be permanently removed."
+                    else "\"${playlist.name}\" verrà eliminata definitivamente."
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
                     onDelete()
-                }) { Text(if (isMember) "Rimuovi" else "Delete") }
+                }) { Text(if (isMember) "Rimuovi" else "Elimina") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmDelete = false }) { Text("Annulla") }
             },
         )
     }
@@ -549,13 +549,13 @@ private fun CreatePlaylistDialog(
     var text by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New playlist") },
+        title = { Text("Nuova playlist") },
         text = {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
-                placeholder = { Text("Playlist name") },
+                placeholder = { Text("Nome playlist") },
                 modifier = Modifier.fillMaxWidth(),
             )
         },
@@ -563,14 +563,14 @@ private fun CreatePlaylistDialog(
             TextButton(
                 onClick = { onConfirm(text) },
                 enabled = text.trim().isNotEmpty(),
-            ) { Text("Create") }
+            ) { Text("Crea") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text("Annulla") }
         },
     )
 }
 
 
 private fun pluralizeSongs(count: Int): String =
-    if (count == 1) "1 song" else "$count songs"
+    if (count == 1) "1 brano" else "$count brani"

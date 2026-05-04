@@ -367,7 +367,7 @@ private fun NowPlayingContent(
                 }) {
                     Icon(
                         imageVector = if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                        contentDescription = if (liked) "Unlike" else "Like",
+                        contentDescription = if (liked) "Rimuovi mi piace" else "Mi piace",
                         tint = if (liked) MaterialTheme.colorScheme.primary else MHColors.OnHero,
                     )
                 }
@@ -495,7 +495,7 @@ private fun NowPlayingContent(
                 IconButton(onClick = { showLyrics = !showLyrics }) {
                     Icon(
                         imageVector = Icons.Filled.TextSnippet,
-                        contentDescription = "Lyrics",
+                        contentDescription = "Testo",
                         tint = MHColors.OnHeroMuted,
                     )
                 }
@@ -505,8 +505,8 @@ private fun NowPlayingContent(
                             Icon(
                                 imageVector = if (showVideo) Icons.Filled.MusicNote
                                               else Icons.Filled.VideoLibrary,
-                                contentDescription = if (showVideo) "Back to audio"
-                                                     else "Watch video",
+                                contentDescription = if (showVideo) "Torna all'audio"
+                                                     else "Guarda il video",
                                 tint = if (showVideo) MaterialTheme.colorScheme.primary
                                        else MHColors.OnHeroMuted,
                             )
@@ -524,7 +524,7 @@ private fun NowPlayingContent(
                             } else {
                                 Icon(
                                     imageVector = Icons.Filled.Tune,
-                                    contentDescription = "Reinitialize video for fast seeking",
+                                    contentDescription = "Reinizializza il video per la ricerca rapida",
                                     tint = MHColors.OnHeroDim,
                                 )
                             }
@@ -544,7 +544,7 @@ private fun NowPlayingContent(
                         } else {
                             Icon(
                                 imageVector = Icons.Filled.VideoFile,
-                                contentDescription = "Download video",
+                                contentDescription = "Scarica il video",
                                 tint = MHColors.OnHeroDim,
                             )
                         }
@@ -553,14 +553,14 @@ private fun NowPlayingContent(
                 IconButton(onClick = { showEqualizer = true }) {
                     Icon(
                         imageVector = Icons.Filled.Equalizer,
-                        contentDescription = "Equalizer",
+                        contentDescription = "Equalizzatore",
                         tint = MHColors.OnHeroMuted,
                     )
                 }
                 IconButton(onClick = { showQueue = true }) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                        contentDescription = "Queue",
+                        contentDescription = "Coda",
                         tint = MHColors.OnHeroMuted,
                     )
                 }
@@ -568,7 +568,7 @@ private fun NowPlayingContent(
                     IconButton(onClick = { overflowOpen = true }) {
                         Icon(
                             imageVector = Icons.Filled.MoreVert,
-                            contentDescription = "More",
+                            contentDescription = "Altro",
                             tint = MHColors.OnHeroMuted,
                         )
                     }
@@ -577,7 +577,7 @@ private fun NowPlayingContent(
                         onDismissRequest = { overflowOpen = false },
                     ) {
                         DropdownMenuItem(
-                            text = { Text(if (redownloading) "Re-downloading…" else "Re-download from source") },
+                            text = { Text(if (redownloading) "Riscaricamento…" else "Riscarica dalla sorgente") },
                             enabled = !redownloading,
                             onClick = {
                                 overflowOpen = false
@@ -585,7 +585,7 @@ private fun NowPlayingContent(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Refresh local copy") },
+                            text = { Text("Aggiorna copia locale") },
                             enabled = !redownloading,
                             onClick = {
                                 overflowOpen = false
@@ -596,8 +596,8 @@ private fun NowPlayingContent(
                             text = {
                                 Text(
                                     if (alarmExport is PlaybackViewModel.AlarmExportState.Exporting)
-                                        "Saving as alarm…"
-                                    else "Save as alarm sound"
+                                        "Salvataggio come suoneria…"
+                                    else "Salva come suoneria sveglia"
                                 )
                             },
                             enabled = alarmExport !is PlaybackViewModel.AlarmExportState.Exporting,
@@ -607,7 +607,7 @@ private fun NowPlayingContent(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Report wrong song") },
+                            text = { Text("Segnala brano sbagliato") },
                             onClick = {
                                 overflowOpen = false
                                 confirmFlagWrong = true
@@ -640,22 +640,22 @@ private fun NowPlayingContent(
     if (confirmRedownload) {
         AlertDialog(
             onDismissRequest = { confirmRedownload = false },
-            title = { Text("Re-download from source?") },
+            title = { Text("Riscaricare dalla sorgente?") },
             text = {
                 Text(
-                    "Delete the current audio and cover for \"${current.title}\" and " +
-                        "fetch them again from the original source. Useful when the file " +
-                        "is corrupted or the cover is wrong."
+                    "Elimina audio e copertina di \"${current.title}\" e li riscarica " +
+                        "dalla sorgente originale. Utile se il file è danneggiato o la " +
+                        "copertina è sbagliata."
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRedownload = false
                     viewModel.redownloadCurrent()
-                }) { Text("Re-download") }
+                }) { Text("Riscarica") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmRedownload = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmRedownload = false }) { Text("Annulla") }
             },
         )
     }
@@ -663,21 +663,21 @@ private fun NowPlayingContent(
     if (confirmFlagWrong) {
         AlertDialog(
             onDismissRequest = { confirmFlagWrong = false },
-            title = { Text("Report wrong song?") },
+            title = { Text("Segnalare brano sbagliato?") },
             text = {
                 Text(
-                    "“${current.title}” will be removed from your playlists, likes, and history, " +
-                        "and the file will be deleted from the server. This is permanent."
+                    "“${current.title}” verrà rimosso dalle tue playlist, dai mi piace e dalla " +
+                        "cronologia, e il file sarà eliminato dal server. L'azione è definitiva."
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirmFlagWrong = false
                     viewModel.flagWrong(current.id)
-                }) { Text("Report") }
+                }) { Text("Segnala") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmFlagWrong = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmFlagWrong = false }) { Text("Annulla") }
             },
         )
     }
@@ -685,22 +685,22 @@ private fun NowPlayingContent(
     if (confirmMarkBroken) {
         AlertDialog(
             onDismissRequest = { confirmMarkBroken = false },
-            title = { Text("Refresh local copy?") },
+            title = { Text("Aggiornare la copia locale?") },
             text = {
                 Text(
-                    "Drop the local cache, offline copy and cover for \"${current.title}\" " +
-                        "and fetch fresh bytes from the server. Use this when the file on " +
-                        "your phone is corrupted but the server copy is fine."
+                    "Cancella la cache locale, la copia offline e la copertina di " +
+                        "\"${current.title}\" e scarica byte freschi dal server. Usalo quando " +
+                        "il file sul telefono è danneggiato ma quello sul server è integro."
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirmMarkBroken = false
                     viewModel.refreshLocalDownload()
-                }) { Text("Refresh") }
+                }) { Text("Aggiorna") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmMarkBroken = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmMarkBroken = false }) { Text("Annulla") }
             },
         )
     }
@@ -708,7 +708,7 @@ private fun NowPlayingContent(
     redownloadError?.let { msg ->
         AlertDialog(
             onDismissRequest = viewModel::consumeRedownloadError,
-            title = { Text("Re-download failed") },
+            title = { Text("Riscaricamento non riuscito") },
             text = { Text(msg) },
             confirmButton = {
                 TextButton(onClick = viewModel::consumeRedownloadError) { Text("OK") }
@@ -719,7 +719,7 @@ private fun NowPlayingContent(
     videoDownloadError?.let { msg ->
         AlertDialog(
             onDismissRequest = viewModel::consumeVideoDownloadError,
-            title = { Text("Video download failed") },
+            title = { Text("Download del video non riuscito") },
             text = { Text(msg) },
             confirmButton = {
                 TextButton(onClick = viewModel::consumeVideoDownloadError) { Text("OK") }
@@ -730,7 +730,7 @@ private fun NowPlayingContent(
     videoReinitializeError?.let { msg ->
         AlertDialog(
             onDismissRequest = viewModel::consumeVideoReinitializeError,
-            title = { Text("Video reinitialize failed") },
+            title = { Text("Reinizializzazione del video non riuscita") },
             text = { Text(msg) },
             confirmButton = {
                 TextButton(onClick = viewModel::consumeVideoReinitializeError) { Text("OK") }
@@ -741,11 +741,11 @@ private fun NowPlayingContent(
     when (val s = alarmExport) {
         is PlaybackViewModel.AlarmExportState.Success -> AlertDialog(
             onDismissRequest = viewModel::consumeAlarmExportState,
-            title = { Text("Saved as alarm sound") },
+            title = { Text("Salvato come suoneria sveglia") },
             text = {
                 Text(
-                    "\"${s.title}\" is now available in your Clock app — open an alarm, " +
-                        "tap the sound row and pick it from the list."
+                    "\"${s.title}\" è ora disponibile nell'app Orologio — apri una sveglia, " +
+                        "tocca la riga del suono e selezionalo dalla lista."
                 )
             },
             confirmButton = {
@@ -754,7 +754,7 @@ private fun NowPlayingContent(
         )
         is PlaybackViewModel.AlarmExportState.Failure -> AlertDialog(
             onDismissRequest = viewModel::consumeAlarmExportState,
-            title = { Text("Couldn't save alarm sound") },
+            title = { Text("Impossibile salvare la suoneria") },
             text = { Text(s.message) },
             confirmButton = {
                 TextButton(onClick = viewModel::consumeAlarmExportState) { Text("OK") }
@@ -774,7 +774,7 @@ private fun SleepTimerMenu(
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         if (sleepActive) {
             DropdownMenuItem(
-                text = { Text("Cancel timer") },
+                text = { Text("Annulla timer") },
                 onClick = { onSelect(0) },
             )
         }

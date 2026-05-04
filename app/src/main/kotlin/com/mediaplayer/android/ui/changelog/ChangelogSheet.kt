@@ -53,13 +53,13 @@ private fun ChangelogContent() {
         item(key = "header") {
             Column {
                 Text(
-                    text = "What's new",
+                    text = "Novità",
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Version ${AppVersion.VERSION}",
+                    text = "Versione ${AppVersion.VERSION}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

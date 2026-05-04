@@ -62,7 +62,7 @@ fun PlaylistShareImporter(
                 preview = p
             }
         } catch (t: Throwable) {
-            error = t.message ?: "Couldn't load shared playlist"
+            error = t.message ?: "Impossibile caricare la playlist condivisa"
         }
     }
 
@@ -104,7 +104,7 @@ fun PlaylistShareImporter(
                                 val detail = repository.acceptShare(token)
                                 onImported(detail.id, detail.name)
                             } catch (t: Throwable) {
-                                error = t.message ?: "Import failed"
+                                error = t.message ?: "Importazione non riuscita"
                                 importing = false
                             }
                         }

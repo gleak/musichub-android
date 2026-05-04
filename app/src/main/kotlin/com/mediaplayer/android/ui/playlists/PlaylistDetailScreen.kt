@@ -142,7 +142,7 @@ fun PlaylistDetailScreen(
                             if (isRefreshing) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             } else {
-                                Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                                Icon(Icons.Filled.Refresh, contentDescription = "Aggiorna")
                             }
                         }
                         // Only the owner can mint share links — members of a
@@ -161,7 +161,7 @@ fun PlaylistDetailScreen(
                                                 type = "text/plain"
                                                 putExtra(
                                                     Intent.EXTRA_SUBJECT,
-                                                    "Listen to ${successState.playlist.name}",
+                                                    "Ascolta ${successState.playlist.name}",
                                                 )
                                                 putExtra(Intent.EXTRA_TEXT, link.url)
                                             }
@@ -170,10 +170,10 @@ fun PlaylistDetailScreen(
                                             // so cancelling the chooser leaves a token
                                             // alive but unused — harmless.
                                             context.startActivity(
-                                                Intent.createChooser(intent, "Share playlist")
+                                                Intent.createChooser(intent, "Condividi playlist")
                                             )
                                         } catch (t: Throwable) {
-                                            snackMessage = t.message ?: "Couldn't create share link"
+                                            snackMessage = t.message ?: "Impossibile creare il link di condivisione"
                                         } finally {
                                             sharing = false
                                         }
@@ -184,13 +184,13 @@ fun PlaylistDetailScreen(
                                 if (sharing) {
                                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                                 } else {
-                                    Icon(Icons.Filled.Share, contentDescription = "Share playlist")
+                                    Icon(Icons.Filled.Share, contentDescription = "Condividi playlist")
                                 }
                             }
                         }
                         if (!successState.playlist.isAuto) {
                             IconButton(onClick = { addSongsOpen = true }) {
-                                Icon(Icons.Filled.Add, contentDescription = "Add songs")
+                                Icon(Icons.Filled.Add, contentDescription = "Aggiungi brani")
                             }
                         }
                     }

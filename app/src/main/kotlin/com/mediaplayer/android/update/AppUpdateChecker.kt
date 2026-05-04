@@ -74,7 +74,7 @@ object AppUpdateChecker {
         val manifest = try {
             repository.latest()
         } catch (t: Throwable) {
-            return ManualResult.Error(t.message ?: "Couldn't reach the update server")
+            return ManualResult.Error(t.message ?: "Impossibile contattare il server degli aggiornamenti")
         }
         prefs.edit().putLong(KEY_LAST_CHECK_AT, System.currentTimeMillis()).apply()
         if (manifest == null || manifest.versionCode <= BuildConfig.VERSION_CODE) {

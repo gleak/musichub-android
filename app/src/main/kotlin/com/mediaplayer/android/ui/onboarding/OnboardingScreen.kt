@@ -93,12 +93,12 @@ fun OnboardingScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items(GENRES) { genre ->
+            items(GENRES) { (label, slug) ->
                 GenreTile(
-                    genre = genre,
-                    selected = genre in picked,
+                    label = label,
+                    selected = slug in picked,
                     onToggle = {
-                        picked = if (genre in picked) picked - genre else picked + genre
+                        picked = if (slug in picked) picked - slug else picked + slug
                     },
                 )
             }
@@ -145,7 +145,7 @@ fun OnboardingScreen(
 }
 
 @Composable
-private fun GenreTile(genre: String, selected: Boolean, onToggle: () -> Unit) {
+private fun GenreTile(label: String, selected: Boolean, onToggle: () -> Unit) {
     val shape = CoverShapes.Card
     val bg = if (selected) MaterialTheme.colorScheme.primary
     else MaterialTheme.colorScheme.surfaceContainerHigh
@@ -179,7 +179,7 @@ private fun GenreTile(genre: String, selected: Boolean, onToggle: () -> Unit) {
                 )
             }
             Text(
-                text = genre.replaceFirstChar { it.uppercase() },
+                text = label,
                 color = fg,
                 style = MaterialTheme.typography.titleSmall,
             )
@@ -190,12 +190,29 @@ private fun GenreTile(genre: String, selected: Boolean, onToggle: () -> Unit) {
 private const val MIN_PICKS = 3
 
 /**
- * Plan-locked preset of 20 genres. Stored lowercase to match how the
- * backend keys `user_taste(dimension=GENRE, key=...)` rows.
+ * Plan-locked preset of 20 genres. Pairs of (Italian display label, lowercase
+ * slug). Slugs key `user_taste(dimension=GENRE, key=...)` rows server-side
+ * and stay English so the backend contract doesn't change.
  */
 private val GENRES = listOf(
-    "rock", "pop", "electronic", "jazz", "hip-hop",
-    "classical", "metal", "indie", "r&b", "country",
-    "blues", "folk", "punk", "reggae", "soul",
-    "techno", "house", "ambient", "latin", "world",
+    "Rock" to "rock",
+    "Pop" to "pop",
+    "Elettronica" to "electronic",
+    "Jazz" to "jazz",
+    "Hip-hop" to "hip-hop",
+    "Classica" to "classical",
+    "Metal" to "metal",
+    "Indie" to "indie",
+    "R&B" to "r&b",
+    "Country" to "country",
+    "Blues" to "blues",
+    "Folk" to "folk",
+    "Punk" to "punk",
+    "Reggae" to "reggae",
+    "Soul" to "soul",
+    "Techno" to "techno",
+    "House" to "house",
+    "Ambient" to "ambient",
+    "Latina" to "latin",
+    "Mondo" to "world",
 )

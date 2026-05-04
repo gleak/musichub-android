@@ -81,7 +81,7 @@ fun ErrorWithRetry(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            FilledTonalButton(onClick = onRetry) { Text("Retry") }
+            FilledTonalButton(onClick = onRetry) { Text("Riprova") }
         }
     }
 }
@@ -208,13 +208,13 @@ fun SongListShimmer(rowCount: Int = 8, modifier: Modifier = Modifier) {
 
 /** Maps a [Throwable] to user-facing copy. Hides serializer / IO stack traces. */
 fun friendlyMessage(t: Throwable?): String = when {
-    t == null -> "Something went wrong"
-    t is java.io.IOException -> "Couldn't reach the server. Check your connection."
-    t.message?.contains("401", ignoreCase = false) == true -> "Sign-in expired. Please sign in again."
-    t.message?.contains("403", ignoreCase = false) == true -> "You don't have access to this."
-    t.message?.contains("404", ignoreCase = false) == true -> "Not found."
+    t == null -> "Qualcosa è andato storto"
+    t is java.io.IOException -> "Server non raggiungibile. Controlla la connessione."
+    t.message?.contains("401", ignoreCase = false) == true -> "Sessione scaduta. Accedi di nuovo."
+    t.message?.contains("403", ignoreCase = false) == true -> "Non hai accesso a questo contenuto."
+    t.message?.contains("404", ignoreCase = false) == true -> "Non trovato."
     !t.message.isNullOrBlank() && t.message!!.length < 80 -> t.message!!
-    else -> "Something went wrong"
+    else -> "Qualcosa è andato storto"
 }
 
 /** Tiny dot row used as a "more loading" visual accent. */

@@ -95,7 +95,7 @@ fun SongRow(
             ) {
                 Icon(
                     imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = if (isLiked) "Unlike" else "Like",
+                    contentDescription = if (isLiked) "Rimuovi mi piace" else "Mi piace",
                     tint = if (isLiked) MaterialTheme.colorScheme.primary
                            else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(18.dp),

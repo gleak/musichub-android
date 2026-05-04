@@ -97,20 +97,20 @@ fun AddSongsToPlaylistSheet(
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = "Add songs",
+                text = "Aggiungi brani",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
             )
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("Search songs") },
+                placeholder = { Text("Cerca brani") },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { query = "" }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Clear")
+                            Icon(Icons.Filled.Close, contentDescription = "Cancella")
                         }
                     }
                 },

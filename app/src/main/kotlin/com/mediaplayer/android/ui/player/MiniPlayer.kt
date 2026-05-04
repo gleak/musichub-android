@@ -142,7 +142,7 @@ fun MiniPlayer(
             }) {
                 Icon(
                     imageVector = if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    contentDescription = if (liked) "Unlike" else "Like",
+                    contentDescription = if (liked) "Rimuovi mi piace" else "Mi piace",
                     tint = if (liked) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )

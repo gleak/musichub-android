@@ -158,7 +158,7 @@ fun AddToPlaylistSheet(
             }
             if (onDownload != null) {
                 QueueActionRow(
-                    label = "Download",
+                    label = "Scarica",
                     icon = { Icon(Icons.Filled.FileDownload, contentDescription = null) },
                     onClick = { onDownload(); onDismiss() },
                 )
@@ -252,11 +252,11 @@ fun AddToPlaylistSheet(
     if (flagConfirmOpen && onFlagWrong != null) {
         AlertDialog(
             onDismissRequest = { flagConfirmOpen = false },
-            title = { Text("Report wrong song?") },
+            title = { Text("Segnalare brano sbagliato?") },
             text = {
                 Text(
-                    "“$songTitle” will be removed from your playlists, likes, and history, and " +
-                            "the file will be deleted from the server. This is permanent."
+                    "“$songTitle” verrà rimosso dalle tue playlist, dai mi piace e dalla cronologia, " +
+                            "e il file sarà eliminato dal server. L'azione è definitiva."
                 )
             },
             confirmButton = {
@@ -266,10 +266,10 @@ fun AddToPlaylistSheet(
                         onFlagWrong()
                         onDismiss()
                     },
-                ) { Text("Report") }
+                ) { Text("Segnala") }
             },
             dismissButton = {
-                TextButton(onClick = { flagConfirmOpen = false }) { Text("Cancel") }
+                TextButton(onClick = { flagConfirmOpen = false }) { Text("Annulla") }
             },
         )
     }
@@ -411,13 +411,13 @@ private fun CreateAndAddDialog(
     var text by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New playlist") },
+        title = { Text("Nuova playlist") },
         text = {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
-                placeholder = { Text("Playlist name") },
+                placeholder = { Text("Nome playlist") },
                 modifier = Modifier.fillMaxWidth(),
             )
         },
@@ -425,10 +425,10 @@ private fun CreateAndAddDialog(
             TextButton(
                 onClick = { onConfirm(text.trim()) },
                 enabled = text.trim().isNotEmpty(),
-            ) { Text("Create & add") }
+            ) { Text("Crea e aggiungi") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text("Annulla") }
         },
     )
 }

@@ -31,13 +31,13 @@ fun AppUpdateDialog(
         onDismissRequest = { if (!manifest.required && !downloading) onDismiss() },
         title = {
             Text(
-                if (manifest.required) "Update required" else "Update available"
+                if (manifest.required) "Aggiornamento richiesto" else "Aggiornamento disponibile"
             )
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Version ${manifest.version} is available.",
+                    text = "La versione ${manifest.version} è disponibile.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 if (manifest.releaseNotes.isNotBlank()) {
@@ -83,7 +83,7 @@ fun AppUpdateDialog(
                 if (downloading) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                 } else {
-                    Text("Update now")
+                    Text("Aggiorna ora")
                 }
             }
         },
@@ -92,7 +92,7 @@ fun AppUpdateDialog(
                 TextButton(
                     enabled = !downloading,
                     onClick = onDismiss,
-                ) { Text("Later") }
+                ) { Text("Più tardi") }
             }
         },
     )

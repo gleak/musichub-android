@@ -286,7 +286,7 @@ private fun ErrorContent(message: String, onRetry: () -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.error,
         )
-        FilledTonalButton(onClick = onRetry) { Text("Try Again") }
+        FilledTonalButton(onClick = onRetry) { Text("Riprova") }
         Spacer(Modifier.weight(1f))
     }
 }

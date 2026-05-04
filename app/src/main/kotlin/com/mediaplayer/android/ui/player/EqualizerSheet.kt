@@ -68,7 +68,7 @@ fun EqualizerSheet(onDismiss: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Equalizer", style = MaterialTheme.typography.titleLarge)
+                Text("Equalizzatore", style = MaterialTheme.typography.titleLarge)
                 Switch(
                     checked = s.enabled,
                     onCheckedChange = { EqualizerController.setEnabled(it) },

@@ -35,11 +35,11 @@ private val Context.equalizerDataStore: DataStore<Preferences> by preferencesDat
 )
 
 enum class EqPreset(val label: String) {
-    FLAT("Flat"),
-    BASS_BOOST("Bass"),
-    TREBLE_BOOST("Treble"),
-    VOCAL("Vocal"),
-    CUSTOM("Custom"),
+    FLAT("Lineare"),
+    BASS_BOOST("Bassi"),
+    TREBLE_BOOST("Alti"),
+    VOCAL("Voce"),
+    CUSTOM("Personalizzato"),
 }
 
 data class BandInfo(

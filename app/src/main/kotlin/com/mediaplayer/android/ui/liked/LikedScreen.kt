@@ -173,7 +173,7 @@ private fun LikedBody(
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         item(key = "header") {
             SpotifyHero(
-                title = "Liked Songs",
+                title = "Brani che mi piacciono",
                 subtitle = "Playlist • ${pluralizeSongs(totalItems)}",
                 coverModel = null,
                 fallbackGradient = MHColors.LikedGradientStart to MHColors.LikedGradientEnd,
@@ -220,7 +220,7 @@ private fun LikedBody(
 }
 
 private fun pluralizeSongs(count: Long): String =
-    if (count == 1L) "1 song" else "$count songs"
+    if (count == 1L) "1 brano" else "$count brani"
 
 private const val PREFETCH_THRESHOLD = 5
 

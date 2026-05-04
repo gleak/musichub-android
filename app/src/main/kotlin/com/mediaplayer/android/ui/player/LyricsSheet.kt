@@ -79,7 +79,7 @@ fun LyricsView(
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
-            text = "Lyrics",
+            text = "Testo",
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
         )

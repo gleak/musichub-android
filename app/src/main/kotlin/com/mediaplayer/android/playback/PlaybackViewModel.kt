@@ -740,17 +740,17 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                             break
                         }
                         "ERROR" -> {
-                            _videoDownloadError.value = s.error.ifBlank { "Video download failed" }
+                            _videoDownloadError.value = s.error.ifBlank { "Download del video non riuscito" }
                             break
                         }
                     }
                     wait = (wait * 2).coerceAtMost(VIDEO_POLL_MAX_MS)
                 }
                 if (attempts >= VIDEO_POLL_MAX_ATTEMPTS && _videoDownloadError.value == null) {
-                    _videoDownloadError.value = "Video download timed out"
+                    _videoDownloadError.value = "Download del video scaduto"
                 }
             } catch (t: Throwable) {
-                _videoDownloadError.value = t.message ?: "Video download failed"
+                _videoDownloadError.value = t.message ?: "Download del video non riuscito"
             } finally {
                 _videoDownloading.value = false
             }
@@ -777,17 +777,17 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     when (s.status) {
                         "DONE" -> break
                         "ERROR" -> {
-                            _videoReinitializeError.value = s.error.ifBlank { "Reinitialize failed" }
+                            _videoReinitializeError.value = s.error.ifBlank { "Reinizializzazione non riuscita" }
                             break
                         }
                     }
                     wait = (wait * 2).coerceAtMost(VIDEO_POLL_MAX_MS)
                 }
                 if (attempts >= VIDEO_POLL_MAX_ATTEMPTS && _videoReinitializeError.value == null) {
-                    _videoReinitializeError.value = "Reinitialize timed out"
+                    _videoReinitializeError.value = "Reinizializzazione scaduta"
                 }
             } catch (t: Throwable) {
-                _videoReinitializeError.value = t.message ?: "Reinitialize failed"
+                _videoReinitializeError.value = t.message ?: "Reinizializzazione non riuscita"
             } finally {
                 _videoReinitializing.value = false
             }
@@ -801,7 +801,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             val body = runCatching { t.response()?.errorBody()?.string() }.getOrNull()
             if (!body.isNullOrBlank()) return body.trim()
         }
-        return t.message ?: "Re-download failed"
+        return t.message ?: "Riscaricamento non riuscito"
     }
 
     /**
@@ -819,7 +819,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 _alarmExportState.value = AlarmExportState.Success(current.title)
             } catch (t: Throwable) {
                 _alarmExportState.value =
-                    AlarmExportState.Failure(t.message ?: "Failed to save alarm sound")
+                    AlarmExportState.Failure(t.message ?: "Impossibile salvare la suoneria")
             }
         }
     }

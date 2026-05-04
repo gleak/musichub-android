@@ -102,8 +102,8 @@ internal class PlaybackResumption(context: Context) {
             items.add(
                 SongSnapshotDto(
                     id = id,
-                    title = item.mediaMetadata.title?.toString() ?: "Unknown",
-                    artist = item.mediaMetadata.artist?.toString() ?: "Unknown",
+                    title = item.mediaMetadata.title?.toString() ?: "Sconosciuto",
+                    artist = item.mediaMetadata.artist?.toString() ?: "Sconosciuto",
                 )
             )
         }

@@ -250,7 +250,7 @@ private fun HomeContent(
             HomeFilter.Music -> {
                 item(key = "liked_row") {
                     SingleColumnTile(
-                        title = "Liked Songs",
+                        title = "Brani che mi piacciono",
                         subtitle = "I brani con il cuore",
                         icon = Icons.Filled.Favorite,
                         gradientStart = MHColors.LikedGradientStart,
@@ -562,7 +562,7 @@ private fun ShortcutTile(
         ShortcutIcon(item = item)
         Text(
             text = when (item) {
-                ShortcutItem.Liked -> "Liked Songs"
+                ShortcutItem.Liked -> "Brani che mi piacciono"
                 is ShortcutItem.Song -> item.song.title
                 is ShortcutItem.Playlist -> item.playlist.name
             },

@@ -44,8 +44,8 @@ object AppUpdateInstaller {
 
         val token = AuthTokenHolder.idToken
         val request = DownloadManager.Request(Uri.parse(url))
-            .setTitle("MediaPlayer update")
-            .setDescription("Downloading new version…")
+            .setTitle("Aggiornamento MusicHub")
+            .setDescription("Scaricamento nuova versione…")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationUri(Uri.fromFile(target))
             .addRequestHeader("X-Api-Key", Network.API_KEY)
@@ -72,33 +72,33 @@ object AppUpdateInstaller {
 
                 if (status != DownloadManager.STATUS_SUCCESSFUL) {
                     val detail = when (reason) {
-                        DownloadManager.ERROR_CANNOT_RESUME -> "Cannot resume download"
-                        DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Storage not found"
-                        DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "File conflict"
-                        DownloadManager.ERROR_FILE_ERROR -> "Storage error"
-                        DownloadManager.ERROR_HTTP_DATA_ERROR -> "HTTP data error"
-                        DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Insufficient storage"
-                        DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "Too many redirects"
-                        DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "Unexpected server response"
-                        DownloadManager.ERROR_UNKNOWN -> "Unknown error"
-                        401 -> "Unauthorized — try signing out and back in"
-                        403 -> "Access denied"
-                        404 -> "Update file not found on server"
-                        else -> if (reason in 400..599) "Server error $reason" else "Error $reason"
+                        DownloadManager.ERROR_CANNOT_RESUME -> "Impossibile riprendere il download"
+                        DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Spazio di archiviazione non trovato"
+                        DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "Conflitto sul file"
+                        DownloadManager.ERROR_FILE_ERROR -> "Errore di archiviazione"
+                        DownloadManager.ERROR_HTTP_DATA_ERROR -> "Errore dati HTTP"
+                        DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Spazio insufficiente"
+                        DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "Troppi redirect"
+                        DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "Risposta del server inattesa"
+                        DownloadManager.ERROR_UNKNOWN -> "Errore sconosciuto"
+                        401 -> "Non autorizzato — prova a uscire e accedere di nuovo"
+                        403 -> "Accesso negato"
+                        404 -> "File di aggiornamento non trovato sul server"
+                        else -> if (reason in 400..599) "Errore del server $reason" else "Errore $reason"
                     }
-                    onError("Download failed: $detail")
+                    onError("Download non riuscito: $detail")
                     return
                 }
 
                 if (!target.exists() || target.length() == 0L) {
-                    onError("Download failed: file missing after completion")
+                    onError("Download non riuscito: file mancante al termine")
                     return
                 }
                 if (!expectedSha256.isNullOrBlank()) {
                     val actual = sha256(target)
                     if (!actual.equals(expectedSha256, ignoreCase = true)) {
                         target.delete()
-                        onError("Integrity check failed — file rejected")
+                        onError("Controllo di integrità non riuscito — file rifiutato")
                         return
                     }
                 }

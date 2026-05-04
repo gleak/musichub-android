@@ -51,14 +51,14 @@ object RingtoneExporter {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(
                     MediaStore.Audio.Media.RELATIVE_PATH,
-                    Environment.DIRECTORY_ALARMS + "/MediaPlayer",
+                    Environment.DIRECTORY_ALARMS + "/MusicHub",
                 )
                 put(MediaStore.Audio.Media.IS_PENDING, 1)
             }
         }
 
         val uri = resolver.insert(collection, values)
-            ?: throw IOException("MediaStore insert returned null")
+            ?: throw IOException("Inserimento in MediaStore non riuscito")
 
         try {
             // Pull the audio bytes from the backend stream endpoint. ExoPlayer's
@@ -68,12 +68,12 @@ object RingtoneExporter {
             val request = Request.Builder().url(Network.streamUrl(song.id)).build()
             Network.okHttp.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) {
-                    throw IOException("HTTP ${resp.code} fetching ${song.id}")
+                    throw IOException("HTTP ${resp.code} durante il download del brano ${song.id}")
                 }
-                val body = resp.body ?: throw IOException("Empty response body")
+                val body = resp.body ?: throw IOException("Risposta del server vuota")
                 resolver.openOutputStream(uri)?.use { out ->
                     body.byteStream().copyTo(out)
-                } ?: throw IOException("Cannot open output stream for $uri")
+                } ?: throw IOException("Impossibile aprire il flusso di output per $uri")
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

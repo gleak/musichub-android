@@ -131,7 +131,27 @@ internal object LibraryTree {
 
     // --- public API ----------------------------------------------------------
 
-    suspend fun root(): MediaItem = browsable(ROOT_ID, "MediaPlayer")
+    /**
+     * Browse root for AA / MediaBrowser. Newer Android Auto builds (gearhead
+     * 2024+) silently hide a root's children when the root MediaMetadata has
+     * no `mediaType` set — the search affordance still appears but the grid
+     * stays empty ("Nessun elemento"). Setting `MEDIA_TYPE_FOLDER_MIXED`
+     * matches the heterogeneous content of `rootChildren()` (playlists,
+     * albums, artists, songs) and unblocks enumeration.
+     */
+    suspend fun root(): MediaItem =
+        MediaItem.Builder()
+            .setMediaId(ROOT_ID)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setIsBrowsable(true)
+                    .setIsPlayable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                    .setTitle("MusicHub")
+                    .setExtras(rootExtras())
+                    .build()
+            )
+            .build()
 
     /**
      * Children of [parentId], or `null` if the id is unrecognised. Honours AA's
@@ -531,7 +551,7 @@ internal object LibraryTree {
                 .setMediaMetadata(song.asBrowseMetadata(playable = true))
                 .build()
         }
-        return list.ifEmpty { listOf(infoItem("No liked songs yet")) }
+        return list.ifEmpty { listOf(infoItem("Ancora nessun brano preferito")) }
     }
 
     private suspend fun recents(): List<MediaItem> {
@@ -542,7 +562,7 @@ internal object LibraryTree {
                 .setMediaMetadata(song.asBrowseMetadata(playable = true))
                 .build()
         }
-        return list.ifEmpty { listOf(infoItem("Nothing played yet")) }
+        return list.ifEmpty { listOf(infoItem("Ancora nessun ascolto")) }
     }
 
     /** Browse leaf for a song that plays as a single item (search results). */
@@ -572,18 +592,6 @@ internal object LibraryTree {
             .setMediaId("$SONG_PREFIX${song.id}")
             .setUri(Network.streamUrl(song.id))
             .setMediaMetadata(song.asBrowseMetadata(playable = true))
-            .build()
-
-    private fun browsable(mediaId: String, title: String): MediaItem =
-        MediaItem.Builder()
-            .setMediaId(mediaId)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setIsBrowsable(true)
-                    .setIsPlayable(false)
-                    .setTitle(title)
-                    .build()
-            )
             .build()
 
     /**

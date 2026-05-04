@@ -535,7 +535,7 @@ private fun OfflineBadge(modifier: Modifier = Modifier) {
     ) {
         Icon(
             imageVector = Icons.Filled.CloudOff,
-            contentDescription = "No network — playing only downloaded songs",
+            contentDescription = "Nessuna rete — riproduzione solo dei brani scaricati",
             tint = MaterialTheme.colorScheme.onErrorContainer,
             modifier = Modifier.size(20.dp),
         )

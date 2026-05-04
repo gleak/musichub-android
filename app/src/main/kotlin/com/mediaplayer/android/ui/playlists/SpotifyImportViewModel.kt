@@ -55,18 +55,18 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
                     val resolver = getApplication<Application>().contentResolver
                     val lines = resolver.openInputStream(uri)
                         ?.bufferedReader()?.readLines()
-                        ?: throw Exception("Could not read file.")
+                        ?: throw Exception("Impossibile leggere il file.")
                     val tracks = CsvPlaylistParser.parse(lines)
                     val name = resolveFilename(uri)
                     name to tracks
                 }
                 if (tracks.isEmpty()) {
-                    SpotifyImportUiState.Error("No tracks found. Make sure this is an Exportify CSV file.")
+                    SpotifyImportUiState.Error("Nessun brano trovato. Assicurati che sia un file CSV di Exportify.")
                 } else {
                     SpotifyImportUiState.Confirming(playlistName = name, tracks = tracks, uri = uri)
                 }
             } catch (t: Throwable) {
-                SpotifyImportUiState.Error(t.message ?: "Failed to read file.")
+                SpotifyImportUiState.Error(t.message ?: "Lettura del file non riuscita.")
             }
         }
     }
@@ -91,7 +91,7 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
                     try {
                         resolver.openInputStream(uri)?.use { input ->
                             tmpFile.outputStream().use { output -> input.copyTo(output) }
-                        } ?: throw Exception("Could not read file.")
+                        } ?: throw Exception("Impossibile leggere il file.")
 
                         val filePart = MultipartBody.Part.createFormData(
                             "file",
@@ -112,7 +112,7 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
                     failed = result.failed,
                 )
             } catch (t: Throwable) {
-                SpotifyImportUiState.Error(t.message ?: "Import failed.")
+                SpotifyImportUiState.Error(t.message ?: "Importazione non riuscita.")
             }
         }
     }
@@ -123,6 +123,6 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
         return cursor?.use {
             val col = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (it.moveToFirst() && col >= 0) it.getString(col) else null
-        }?.removeSuffix(".csv") ?: "Imported Playlist"
+        }?.removeSuffix(".csv") ?: "Playlist importata"
     }
 }

@@ -350,7 +350,7 @@ class MediaPlaybackService : MediaLibraryService() {
     private fun buildLikeButton(liked: Boolean): CommandButton =
         CommandButton.Builder()
             .setSessionCommand(toggleLikeCommand)
-            .setDisplayName(if (liked) "Unlike" else "Like")
+            .setDisplayName(if (liked) "Rimuovi mi piace" else "Mi piace")
             .setIconResId(
                 if (liked) R.drawable.ic_favorite else R.drawable.ic_favorite_border
             )
@@ -359,7 +359,7 @@ class MediaPlaybackService : MediaLibraryService() {
     private fun buildSleepButton(active: Boolean): CommandButton =
         CommandButton.Builder()
             .setSessionCommand(sleepTimerCommand)
-            .setDisplayName(if (active) "Cancel sleep" else "Sleep ${defaultSleepMinutes}m")
+            .setDisplayName(if (active) "Annulla timer" else "Sospendi tra ${defaultSleepMinutes}m")
             .setIconResId(
                 if (active) R.drawable.ic_bedtime else R.drawable.ic_bedtime_off
             )

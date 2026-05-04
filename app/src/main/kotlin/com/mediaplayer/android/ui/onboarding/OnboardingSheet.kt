@@ -50,13 +50,13 @@ fun OnboardingSheet(onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(MediaPlayerSpacing.M),
         ) {
             Text(
-                text = "Welcome to MediaPlayer",
+                text = "Benvenuto in MusicHub",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = "Your own music library, streamed from your own server. " +
-                    "Sign in or play as a guest — your library follows you to the car.",
+                text = "La tua libreria musicale, in streaming dal tuo server. " +
+                    "Accedi con Google — la tua libreria ti segue anche in auto.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -65,18 +65,18 @@ fun OnboardingSheet(onDismiss: () -> Unit) {
 
             FeatureRow(
                 icon = Icons.Filled.LibraryMusic,
-                title = "Build your library",
-                subtitle = "Import a Spotify playlist, or find new music with the Find tab.",
+                title = "Costruisci la tua libreria",
+                subtitle = "Importa una playlist da Spotify oppure scopri nuova musica dalla scheda Scopri.",
             )
             FeatureRow(
                 icon = Icons.Filled.MusicNote,
-                title = "Like and organize",
-                subtitle = "Heart what you love; the auto-playlists do the rest.",
+                title = "Metti mi piace e organizza",
+                subtitle = "Aggiungi al cuore ciò che ami; alle playlist automatiche pensiamo noi.",
             )
             FeatureRow(
                 icon = Icons.Filled.PlayCircle,
-                title = "Connect to your car",
-                subtitle = "Android Auto picks up your library, voice search, sleep timer, and more.",
+                title = "Connetti alla tua auto",
+                subtitle = "Android Auto carica la tua libreria, la ricerca vocale, il timer di sospensione e altro.",
             )
 
             Spacer(Modifier.height(MediaPlayerSpacing.S))
@@ -84,7 +84,7 @@ fun OnboardingSheet(onDismiss: () -> Unit) {
             Button(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Get started") }
+            ) { Text("Inizia") }
 
             Spacer(Modifier.height(MediaPlayerSpacing.S))
         }
