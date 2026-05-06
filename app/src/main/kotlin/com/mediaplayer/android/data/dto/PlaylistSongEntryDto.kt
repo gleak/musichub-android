@@ -13,4 +13,12 @@ import kotlinx.serialization.Serializable
 data class PlaylistSongEntryDto(
     val playlistSongId: Long,
     val song: SongDto,
+    /**
+     * Contributor — user who added this song to the playlist. Null when
+     * unknown (legacy rows or auto-playlist server-side inserts). The UI
+     * shows a per-track contributor pill on collaborative playlists when
+     * this is set AND differs from the playlist owner.
+     */
+    val addedByUserId: Long? = null,
+    val addedByName: String? = null,
 )

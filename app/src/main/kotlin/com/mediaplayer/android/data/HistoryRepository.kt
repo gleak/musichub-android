@@ -21,13 +21,15 @@ class HistoryRepository(
         durationListenedMs: Long,
         completionRatio: Double? = null,
         wasSkipped: Boolean? = null,
+        displayLabel: String? = null,
     ) = EventQueue.enqueuePlay(
         RecordPlayRequest(
             songId = songId,
             durationListenedMs = durationListenedMs,
             completionRatio = completionRatio,
             wasSkipped = wasSkipped,
-        )
+        ),
+        displayLabel = displayLabel,
     )
 
     /**
@@ -41,6 +43,7 @@ class HistoryRepository(
         durationListenedMs: Long,
         completionRatio: Double? = null,
         wasSkipped: Boolean? = null,
+        displayLabel: String? = null,
     ) {
         val req = RecordPlayRequest(
             songId = songId,
@@ -51,7 +54,7 @@ class HistoryRepository(
         try {
             api.recordPlay(req)
         } catch (_: java.io.IOException) {
-            EventQueue.enqueuePlay(req)
+            EventQueue.enqueuePlay(req, displayLabel = displayLabel)
         }
     }
 

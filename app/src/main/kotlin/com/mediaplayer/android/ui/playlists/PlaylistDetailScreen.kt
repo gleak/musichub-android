@@ -50,14 +50,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.launch
 import com.mediaplayer.android.data.Network
-import com.mediaplayer.android.data.PlaylistRepository
 import com.mediaplayer.android.playback.PlaybackViewModel
-import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.compose.ui.Alignment
@@ -92,6 +88,7 @@ fun PlaylistDetailScreen(
     onBack: () -> Unit,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
     onShufflePlay: (List<SongDto>) -> Unit,
+    onOpenMembers: (playlistId: Long, isOwner: Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val viewModel: PlaylistDetailViewModel = viewModel(
@@ -107,11 +104,9 @@ fun PlaylistDetailScreen(
 
     var sheetSong by remember { mutableStateOf<SongDto?>(null) }
     var addSongsOpen by remember { mutableStateOf(false) }
-    var sharing by remember { mutableStateOf(false) }
+    var shareOpen by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     var snackMessage by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-    val playlistRepository = remember { PlaylistRepository() }
 
     LaunchedEffect(snackMessage) {
         val msg = snackMessage ?: return@LaunchedEffect
@@ -130,7 +125,7 @@ fun PlaylistDetailScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
                     }
                 },
                 actions = {
@@ -150,42 +145,8 @@ fun PlaylistDetailScreen(
                         // user. Hiding the icon for non-owners avoids the user
                         // getting a 404 when they try.
                         if (successState.playlist.isOwner) {
-                            IconButton(
-                                onClick = {
-                                    if (sharing) return@IconButton
-                                    sharing = true
-                                    scope.launch {
-                                        try {
-                                            val link = playlistRepository.createShare(playlistId)
-                                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                                type = "text/plain"
-                                                putExtra(
-                                                    Intent.EXTRA_SUBJECT,
-                                                    "Ascolta ${successState.playlist.name}",
-                                                )
-                                                putExtra(Intent.EXTRA_TEXT, link.url)
-                                            }
-                                            // Wrap in chooser so the user picks WhatsApp /
-                                            // Messages / etc. Each tap mints a new token,
-                                            // so cancelling the chooser leaves a token
-                                            // alive but unused — harmless.
-                                            context.startActivity(
-                                                Intent.createChooser(intent, "Condividi playlist")
-                                            )
-                                        } catch (t: Throwable) {
-                                            snackMessage = t.message ?: "Impossibile creare il link di condivisione"
-                                        } finally {
-                                            sharing = false
-                                        }
-                                    }
-                                },
-                                enabled = !sharing,
-                            ) {
-                                if (sharing) {
-                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Icon(Icons.Filled.Share, contentDescription = "Condividi playlist")
-                                }
+                            IconButton(onClick = { shareOpen = true }) {
+                                Icon(Icons.Filled.Share, contentDescription = "Condividi playlist")
                             }
                         }
                         if (!successState.playlist.isAuto) {
@@ -230,6 +191,14 @@ fun PlaylistDetailScreen(
                         },
                         onRemoveDownloads = viewModel::removePlaylistDownloads,
                         onToggleAutoSync = viewModel::toggleAutoSync,
+                        onManageMembers = {
+                            onOpenMembers(playlistId, s.playlist.isOwner)
+                        },
+                        onLeavePlaylist = {
+                            viewModel.deleteOrLeave { ok, _ ->
+                                if (ok) onBack() else snackMessage = "Impossibile rimuovere la playlist"
+                            }
+                        },
                     )
                 }
             }
@@ -265,6 +234,15 @@ fun PlaylistDetailScreen(
             onSongAdded = viewModel::refresh,
         )
     }
+
+    if (shareOpen && successState != null && successState.playlist.isOwner) {
+        PlaylistShareSheet(
+            playlistId = playlistId,
+            playlistName = successState.playlist.name,
+            memberCount = successState.playlist.memberCount,
+            onDismiss = { shareOpen = false },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -282,6 +260,8 @@ private fun PlaylistDetailBody(
     onDownload: () -> Unit,
     onRemoveDownloads: () -> Unit,
     onToggleAutoSync: () -> Unit,
+    onManageMembers: () -> Unit,
+    onLeavePlaylist: () -> Unit,
 ) {
     val playbackVm: PlaybackViewModel = viewModel()
     val playerIsPlaying by playbackVm.isPlaying.collectAsStateWithLifecycle()
@@ -355,10 +335,16 @@ private fun PlaylistDetailBody(
             // the same convention PlaylistDto.coverSongId uses on the list view.
             val heroCoverSongId = if (playlist.isAuto) null
                 else playlist.songs.firstOrNull { it.song.hasCoverArt }?.song?.id
+            val heroEyebrow = when {
+                playlist.isAuto -> "PER TE · GENERATA"
+                playlist.isShared -> "PLAYLIST · COLLABORATIVA"
+                else -> null
+            }
             SpotifyHero(
                 title = playlist.name,
                 subtitle = subtitleStr,
                 coverModel = heroCoverSongId?.let { Network.coverUrl(it) },
+                eyebrow = heroEyebrow,
                 onPlay = {
                     if (playingFromHere) playbackVm.togglePlayPause()
                     else if (entries.isNotEmpty()) onPlayFromIndex(songsForPlayback, 0)
@@ -392,6 +378,17 @@ private fun PlaylistDetailBody(
                 )
             }
         } else {
+            if (playlist.isShared) {
+                item(key = "members_strip") {
+                    com.mediaplayer.android.ui.common.MembersStripCard(
+                        isOwner = playlist.isOwner,
+                        ownerName = playlist.ownerName,
+                        memberCount = playlist.memberCount,
+                        onManage = onManageMembers,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+            }
             // Auto-sync is a per-user preference for collaborative playlists
             // since v0.13.0 — owner persists to playlists.auto_sync, members
             // persist to playlist_members.auto_sync. Each user's toggle is
@@ -403,14 +400,26 @@ private fun PlaylistDetailBody(
                     onToggle = onToggleAutoSync,
                 )
             }
+            // Non-owner members get an inline ghost CTA per the mockup
+            // (`mh-library.jsx:303-309`). Same destination as the long-press
+            // dialog on the library landing — keeps two entry points in sync.
+            if (!playlist.isOwner && playlist.isShared) {
+                item(key = "leave_cta") {
+                    LeavePlaylistButton(
+                        playlistName = playlist.name,
+                        ownerName = playlist.ownerName,
+                        onConfirm = onLeavePlaylist,
+                    )
+                }
+            }
         }
 
         if (entries.isEmpty()) {
             item(key = "empty") {
                 EmptyState(
                     icon = Icons.AutoMirrored.Filled.QueueMusic,
-                    title = "No songs yet",
-                    subtitle = "Add some from the Search tab or tap +.",
+                    title = "Nessun brano",
+                    subtitle = "Aggiungi brani dalla ricerca o tocca +.",
                 )
             }
         } else {
@@ -458,17 +467,23 @@ private fun PlaylistDetailBody(
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Delete,
-                                    contentDescription = "Remove",
+                                    contentDescription = "Rimuovi",
                                     tint = MaterialTheme.colorScheme.onErrorContainer,
                                 )
                             }
                         },
                     ) {
+                        // Contributor pill only when collaborative AND the
+                        // adder isn't the playlist owner — owner attribution
+                        // would clutter every row on a single-author playlist.
+                        val contributorTag = entry.addedByName
+                            ?.takeIf { playlist.isShared && entry.addedByUserId != playlist.ownerId }
                         SongRow(
                             song = song,
                             isDownloaded = song.id in downloadedIds,
                             onClick = { onPlayFromIndex(songsForPlayback, idx) },
                             onMore = { onLongPressSong(song) },
+                            contributorTag = contributorTag,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(MaterialTheme.colorScheme.surface),
@@ -612,6 +627,45 @@ private fun MetaCard(
             style = MaterialTheme.typography.titleSmall,
             color = com.mediaplayer.android.ui.theme.MHColors.TextHi,
             modifier = Modifier.padding(top = 3.dp),
+        )
+    }
+}
+
+@Composable
+private fun LeavePlaylistButton(
+    playlistName: String,
+    ownerName: String?,
+    onConfirm: () -> Unit,
+) {
+    var confirm by remember { mutableStateOf(false) }
+    OutlinedButton(
+        onClick = { confirm = true },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        Text("Rimuovi dalla libreria")
+    }
+    if (confirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("Rimuovi dalla libreria?") },
+            text = {
+                Text(
+                    "\"$playlistName\" sparirà dalla tua libreria. " +
+                        "Continuerà ad esistere per ${ownerName ?: "il proprietario"} " +
+                        "e gli altri membri.",
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    confirm = false
+                    onConfirm()
+                }) { Text("Rimuovi") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirm = false }) { Text("Annulla") }
+            },
         )
     }
 }

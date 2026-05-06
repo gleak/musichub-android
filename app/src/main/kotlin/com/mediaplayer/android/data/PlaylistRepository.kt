@@ -83,6 +83,18 @@ class PlaylistRepository(
     suspend fun acceptShare(token: String): PlaylistDetailDto =
         api.acceptPlaylistShare(token)
 
+    /** Owner-only: revoke every active share token for the playlist. */
+    suspend fun revokeShares(playlistId: Long) {
+        api.revokePlaylistShares(playlistId)
+    }
+
+    suspend fun listMembers(playlistId: Long): List<com.mediaplayer.android.data.dto.PlaylistMemberDto> =
+        api.listPlaylistMembers(playlistId)
+
+    suspend fun kickMember(playlistId: Long, userId: Long) {
+        api.kickPlaylistMember(playlistId, userId)
+    }
+
     /** Triggers a manual Daily Mix recompute. Returns the number of refreshed entries. */
     suspend fun refreshDailyMix(): Int = api.refreshDailyMix().refreshed
 }

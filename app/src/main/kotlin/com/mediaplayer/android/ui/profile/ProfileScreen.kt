@@ -14,13 +14,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import com.mediaplayer.android.data.PlaylistRepository
+import com.mediaplayer.android.data.dto.UserDto
 import com.mediaplayer.android.data.sync.EventQueue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.mediaplayer.android.data.AppVersion
 import com.mediaplayer.android.ui.common.EyebrowText
 import com.mediaplayer.android.ui.common.LocalCurrentUser
@@ -93,27 +95,12 @@ fun ProfileScreen(
     // the session silently.
     var showSignOutConfirm by remember { mutableStateOf(false) }
     if (showSignOutConfirm) {
-        AlertDialog(
-            onDismissRequest = { showSignOutConfirm = false },
-            title = { Text("Disconnettersi?") },
-            text = {
-                Text(
-                    "Verrai riportato alla schermata di accesso. " +
-                        "I download e le playlist locali resteranno sul dispositivo."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showSignOutConfirm = false
-                    onSignOut()
-                }) {
-                    Text("Disconnetti", color = Color(0xFFFF4D2E))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSignOutConfirm = false }) {
-                    Text("Annulla")
-                }
+        AccountSwitchDialog(
+            user = user,
+            onDismiss = { showSignOutConfirm = false },
+            onConfirm = {
+                showSignOutConfirm = false
+                onSignOut()
             },
         )
     }
@@ -266,6 +253,7 @@ fun ProfileScreen(
                 SettingsRow(
                     label = "Eventi in coda",
                     detail = if (pending == 0) "Tutto sincronizzato" else "$pending in attesa",
+                    onClick = { onOpenSetting("profile/queued-events") },
                 )
                 SettingsRow(label = "Versione", detail = "v${AppVersion.VERSION}")
             }
@@ -411,4 +399,153 @@ private fun androidx.compose.foundation.layout.ColumnScope.SettingsRow(
 private fun displayInitial(name: String?, email: String?): String {
     val s = name?.takeIf { it.isNotBlank() } ?: email
     return s?.trim()?.firstOrNull()?.uppercase() ?: "?"
+}
+
+/**
+ * Mockup `AccountSwitchDialog` (mh-auth.jsx:186-219). Custom 16-radius
+ * card surface with `// CAMBIA ACCOUNT` eyebrow, two-sentence cloud-sync
+ * body, account preview row, and side-by-side pill buttons (Annulla
+ * subtle / Disconnetti red filled). Replaces the stock Material3
+ * AlertDialog that lived inline in `ProfileScreen` before v0.13.4.
+ */
+@Composable
+private fun AccountSwitchDialog(
+    user: UserDto?,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val mono = LocalMHMono.current
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .widthIn(max = 320.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF1A1A1A))
+                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                .padding(22.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                EyebrowText(text = "Cambia account")
+                Text(
+                    text = "Disconnettersi da MusicHub?",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                    ),
+                    color = MHColors.TextHi,
+                )
+                Text(
+                    text = "La libreria scaricata e i preferiti restano sul dispositivo. " +
+                        "La sincronizzazione con il cloud si interrompe finché non accedi di nuovo.",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                    ),
+                    color = MHColors.TextLo,
+                )
+                if (user != null) {
+                    AccountPreviewRow(user = user)
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    PillButton(
+                        modifier = Modifier.weight(1f),
+                        text = "Annulla",
+                        bg = Color.White.copy(alpha = 0.06f),
+                        contentColor = MHColors.TextHi,
+                        onClick = onDismiss,
+                    )
+                    PillButton(
+                        modifier = Modifier.weight(1f),
+                        text = "Disconnetti",
+                        bg = Color(0xFFE14848),
+                        contentColor = Color.White,
+                        onClick = onConfirm,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountPreviewRow(user: UserDto) {
+    val mono = LocalMHMono.current
+    val initial = displayInitial(user.name, user.email)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.White.copy(alpha = 0.04f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        0f to MHColors.Lime,
+                        1f to Color(0xFF3A0CA3),
+                    ),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = initial,
+                color = Color(0xFF0A0A0A),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = user.email ?: user.name ?: "—",
+                color = MHColors.TextHi,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "Account corrente",
+                style = mono.duration.copy(
+                    fontSize = 10.5.sp,
+                    color = MHColors.TextLo2,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PillButton(
+    modifier: Modifier = Modifier,
+    text: String,
+    bg: Color,
+    contentColor: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = contentColor,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+            ),
+        )
+    }
 }

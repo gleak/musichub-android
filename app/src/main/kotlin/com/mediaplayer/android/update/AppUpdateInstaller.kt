@@ -11,6 +11,16 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.mediaplayer.android.data.AuthTokenHolder
 import com.mediaplayer.android.data.Network
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.io.File
 import java.security.MessageDigest
 
@@ -21,11 +31,38 @@ import java.security.MessageDigest
  * notification shade. Auth headers (X-Api-Key + Authorization Bearer)
  * are attached to the request so the protected backend endpoint accepts
  * the fetch without a separate public route.
+ *
+ * Also publishes [progress] — a live `StateFlow` that the in-app banner
+ * (`AppUpdateBanner`) consumes to render its `progress` and `failed`
+ * states without forcing the user to read the system notification shade.
  */
 object AppUpdateInstaller {
 
     private const val APK_DIR = "updates"
     private const val APK_FILE = "mediaplayer-update.apk"
+
+    sealed interface DownloadProgress {
+        data object Idle : DownloadProgress
+        data class Active(
+            val percent: Int,
+            val bytesDownloaded: Long,
+            val totalBytes: Long,
+        ) : DownloadProgress
+        data class Failed(val reason: String) : DownloadProgress
+    }
+
+    private val _progress = MutableStateFlow<DownloadProgress>(DownloadProgress.Idle)
+    val progress: StateFlow<DownloadProgress> = _progress.asStateFlow()
+
+    private val pollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile private var pollJob: Job? = null
+
+    /** Clears [progress] back to Idle. Called by the banner X dismiss. */
+    fun resetProgress() {
+        pollJob?.cancel()
+        pollJob = null
+        _progress.value = DownloadProgress.Idle
+    }
 
     /**
      * Kick off the system-level download of [url]. Re-uses an in-flight
@@ -56,11 +93,20 @@ object AppUpdateInstaller {
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val downloadId = dm.enqueue(request)
 
+        _progress.value = DownloadProgress.Active(
+            percent = 0,
+            bytesDownloaded = 0L,
+            totalBytes = 0L,
+        )
+        startProgressPoll(dm, downloadId)
+
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 val finishedId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
                 if (finishedId != downloadId) return
                 ctx.unregisterReceiver(this)
+                pollJob?.cancel()
+                pollJob = null
 
                 val query = DownloadManager.Query().setFilterById(finishedId)
                 val (status, reason) = dm.query(query)?.use { c ->
@@ -86,22 +132,29 @@ object AppUpdateInstaller {
                         404 -> "File di aggiornamento non trovato sul server"
                         else -> if (reason in 400..599) "Errore del server $reason" else "Errore $reason"
                     }
-                    onError("Download non riuscito: $detail")
+                    val msg = "Download non riuscito: $detail"
+                    _progress.value = DownloadProgress.Failed(msg)
+                    onError(msg)
                     return
                 }
 
                 if (!target.exists() || target.length() == 0L) {
-                    onError("Download non riuscito: file mancante al termine")
+                    val msg = "Download non riuscito: file mancante al termine"
+                    _progress.value = DownloadProgress.Failed(msg)
+                    onError(msg)
                     return
                 }
                 if (!expectedSha256.isNullOrBlank()) {
                     val actual = sha256(target)
                     if (!actual.equals(expectedSha256, ignoreCase = true)) {
                         target.delete()
-                        onError("Controllo di integrità non riuscito — file rifiutato")
+                        val msg = "Controllo di integrità non riuscito — file rifiutato"
+                        _progress.value = DownloadProgress.Failed(msg)
+                        onError(msg)
                         return
                     }
                 }
+                _progress.value = DownloadProgress.Idle
                 onReady(target)
             }
         }
@@ -113,6 +166,46 @@ object AppUpdateInstaller {
             IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
             flags,
         )
+    }
+
+    /**
+     * Poll DownloadManager every 500ms while the download is running and
+     * push updates into [progress]. Cancelled by the completion receiver
+     * (success or failure) or by [resetProgress].
+     */
+    private fun startProgressPoll(dm: DownloadManager, downloadId: Long) {
+        pollJob?.cancel()
+        pollJob = pollScope.launch {
+            val query = DownloadManager.Query().setFilterById(downloadId)
+            while (isActive) {
+                val snapshot = dm.query(query)?.use { c ->
+                    if (c.moveToFirst()) {
+                        val status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                        val total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                        val so = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                        Triple(status, so.coerceAtLeast(0L), total.coerceAtLeast(0L))
+                    } else null
+                }
+                if (snapshot != null) {
+                    val (status, so, total) = snapshot
+                    if (status == DownloadManager.STATUS_RUNNING ||
+                        status == DownloadManager.STATUS_PENDING ||
+                        status == DownloadManager.STATUS_PAUSED
+                    ) {
+                        val pct = if (total > 0L) ((so * 100L) / total).toInt().coerceIn(0, 100) else 0
+                        _progress.value = DownloadProgress.Active(
+                            percent = pct,
+                            bytesDownloaded = so,
+                            totalBytes = total,
+                        )
+                    } else {
+                        // Terminal — receiver will pick it up.
+                        break
+                    }
+                }
+                delay(500L)
+            }
+        }
     }
 
     /**

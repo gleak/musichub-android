@@ -58,7 +58,7 @@ import kotlin.math.min
  */
 
 internal const val DB_NAME = "sync.db"
-internal const val DB_VERSION = 2
+internal const val DB_VERSION = 3
 internal const val TABLE = "pending_events"
 internal const val CACHE_TABLE = "cached_kv"
 
@@ -73,6 +73,9 @@ internal class SyncDb(context: Context) :
     override fun onUpgrade(db: SQLiteDatabase, old: Int, new: Int) {
         // Additive only — never drop pending_events, those are user data.
         if (old < 2) createCacheKv(db)
+        if (old < 3) {
+            db.execSQL("ALTER TABLE $TABLE ADD COLUMN display_label TEXT")
+        }
     }
 
     private fun createPendingEvents(db: SQLiteDatabase) {
@@ -83,6 +86,7 @@ internal class SyncDb(context: Context) :
                 type TEXT NOT NULL,
                 payload TEXT NOT NULL,
                 dedupe_key TEXT,
+                display_label TEXT,
                 created_at INTEGER NOT NULL,
                 attempts INTEGER NOT NULL DEFAULT 0,
                 next_attempt_at INTEGER NOT NULL DEFAULT 0,
@@ -140,6 +144,40 @@ object EventQueue {
     private val _pending = MutableStateFlow(0)
     val pending: StateFlow<Int> = _pending.asStateFlow()
 
+    /**
+     * Live per-type breakdown of unsent events. Empty until [init] runs.
+     * Backs the `Eventi in coda` diagnostic screen — the user wants to
+     * see WHAT is queued, not just how many things.
+     */
+    private val _breakdown = MutableStateFlow<Map<EventType, Int>>(emptyMap())
+    val breakdown: StateFlow<Map<EventType, Int>> = _breakdown.asStateFlow()
+
+    /**
+     * Live row-level snapshot for the diagnostic screen. Each entry is
+     * one outstanding queue row — id, type and the literal payload (song
+     * id as a string, or an artist name, or the JSON of a play record).
+     * Capped at 50 rows so an unbounded offline queue can't bloat the
+     * UI; the count remains accurate via [pending].
+     */
+    data class UiRow(
+        val id: Long,
+        val type: EventType,
+        val payload: String,
+        val displayLabel: String?,
+    )
+
+    private val _rows = MutableStateFlow<List<UiRow>>(emptyList())
+    val rows: StateFlow<List<UiRow>> = _rows.asStateFlow()
+
+    /**
+     * Earliest `next_attempt_at` in the future, or null if no row is
+     * waiting on a backoff. The UI counts down to this so users know
+     * the next retry is imminent. Set to `0L` here only as a placeholder —
+     * actual values come from SQLite.
+     */
+    private val _nextRetryAt = MutableStateFlow<Long?>(null)
+    val nextRetryAt: StateFlow<Long?> = _nextRetryAt.asStateFlow()
+
     fun init(context: Context) {
         if (this::db.isInitialized) return
         db = SyncDb(context.applicationContext)
@@ -152,46 +190,56 @@ object EventQueue {
         scope.launch { drainerLoop(api) }
     }
 
-    suspend fun enqueuePlay(req: RecordPlayRequest) =
-        insert(EventType.PLAY, json.encodeToString(req), dedupeKey = null)
+    suspend fun enqueuePlay(req: RecordPlayRequest, displayLabel: String? = null) =
+        insert(EventType.PLAY, json.encodeToString(req), dedupeKey = null,
+            displayLabel = displayLabel)
 
-    suspend fun enqueueLike(songId: Long) =
+    suspend fun enqueueLike(songId: Long, displayLabel: String? = null) =
         insert(EventType.LIKE, songId.toString(),
-            dedupeKey = "LIKE:$songId", replaceKey = "UNLIKE:$songId")
+            dedupeKey = "LIKE:$songId", replaceKey = "UNLIKE:$songId",
+            displayLabel = displayLabel)
 
-    suspend fun enqueueUnlike(songId: Long) =
+    suspend fun enqueueUnlike(songId: Long, displayLabel: String? = null) =
         insert(EventType.UNLIKE, songId.toString(),
-            dedupeKey = "UNLIKE:$songId", replaceKey = "LIKE:$songId")
+            dedupeKey = "UNLIKE:$songId", replaceKey = "LIKE:$songId",
+            displayLabel = displayLabel)
 
     suspend fun enqueueFollow(artist: String) =
         insert(EventType.FOLLOW, artist,
-            dedupeKey = "FOLLOW:$artist", replaceKey = "UNFOLLOW:$artist")
+            dedupeKey = "FOLLOW:$artist", replaceKey = "UNFOLLOW:$artist",
+            displayLabel = artist)
 
     suspend fun enqueueUnfollow(artist: String) =
         insert(EventType.UNFOLLOW, artist,
-            dedupeKey = "UNFOLLOW:$artist", replaceKey = "FOLLOW:$artist")
+            dedupeKey = "UNFOLLOW:$artist", replaceKey = "FOLLOW:$artist",
+            displayLabel = artist)
 
-    suspend fun enqueueDislikeSong(songId: Long) =
+    suspend fun enqueueDislikeSong(songId: Long, displayLabel: String? = null) =
         insert(EventType.DISLIKE_SONG, songId.toString(),
-            dedupeKey = "DISLIKE_SONG:$songId", replaceKey = "UNDISLIKE_SONG:$songId")
+            dedupeKey = "DISLIKE_SONG:$songId", replaceKey = "UNDISLIKE_SONG:$songId",
+            displayLabel = displayLabel)
 
-    suspend fun enqueueUndislikeSong(songId: Long) =
+    suspend fun enqueueUndislikeSong(songId: Long, displayLabel: String? = null) =
         insert(EventType.UNDISLIKE_SONG, songId.toString(),
-            dedupeKey = "UNDISLIKE_SONG:$songId", replaceKey = "DISLIKE_SONG:$songId")
+            dedupeKey = "UNDISLIKE_SONG:$songId", replaceKey = "DISLIKE_SONG:$songId",
+            displayLabel = displayLabel)
 
     suspend fun enqueueDislikeArtist(artist: String) =
         insert(EventType.DISLIKE_ARTIST, artist,
-            dedupeKey = "DISLIKE_ARTIST:$artist", replaceKey = "UNDISLIKE_ARTIST:$artist")
+            dedupeKey = "DISLIKE_ARTIST:$artist", replaceKey = "UNDISLIKE_ARTIST:$artist",
+            displayLabel = artist)
 
     suspend fun enqueueUndislikeArtist(artist: String) =
         insert(EventType.UNDISLIKE_ARTIST, artist,
-            dedupeKey = "UNDISLIKE_ARTIST:$artist", replaceKey = "DISLIKE_ARTIST:$artist")
+            dedupeKey = "UNDISLIKE_ARTIST:$artist", replaceKey = "DISLIKE_ARTIST:$artist",
+            displayLabel = artist)
 
     private suspend fun insert(
         type: EventType,
         payload: String,
         dedupeKey: String?,
         replaceKey: String? = null,
+        displayLabel: String? = null,
     ) {
         withContext(Dispatchers.IO) {
             writeLock.withLock {
@@ -208,6 +256,7 @@ object EventQueue {
                         put("type", type.name)
                         put("payload", payload)
                         put("dedupe_key", dedupeKey)
+                        put("display_label", displayLabel)
                         put("created_at", System.currentTimeMillis())
                         put("next_attempt_at", 0L)
                     }
@@ -325,5 +374,57 @@ object EventQueue {
 
     private suspend fun refreshPendingCount() {
         _pending.value = queryPendingCount()
+        _breakdown.value = queryBreakdown()
+        _rows.value = queryRows()
+        _nextRetryAt.value = queryNextRetryAt()
+    }
+
+    private suspend fun queryBreakdown(): Map<EventType, Int> = withContext(Dispatchers.IO) {
+        val out = LinkedHashMap<EventType, Int>()
+        db.readableDatabase.rawQuery(
+            "SELECT type, COUNT(*) FROM $TABLE GROUP BY type", null,
+        ).use { c ->
+            while (c.moveToNext()) {
+                val type = runCatching { EventType.valueOf(c.getString(0)) }.getOrNull() ?: continue
+                out[type] = c.getInt(1)
+            }
+        }
+        out
+    }
+
+    private suspend fun queryRows(): List<UiRow> = withContext(Dispatchers.IO) {
+        val out = ArrayList<UiRow>(50)
+        db.readableDatabase.rawQuery(
+            "SELECT id, type, payload, display_label FROM $TABLE ORDER BY id LIMIT 50",
+            null,
+        ).use { c ->
+            while (c.moveToNext()) {
+                val type = runCatching { EventType.valueOf(c.getString(1)) }.getOrNull() ?: continue
+                out.add(
+                    UiRow(
+                        id = c.getLong(0),
+                        type = type,
+                        payload = c.getString(2),
+                        displayLabel = if (c.isNull(3)) null else c.getString(3),
+                    )
+                )
+            }
+        }
+        out
+    }
+
+    /**
+     * Smallest `next_attempt_at` strictly in the future across all rows.
+     * Returns `null` when no row is currently in backoff (so all eligible
+     * rows would dispatch immediately on next network).
+     */
+    private suspend fun queryNextRetryAt(): Long? = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        db.readableDatabase.rawQuery(
+            "SELECT MIN(next_attempt_at) FROM $TABLE WHERE next_attempt_at > ?",
+            arrayOf(now.toString()),
+        ).use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+        }
     }
 }

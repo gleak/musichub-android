@@ -55,9 +55,11 @@ class DislikedRepository(
     }
 
     /** Toggles dedupe per songId (dislike then undislike cancels). */
-    suspend fun dislikeSong(songId: Long) = EventQueue.enqueueDislikeSong(songId)
+    suspend fun dislikeSong(songId: Long, displayLabel: String? = null) =
+        EventQueue.enqueueDislikeSong(songId, displayLabel)
 
-    suspend fun undislikeSong(songId: Long) = EventQueue.enqueueUndislikeSong(songId)
+    suspend fun undislikeSong(songId: Long, displayLabel: String? = null) =
+        EventQueue.enqueueUndislikeSong(songId, displayLabel)
 
     suspend fun dislikeArtist(artist: String) = EventQueue.enqueueDislikeArtist(artist)
 

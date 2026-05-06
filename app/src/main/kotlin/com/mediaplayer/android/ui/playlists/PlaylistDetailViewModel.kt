@@ -101,6 +101,22 @@ class PlaylistDetailViewModel(
         DownloadRepository.removeAll(entries.map { it.song.id })
     }
 
+    /**
+     * Owner = cascade delete; member = leave the share. Backend is the same
+     * `DELETE /api/playlists/{id}` endpoint — server inspects ownership and
+     * either drops the row entirely or only the membership.
+     */
+    fun deleteOrLeave(onDone: (success: Boolean, isMember: Boolean) -> Unit) {
+        val current = (state.value as? PlaylistDetailUiState.Success)?.playlist
+        val isMember = current?.isOwner == false
+        viewModelScope.launch {
+            val ok = try {
+                repository.delete(playlistId); true
+            } catch (_: Throwable) { false }
+            onDone(ok, isMember)
+        }
+    }
+
     fun toggleAutoSync() {
         val current = (state.value as? PlaylistDetailUiState.Success)?.playlist ?: return
         val next = !current.autoSync
