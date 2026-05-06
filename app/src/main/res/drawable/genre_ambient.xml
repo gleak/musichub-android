@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AA browse-tile cover for Ambient. Mockup palette: dot (bg=#0B3D2E, fg=lime #A8E04E). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:startColor="#0B3D2E"
+        android:endColor="#A8E04E"
+        android:angle="45"
+        android:type="linear"/>
+</shape>

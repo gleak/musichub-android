@@ -62,7 +62,7 @@ fun QueueSheet(
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             Text(
-                text = "Up next",
+                text = "In coda",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
             )
@@ -70,14 +70,14 @@ fun QueueSheet(
             if (queue.isEmpty()) {
                 EmptyState(
                     icon = Icons.AutoMirrored.Filled.QueueMusic,
-                    title = "Queue is empty",
-                    subtitle = "Tap a song to start playback.",
+                    title = "Coda vuota",
+                    subtitle = "Tocca un brano per iniziare la riproduzione.",
                 )
             } else {
                 LazyColumn {
                     if (current != null) {
                         item(key = "section-now") {
-                            QueueSectionHeader("Now playing")
+                            QueueSectionHeader("In riproduzione")
                         }
                         item(key = "now-${current.index}-${current.song.id}") {
                             QueueRow(
@@ -92,7 +92,7 @@ fun QueueSheet(
                     }
                     if (userAhead.isNotEmpty()) {
                         item(key = "section-user") {
-                            QueueSectionHeader("Next in queue")
+                            QueueSectionHeader("Prossimi in coda")
                         }
                         items(items = userAhead, key = { "uq-${it.index}-${it.song.id}" }) { entry ->
                             QueueRow(
@@ -107,7 +107,7 @@ fun QueueSheet(
                     }
                     if (sourceAhead.isNotEmpty()) {
                         item(key = "section-source") {
-                            QueueSectionHeader("Next up")
+                            QueueSectionHeader("A seguire")
                         }
                         items(items = sourceAhead, key = { "src-${it.index}-${it.song.id}" }) { entry ->
                             QueueRow(
@@ -174,7 +174,7 @@ private fun QueueRow(
             IconButton(onClick = onRemove) {
                 Icon(
                     imageVector = Icons.Filled.Close,
-                    contentDescription = "Remove from queue",
+                    contentDescription = "Rimuovi dalla coda",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

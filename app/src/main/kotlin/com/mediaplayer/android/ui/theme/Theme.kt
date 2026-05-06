@@ -8,8 +8,14 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RadialGradientShader
+import androidx.compose.ui.graphics.Shader
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -190,6 +196,31 @@ object MHGradient {
             0f to top,
             0.5f to bottom,
             1f to bottom,
+        )
+    }
+
+    /**
+     * LoginScreen radial — `radial(120% 60% at 50% 0%, #2A4615 → BG_TOP →
+     * BG_BOTTOM)` per `mh-auth.jsx:9-12`. Lime-tinted halo above the
+     * monogram fades into the standard screen background. Locked dark
+     * because the hero needs the brand backdrop regardless of theme.
+     */
+    fun loginBg(): Brush = LoginRadialBrush
+
+    private val LoginRadialBrush: ShaderBrush = object : ShaderBrush() {
+        override fun createShader(size: Size): Shader = RadialGradientShader(
+            colors = listOf(
+                Color(0xFF2A4615),
+                MHColors.BgTop,
+                MHColors.BgBottom,
+            ),
+            colorStops = listOf(0f, 0.35f, 1f),
+            // Center horizontally, anchored to the top edge.
+            center = Offset(size.width / 2f, 0f),
+            // Mockup radial spec is 120% width × 60% height — the radius
+            // matches whichever is larger so the halo reaches the corners.
+            radius = maxOf(size.width * 0.6f, size.height * 0.6f),
+            tileMode = TileMode.Clamp,
         )
     }
 }

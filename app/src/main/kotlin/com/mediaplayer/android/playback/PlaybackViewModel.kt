@@ -155,6 +155,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     // Play-time tracking for history reporting
     private var trackedSongId: Long? = null
     private var trackedSongTitle: String? = null
+    private var trackedSongArtist: String? = null
     private var trackedDurationMs: Long = 0L
     private var listenedMs: Long = 0L
     private var playingStartWall: Long = -1L
@@ -195,6 +196,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             val nextDto = mediaItem?.toSongDto()
             trackedSongId = mediaItem?.mediaId?.toLongOrNull()
             trackedSongTitle = nextDto?.title
+            trackedSongArtist = nextDto?.artist
             trackedDurationMs = 0L
             listenedMs = 0L
             _currentSong.value = nextDto
@@ -964,12 +966,17 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         val ratio = if (duration > 0)
             (listened.toDouble() / duration).coerceAtMost(1.0)
         else null
+        val playLabel = listOfNotNull(
+            trackedSongTitle?.takeIf { it.isNotBlank() },
+            trackedSongArtist?.takeIf { it.isNotBlank() },
+        ).joinToString(" — ").ifBlank { null }
         viewModelScope.launch {
             historyRepository.record(
                 songId = id,
                 durationListenedMs = listened,
                 completionRatio = ratio,
                 wasSkipped = !countsAsFullPlay,
+                displayLabel = playLabel,
             )
         }
         // Auto-download every song the user actually starts (listened > 0,
@@ -1008,6 +1015,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         val ratio = if (duration > 0)
             (listened.toDouble() / duration).coerceAtMost(1.0)
         else null
+        val flushLabel = listOfNotNull(
+            trackedSongTitle?.takeIf { it.isNotBlank() },
+            trackedSongArtist?.takeIf { it.isNotBlank() },
+        ).joinToString(" — ").ifBlank { null }
         // Direct POST so /recent reflects this play on the next refresh.
         // Falls back to the queue inside recordImmediate if offline.
         historyRepository.recordImmediate(
@@ -1015,6 +1026,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             durationListenedMs = listened,
             completionRatio = ratio,
             wasSkipped = false,
+            displayLabel = flushLabel,
         )
         if (PlayerSettings.instance.downloadAutoNow() &&
             !DownloadRepository.isDownloaded(id)

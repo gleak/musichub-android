@@ -54,7 +54,7 @@ fun EqualizerSheet(onDismiss: () -> Unit) {
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "Equalizer not supported on this device",
+                        text = "Equalizzatore non supportato su questo dispositivo",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -13,6 +13,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mediaplayer.android.ui.theme.LocalMHMono
+import com.mediaplayer.android.ui.theme.MHColors
 
 /**
  * Section header used across list-style screens. Replaces the per-screen
@@ -29,6 +31,7 @@ fun SectionHeader(
     eyebrow: String? = null,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    trailingBadge: String? = null,
 ) {
     Row(
         modifier = modifier
@@ -47,6 +50,12 @@ fun SectionHeader(
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (trailingBadge != null) {
+            Text(
+                text = trailingBadge,
+                style = LocalMHMono.current.badge.copy(color = MHColors.Lime),
             )
         }
         if (actionLabel != null && onAction != null) {

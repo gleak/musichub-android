@@ -50,6 +50,7 @@ import com.mediaplayer.android.ui.common.CollageCover
 import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.EyebrowText
 import com.mediaplayer.android.ui.common.GeneratedCover
+import com.mediaplayer.android.ui.common.MHLogo
 import com.mediaplayer.android.ui.common.SectionHeader
 import com.mediaplayer.android.ui.common.badgeFor
 import com.mediaplayer.android.ui.common.familyOf
@@ -113,6 +114,24 @@ private fun ForYouContent(
     ) {
         item {
             Column(modifier = Modifier.padding(start = MediaPlayerSpacing.M, end = 4.dp)) {
+                // Brand lockup at the top of the surface per mockup
+                // `mh-foryou.jsx:20-25`. Settings entry stays in the same row.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp, end = 12.dp),
+                ) {
+                    MHLogo(tileSize = 22.dp, modifier = Modifier.weight(1f))
+                    IconButton(onClick = onProfileClick, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "Profilo",
+                            tint = MHColors.TextHi,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
                 EyebrowText(text = "Generata dal sistema")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -121,13 +140,6 @@ private fun ForYouContent(
                         color = MHColors.TextHi,
                         modifier = Modifier.weight(1f),
                     )
-                    IconButton(onClick = onProfileClick) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = "Profilo",
-                            tint = MHColors.TextHi,
-                        )
-                    }
                 }
                 Text(
                     text = "${autoPlaylists.size} playlist · aggiornate oggi",
@@ -145,7 +157,11 @@ private fun ForYouContent(
         if (mixes.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(24.dp))
-                SectionHeader(eyebrow = "6 mix", title = "I tuoi mix giornalieri")
+                SectionHeader(
+                    eyebrow = "6 mix",
+                    title = "I tuoi mix giornalieri",
+                    trailingBadge = "OGGI",
+                )
             }
             item {
                 MixGrid(mixes, onClick = onPlaylistClick)

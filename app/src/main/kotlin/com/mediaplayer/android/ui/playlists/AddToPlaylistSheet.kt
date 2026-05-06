@@ -125,7 +125,7 @@ fun AddToPlaylistSheet(
                 .padding(horizontal = 0.dp, vertical = 8.dp),
         ) {
             Text(
-                text = "Add to playlist",
+                text = "Aggiungi alla playlist",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(horizontal = 24.dp),
             )
@@ -142,7 +142,7 @@ fun AddToPlaylistSheet(
 
             if (onPlayNext != null) {
                 QueueActionRow(
-                    label = "Play next",
+                    label = "Riproduci dopo",
                     icon = { Icon(Icons.Filled.SkipNext, contentDescription = null) },
                     onClick = { onPlayNext(); onDismiss() },
                 )
@@ -150,7 +150,7 @@ fun AddToPlaylistSheet(
             }
             if (onAddToQueue != null) {
                 QueueActionRow(
-                    label = "Add to queue",
+                    label = "Aggiungi alla coda",
                     icon = { Icon(Icons.Filled.AddToPhotos, contentDescription = null) },
                     onClick = { onAddToQueue(); onDismiss() },
                 )
@@ -182,7 +182,7 @@ fun AddToPlaylistSheet(
             }
             if (onFlagWrong != null) {
                 QueueActionRow(
-                    label = "Report wrong song",
+                    label = "Segnala brano sbagliato",
                     icon = {
                         Icon(
                             Icons.Filled.ReportProblem,
@@ -396,7 +396,7 @@ private fun NewPlaylistRow(onClick: () -> Unit) {
         }
         Spacer(Modifier.width(16.dp))
         Text(
-            text = "New playlist",
+            text = "Nuova playlist",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
         )

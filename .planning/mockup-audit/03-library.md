@@ -1,5 +1,14 @@
 # Library drilldowns — mockup vs impl
 
+> **Implementation status — 2026-05-05 · DONE (v0.13.5 → v0.14.0 → v0.15.0).**
+> Albums/Artists/Liked rebranded with eyebrows + count badges + Italian
+> titles, A→Z scrubber on Artists, Liked numeric index + total duration
+> + download triplet, GenreDetailScreen shipped, collaborative-playlist
+> members card + Gestisci membri + per-track contributor pill, dedicated
+> PlaylistShareDialog with copy + system share + revoke link,
+> full-screen PlaylistShareImporter modal. Kept as historical audit
+> trail only.
+
 Mockup file: `mockup/mh-library.jsx`
 Impl files audited:
 - `app/src/main/kotlin/com/mediaplayer/android/ui/albums/AlbumListScreen.kt`
@@ -110,13 +119,29 @@ Impl files audited:
 
 ## Missing in mockup
 
-1. Loading / shimmer / error-retry / pull-to-refresh / paginated load-more states.
-2. Empty states (e.g. `"No liked songs yet"`, `"No albums in catalog."`).
-3. Kebab `AddToPlaylistSheet` with dislike-song / dislike-artist / flag-wrong actions wired into every track row (`LikedScreen.kt:121-138`, `PlaylistDetailScreen.kt:239-258`).
-4. Auto-playlist variant of `PlaylistDetailScreen` (the `AutoPlaylistMetaStrip` / `AGGIORNATA` / `BRANI` cards at `PlaylistDetailScreen.kt:540-617`) — mockup only shows the collaborative variant.
-5. Swipe-to-dismiss + drag-reorder gestures on playlist detail.
-6. Refresh / Add-songs `TopAppBar` actions on playlist detail.
-7. Profile / Settings entry point on the library landing.
-8. `Routes.SPOTIFY_IMPORT` row on the library landing (`PlaylistsScreen.kt:377-411`) — `"Import from Spotify"` / `"Bring playlists into your library"`.
-9. `LibraryFilter.Scaricati` placeholder behaviour (`"I brani scaricati per l'ascolto offline appariranno qui."`).
-10. App-update dialog, playback error dialog, offline badge — generic overlays the mockup doesn't depict.
+**Update 2026-05-05:** new state file `mockup/mh-library-states.jsx` (mounted in `mh-canvas-app.jsx:78-91` as `lib-loading`, `lib-pull`, `lib-error`, `lib-loadmore`, `lib-empty-liked`, `lib-empty-albums`, `lib-kebab`, `lib-auto`, `lib-gestures`, `lib-topbar`, `lib-landing-plus`, `lib-scaricati`, `lib-update`, `lib-offline`) closes most prior gaps. Remaining truly impl-only items at the bottom.
+
+### Now covered by state mockups
+1. ~~**Loading / shimmer / error-retry / pull-to-refresh / paginated load-more**~~ →
+   - `LibraryLoadingScreen` — full shimmer (filter chips + 8 list rows, `mhShimmer` keyframes, 200% bg-pos slide).
+   - `LibraryPullRefreshScreen` — top progress band with spinner + mono `// AGGIORNO LIBRERIA…`, content translated 4px down at 0.85 opacity.
+   - `LibraryErrorRetryScreen` — 64dp red triangle glyph, red eyebrow `// ERRORE · NETWORK`, title `"Server irraggiungibile"`, copy `"mh.duckdns.org non risponde. I brani offline restano disponibili dalla scheda Scaricati."`, mono diagnostic chip `ECONNREFUSED · retry 3/5 · backoff 4s`, dual CTA `Riprova` lime + `Solo offline` ghost.
+   - `LibraryLoadMoreScreen` — Paged liked-songs list with mono header `// PAGE 4 OF 26 · 100/1284`, leading numeric index col (`fontFamily: T.MONO`, right-aligned), bottom load-more card (spinner + `"Carico altri brani…"` + mono `page=5 limit=100 · ETA 0.6s` + `1184 / 1284` counter).
+2. ~~**Empty states**~~ →
+   - `LikedEmptyScreen` — purple→bg gradient hero, 200dp dashed-border heart placeholder, eyebrow `// LIBRERIA · MI PIACE`, title `"Nessun brano che ti piace"`, body `"Tocca il cuore su qualunque traccia: la troverai qui, sempre offline-ready."`, lime CTA `Sfoglia consigli`.
+   - `AlbumsEmptyScreen` — back chevron + eyebrow `// LIBRERIA` + title `Album · 0`, 96dp dashed disc icon, italian copy referencing `MusicHub` + Exportify path, dual CTA `Importa da Spotify` lime + `Cerca` ghost.
+3. ~~**Kebab `AddToPlaylistSheet` with dislike + flag**~~ → `LibraryTrackKebabSheet`. Bottom sheet with eyebrow `// AZIONI · LIBRERIA`, track header (56dp `MHCover` + title + `Artista · Album`), action list: `Aggiungi a playlist`, `Aggiungi alla coda`, `Riproduci dopo`, **muted heart row `Tolto da Mi piace` with trailing mono `OFF` indicator**, divider, two thumb-down rows (`Non consigliarmi questo brano` / `…questo artista`), red flag row `Segnala brano sbagliato` (`#FF7A7A`).
+4. ~~**Auto-playlist variant of `PlaylistDetailScreen`**~~ → `AutoPlaylistDetailScreen`. Lime gradient hero, 180dp cover with absolute-positioned `AUTO` badge (sparkle glyph + mono caption), eyebrow `// PER TE · GENERATA`, title `"Mix · 02"`, italian generation copy, **2-up meta strip cards** `// AGGIORNATA` (`"2 giorni fa"` + mono `Prossimo: mer 11/05`) and `// BRANI` (`"32 · 1h 54m"` + mono `+8 nuovi questa settimana`), CTA row with no edit button, section caption `// BRANI · ORDINE GENERATO`, per-track `NEW` ribbon mono badge (`fontSize: 8.5`, lime tinted bg) for fresh tracks + `MHPlayingBars` for currently-playing row.
+5. ~~**Swipe-to-dismiss + drag-reorder gestures**~~ → `PlaylistGesturesScreen`. Eyebrow `// PLAYLIST · MODIFICA`, mono helper line `7 brani · trascina per riordinare · scorri per rimuovere`. **Three gesture states inline:**
+   - swiping row — pulled left -92px, red `Rimuovi` affordance with trash icon revealed behind on red gradient (`linear-gradient(90deg, transparent 30%, rgba(225,72,72,0.85) 100%)`).
+   - dragging row — lifted, lime tint bg + 12px box-shadow + `0 0 0 1px rgba(168,224,78,0.3)` outline + scale(1.01) + lime drag handle + lime title.
+   - drop-target gap — 2px lime line with lime glow above the dimmed (0.55) target row.
+6. ~~**Refresh / Add-songs `TopAppBar` actions**~~ → `PlaylistDetailWithTopBar`. Top bar shows spinning lime refresh icon (`mhSpin` keyframes) + lime plus + more. Sync banner directly below: `Spinner` + `"Sincronizzo da MusicHub Server…"` + mono `checking 7 tracks · last sync 12m ago` on lime-tinted card. Eyebrow `// PLAYLIST · TOP-BAR ACTIONS`, mono subtitle `5 brani · 19 min · ↻ refresh · ＋ aggiungi`.
+7. ~~**Profile / Settings entry point on library landing**~~ + ~~**`Routes.SPOTIFY_IMPORT` row**~~ → `LibraryLandingPlusScreen`. 36dp circular avatar gradient (`#A8E04E → #3A0CA3`) with initial `M` + 2px lime ring, sits left of `Libreria` title; first-class **Spotify import row** as 52dp green-disc icon + `Importa da Spotify` / `Porta le tue playlist nella libreria` + lime chevron, on dashed lime-tinted card; rest of library list (pinned + playlists + albums + artists) follows.
+8. ~~**`LibraryFilter.Scaricati` placeholder**~~ → `ScaricatiEmptyScreen`. Filter chips with `Scaricati` selected (lime), 88dp lime-tinted download icon, eyebrow `// LIBRERIA · SCARICATI`, title `"Tutto in streaming, per ora"`, italian copy with inline `<I.Download/>` glyph, settings hint card linking to `Impostazioni · Download` (`Scarica solo via Wi-Fi`).
+9. ~~**App-update dialog overlay**~~ → `AppUpdateDialog`. Modal 320px max-w, eyebrow `// AGGIORNAMENTO · v0.13.0` + lime tile glyph, title `"Nuova versione disponibile"`, italian release-note copy, 3-bullet changelog list (lime `+` for additions, red `×` for fixes), version diff chip `v0.12.6 → v0.13.0` + size `14.2 MB`, dual CTAs `Più tardi` ghost (flex 1) + `Aggiorna ora` lime (flex 1.4).
+10. ~~**Offline badge / global indicator**~~ → `LibraryOfflineBadgeScreen`. Sticky orange (`#E1A048`) banner under status bar with pulsing dot + `"Sei offline · solo i brani scaricati sono riproducibili"` + mono `OFFLINE` chip; non-downloaded items dim to 0.45 opacity + trailing mono `N/A` chip; downloaded items get inline lime check glyph next to title.
+
+### Still impl-only (behaviour, no UI counterpart needed)
+- **Playback error dialog** — generic overlay still not depicted in this audit slice (covered in `04-player-sheets.md`).
+- **Per-row offline `dl: true` checkmark** in `LibraryOfflineBadgeScreen` is depicted but impl `PlaylistsScreen` still doesn't surface a per-row download badge — feature gap, not state-mockup gap.

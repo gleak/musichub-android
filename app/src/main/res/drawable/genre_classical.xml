@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AA browse-tile cover for Classica. Mockup palette: wave (a=#5C2D8C, b=#F0A6B0). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:startColor="#5C2D8C"
+        android:endColor="#F0A6B0"
+        android:angle="270"
+        android:type="linear"/>
+</shape>

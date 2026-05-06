@@ -2,6 +2,24 @@
 
 Source mockup: `mockup/mh-auth.jsx` (exports `LoginScreen`, `OnboardingScreen`, `OnboardingSheet`, `AccountSwitchDialog`).
 
+> **Implementation status — 2026-05-05 · COMPLETELY DONE (post-v0.13.3).**
+> Every gap in `Missing in impl`, every state-mockup parity item, and the
+> error-code categorization polish item have all landed. Nothing remains
+> actionable in this file — kept as historical audit trail only.
+>
+> Files in play:
+>
+> - `app/src/main/kotlin/com/mediaplayer/android/ui/auth/LoginScreen.kt`
+> - `app/src/main/kotlin/com/mediaplayer/android/ui/auth/AuthProbeScreen.kt` *(new)*
+> - `app/src/main/kotlin/com/mediaplayer/android/ui/auth/AuthViewModel.kt`
+> - `app/src/main/kotlin/com/mediaplayer/android/ui/onboarding/OnboardingScreen.kt`
+> - `app/src/main/kotlin/com/mediaplayer/android/ui/onboarding/OnboardingSheet.kt`
+> - `app/src/main/kotlin/com/mediaplayer/android/ui/profile/ProfileScreen.kt` *(`AccountSwitchDialog` block)*
+> - `app/src/main/kotlin/com/mediaplayer/android/MainActivity.kt` *(`AuthGate` routes `State.Probe` → `AuthProbeScreen`, threads `pickerCancelled`)*
+>
+> Compile verified locally. Version bump intentionally skipped — fold into
+> the next user-visible release alongside §2/§3 work.
+
 ## Coverage
 - mockup screens drawn:
   1. `LoginScreen` (idle / signing-in / error states)
@@ -166,27 +184,48 @@ Source mockup: `mockup/mh-auth.jsx` (exports `LoginScreen`, `OnboardingScreen`, 
   - **[BEHAVIOR]** Impl dialog does not visually distinguish "switch account" vs "sign out" — same surface for both entry points, same destructive label `Disconnetti`. Mockup also conflates them under a single `AccountSwitchDialog`. So this is consistent, but the eyebrow copy `// CAMBIA ACCOUNT` is lost.
 
 ## Missing in impl
-1. **LoginScreen brand monogram** — equalizer-bars SVG (8 rounded rects) is the design's brand mark and it appears on both `LoginScreen` and `OnboardingSheet`. Impl uses a literal `Text("M")` letter — wrong icon entirely.
-2. **Google CTA visual treatment** — multi-color G logo, white pill, dark text, drop shadow. Impl uses a lime pill with no icon.
-3. **Login lime-tinted radial gradient** — distinct from the generic app gradient.
-4. **Login error panel** — boxed inline panel with red bullet, two-line title+code copy. Impl uses a single line of `e.message`.
-5. **Login "signing-in" CTA label** (`"Accesso in corso…"`) — impl wipes the whole screen for a spinner instead.
-6. **Login T&C/privacy fine-print footer** (`"Continuando accetti i Termini e l'Informativa privacy."`).
-7. **Onboarding pill chip-cloud layout + counter footer + thin divider** — impl is a 3-col grid with stacked CTAs.
-8. **Onboarding eyebrow `// PASSO 1 / 1`** — impl shows `// BENVENUTO`.
-9. **Onboarding genre set + italian capitalisation** — impl has 20 lowercase english slugs vs 12 italian display names. The user-facing labels in italian (`Elettronica`, `Classica`, `Lo-fi`, `Cantautorato`) are missing.
-10. **OnboardingSheet welcome design entirely** — lime monogram tile, italian eyebrow + tagline, single-message layout. Impl is a 3-feature english explainer with no logo.
-11. **Account dialog eyebrow `// CAMBIA ACCOUNT`**.
-12. **Account dialog account-preview row** (avatar + email + mono "Account corrente").
-13. **Account dialog filled red destructive pill** + filled neutral cancel pill (impl uses `TextButton`s).
-14. **Account dialog cloud-sync warning copy** (`"La sincronizzazione con il cloud si interrompe…"`).
+
+All 14 items below are now resolved in code. Strike-through marks landed
+work; the trailing path is the file holding the new contract.
+
+1. ~~**LoginScreen brand monogram**~~ → `MHMonogramTile` from `ui/common/MHLogo.kt`, used in `LoginScreen.kt` + `AuthProbeScreen.kt` + `OnboardingSheet.kt`.
+2. ~~**Google CTA visual treatment**~~ → white pill + dark text + `GoogleGIcon` (`ui/common/GoogleGIcon.kt`) + `0 8px 24px` shadow via Material3 `Button` defaults in `LoginScreen.kt`.
+3. ~~**Login lime-tinted radial gradient**~~ → `MHGradient.loginBg()` (`ui/theme/Theme.kt`) painting `#2A4615 → BG_TOP → BG_BOTTOM`.
+4. ~~**Login error panel**~~ → `LoginErrorPanel` in `LoginScreen.kt` (red 12% bg, 35% border, bullet + title + mono code).
+5. ~~**Login "signing-in" CTA label**~~ → `state is State.SigningIn` keeps the screen and swaps the CTA label + spinner; mono `auth/google · credential-exchange` line under the button.
+6. ~~**Login T&C/privacy fine-print footer**~~ → 11sp `TextLo2` line under the CTA in `LoginScreen.kt`.
+7. ~~**Onboarding pill chip-cloud layout + counter footer + thin divider**~~ → `FlowRow` + `GenrePill` + `FooterRow` + `HorizontalDivider` in `OnboardingScreen.kt`.
+8. ~~**Onboarding eyebrow `// PASSO 1 / 1`**~~ → `EyebrowText("Passo 1 / 1")` in `OnboardingScreen.kt`.
+9. ~~**Onboarding genre set + italian capitalisation**~~ → 12-entry `GENRES` list in `OnboardingScreen.kt` (italian display labels, english slugs preserved for the backend `user_taste(GENRE)` contract).
+10. ~~**OnboardingSheet welcome design entirely**~~ → `OnboardingSheet.kt` rewritten: `Brush.verticalGradient(#233A12 → #131313)`, custom drag handle, `// BENVENUTO IN MUSICHUB` eyebrow, two-line tagline, lime-tile feature rows, "Inizia" pill CTA.
+11. ~~**Account dialog eyebrow `// CAMBIA ACCOUNT`**~~ → `AccountSwitchDialog` in `ProfileScreen.kt`.
+12. ~~**Account dialog account-preview row**~~ → `AccountPreviewRow` in `ProfileScreen.kt` (gradient avatar + email + mono "Account corrente").
+13. ~~**Account dialog filled red destructive pill**~~ → `PillButton` × 2 in `ProfileScreen.kt`: Annulla white-6% bg, Disconnetti `#E14848` filled.
+14. ~~**Account dialog cloud-sync warning copy**~~ → body string in `AccountSwitchDialog`.
 
 ## Missing in mockup
-1. **`State.Loading` initial-probe spinner** (auto-sign-in attempt before any UI). Impl needs this to cover token refresh; mockup never specifies it.
-2. **OnboardingScreen `error` state** (`OnboardingScreen.kt:107-114`) — surfaced under the grid above the CTA. Mockup doesn't draw a network-failure variant for the picker.
-3. **OnboardingScreen `saving` state** — spinner inside the primary CTA while `seedGenres` is in flight. Mockup has only an opacity fade.
-4. **Dynamic CTA label `"Scegli ancora N"`** — impl-only ergonomics; mockup keeps a static `Continua`.
-5. **`State.SignedIn` rendering branch** in `LoginScreen.kt:112` (no-op, gate handles routing) — not in mockup but also not visible.
-6. **OnboardingSheet 3-feature explainer** + `LibraryMusic / MusicNote / PlayCircle` icons — fully impl-only, replaced the mockup's hero treatment.
-7. **`AuthViewModel` dual rejection paths** — silent token-rejection clear (`AuthViewModel.kt:37-42`) and Google picker cancel branch (`AuthViewModel.kt:59-62`). Mockup doesn't model these.
-8. **`refreshMe()` re-fetch hook** (`AuthViewModel.kt:83-89`) used after onboarding flips server-side `onboardingComplete`. Pure plumbing, no UI counterpart needed.
+
+**Update 2026-05-05:** new state file `mockup/mh-auth-states.jsx` (mounted in `mh-canvas-app.jsx:48-56` as `auth-probe-*`, `login-signing`, `login-cancel`, `onb-needs-more`, `onb-saving`, `onb-error`, `sheet-explainer`) closes most of the prior gaps. Remaining truly impl-only items at the bottom.
+
+### Now covered by state mockups
+1. ~~**`State.Loading` initial-probe spinner**~~ → `AuthProbeScreen` with 3 stages (`token` / `me` / `rejected-silent`). Brand-locked splash, lime gradient (red gradient for rejected), 92x92 equalizer monogram, thin progress strip, mono diagnostic line (`auth/token-refresh`, `auth/refresh-me`, `auth/token-rejected · clear`). Covers both `AuthViewModel.kt:30-47` probe and `AuthViewModel.kt:37-42` silent token rejection.
+2. ~~**OnboardingScreen `error` state**~~ → `OnboardingErrorScreen`. Inline red error band between grid and CTA — bullet, title `"Salvataggio non riuscito"`, mono code `onboarding/seed-genres`, `RIPROVA` mono pill.
+3. ~~**OnboardingScreen `saving` state**~~ → `OnboardingSavingScreen`. Grid dimmed (opacity 0.55, pointerEvents none); footer counter swaps to `SALVATAGGIO…` mono lime; primary CTA disabled with inline spinner + `Salvo…` label; Salta also disabled.
+4. ~~**Dynamic CTA label `"Scegli ancora N"`**~~ → `OnboardingNeedsMoreScreen`. Below threshold the CTA renders as dashed lime ghost pill (`1px dashed rgba(168,224,78,0.5)`, accent-tinted bg, `cursor: not-allowed`) showing `"Scegli ancora {n}"`; counter shows `{picked}/3 minimo`.
+5. ~~**OnboardingSheet 3-feature explainer**~~ → `OnboardingSheetExplainer`. Same 3-row IA as impl (LibraryMusic / MusicNote / PlayCircle analogues) but italian copy + lime tile icons + lime eyebrow `// BENVENUTO IN MUSICHUB` + tagline `"La tua libreria, il tuo ritmo."` + `Inizia` CTA. **Note:** this redefines the contract — the original `mh-auth.jsx` hero-only sheet is now superseded by the explainer pattern, so impl/mockup parity is achievable without dropping feature rows. Still need: italian copy, eyebrow, lime icon tiles, MHLogo monogram absent from impl sheet (impl has none).
+6. ~~**Picker-cancel branch**~~ → `LoginPickerCancelScreen`. Login chrome unchanged + soft toast bottom (`rgba(28,28,28,0.96)` with backdrop-blur, dot bullet, title `"Accesso annullato"`, mono code `auth/picker-cancel`). Replaces the impl's silent return to `NotSignedIn` (`AuthViewModel.kt:59-62`).
+7. ~~**Login `signing-in` button-label state**~~ → `LoginSigningInScreen`. Disabled white pill with leading spinner + `"Accesso in corso…"` label, mono diagnostic `auth/google · credential-exchange` underneath. (Originally listed in §LoginScreen as missing-in-impl; the mockup only specified a label swap. This file confirms the visual contract.)
+
+### Still impl-only (no UI mockup needed)
+- **`State.SignedIn` rendering branch** in `LoginScreen.kt` — no-op; gate handles routing.
+- **`refreshMe()` re-fetch hook** in `AuthViewModel.kt` — pure plumbing after onboarding flips `onboardingComplete`.
+
+### State-mockup parity (now in impl)
+- ~~**`AuthProbeScreen` (Token / Me / RejectedSilent stages)**~~ → `ui/auth/AuthProbeScreen.kt`; `AuthViewModel.State.Probe(stage)` drives label/code/progress; rejected-silent flashes ~900ms before falling to `NotSignedIn`.
+- ~~**`OnboardingErrorScreen` red band**~~ → `ErrorBand` in `OnboardingScreen.kt` with `onboarding/seed-genres` mono code + `RIPROVA` retry pill.
+- ~~**`OnboardingSavingScreen` dim + spinner CTA**~~ → `Modifier.alpha(0.55f)` on the FlowRow when `saving`, footer counter swaps to lime `SALVATAGGIO…`, CTA renders inline `CircularProgressIndicator` + `Salvo…`.
+- ~~**`OnboardingNeedsMoreScreen` ghost CTA**~~ → `ContinuePill` renders `Lime.copy(alpha=0.08f)` fill + 50%-alpha lime border + `Scegli ancora N` label below the 3-pick threshold.
+- ~~**`LoginSigningInScreen` button-label state**~~ → `LoginScreen.kt` `state is SigningIn` swap (disabled white pill, leading spinner, label `"Accesso in corso…"`, mono diagnostic underneath).
+- ~~**`LoginPickerCancelScreen` soft toast**~~ → `AnimatedVisibility` toast (slide+fade, 2.5s) at the bottom of `LoginScreen`, fed by `AuthViewModel.pickerCancelled: SharedFlow<Unit>`.
+- ~~**`OnboardingSheetExplainer` 3-feature variant**~~ → `OnboardingSheet.kt` matches: italian feature rows + lime tile icons + lime eyebrow + tagline + drag handle + lime-gradient sheet.
+- ~~**Categorized auth error code in `LoginErrorPanel`**~~ → `AuthViewModel.classifyAuthError(e)` maps the raw exception to one of `auth/network-error` / `auth/server-rejected` / `auth/google-rejected` / `auth/unknown`; `State.Error` carries `(message, code)` and the panel renders the code in the mono slot.

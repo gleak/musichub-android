@@ -74,6 +74,8 @@ import com.mediaplayer.android.ui.auth.AuthViewModel
 import com.mediaplayer.android.ui.auth.LoginScreen
 import com.mediaplayer.android.ui.common.CurrentUser
 import com.mediaplayer.android.ui.common.LocalCurrentUser
+import com.mediaplayer.android.ui.common.LocalNowPlaying
+import com.mediaplayer.android.ui.common.NowPlayingState
 import com.mediaplayer.android.ui.find.FindScreen
 import com.mediaplayer.android.ui.home.HomeScreen
 import com.mediaplayer.android.ui.liked.LikedScreen
@@ -86,7 +88,6 @@ import com.mediaplayer.android.ui.playlists.SpotifyImportScreen
 import com.mediaplayer.android.ui.search.SearchScreen
 import com.mediaplayer.android.ui.theme.MediaPlayerTheme
 import com.mediaplayer.android.update.AppUpdateChecker
-import com.mediaplayer.android.update.AppUpdateDialog
 import kotlinx.coroutines.launch
 
 @UnstableApi
@@ -148,6 +149,9 @@ private fun AuthGate(
     val authState by authVm.state.collectAsStateWithLifecycle()
 
     when (val s = authState) {
+        is AuthViewModel.State.Probe -> {
+            com.mediaplayer.android.ui.auth.AuthProbeScreen(stage = s.stage)
+        }
         is AuthViewModel.State.SignedIn -> {
             // M14e: route fresh sign-ins through the tag picker before AppScaffold
             // so the recommender's cold-start path has GENRE seeds. The local
@@ -195,6 +199,7 @@ private fun AuthGate(
         else -> LoginScreen(
             state = authState,
             onSignIn = authVm::signIn,
+            pickerCancelled = authVm.pickerCancelled,
         )
     }
 }
@@ -210,6 +215,7 @@ internal object Routes {
     const val SETTINGS_DOWNLOAD = "profile/download"
     const val SETTINGS_THEME = "profile/theme"
     const val SETTINGS_DISLIKED = "profile/disliked"
+    const val SETTINGS_QUEUED_EVENTS = "profile/queued-events"
     const val FIND = "find"
     const val LIBRARY = "library"
     const val PLAYLIST_DETAIL = "playlists/{playlistId}"
@@ -219,11 +225,18 @@ internal object Routes {
     const val ALBUM_DETAIL = "albums/{albumName}?artist={albumArtist}"
     const val ARTIST_LIST = "artists"
     const val ARTIST_DETAIL = "artists/{artistName}"
+    const val GENRE_DETAIL = "genres/{tag}?display={display}"
+    const val PLAYLIST_MEMBERS = "playlists/{playlistId}/members?owner={owner}"
+    const val TRIM = "trim"
 
     fun playlistDetail(id: Long) = "playlists/$id"
     fun albumDetail(name: String, artist: String) =
         "albums/${Uri.encode(name)}?artist=${Uri.encode(artist)}"
     fun artistDetail(name: String) = "artists/${Uri.encode(name)}"
+    fun genreDetail(tag: String, display: String) =
+        "genres/${Uri.encode(tag)}?display=${Uri.encode(display)}"
+    fun playlistMembers(id: Long, owner: Boolean) =
+        "playlists/$id/members?owner=$owner"
 
     /**
      * Routes that conceptually live under the "Library" tab. Any sub-route
@@ -240,6 +253,7 @@ internal object Routes {
         "albums",
         ARTIST_LIST,
         "artists",
+        "genres",
     )
 
     fun belongsToLibrary(currentRoute: String?): Boolean {
@@ -273,6 +287,7 @@ private fun AppScaffold(
 ) {
     val playbackVm: PlaybackViewModel = viewModel()
     val currentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
+    val isPlaying by playbackVm.isPlaying.collectAsStateWithLifecycle()
     var sheetOpen by remember { mutableStateOf(false) }
     var changelogOpen by remember { mutableStateOf(false) }
     var onboardingOpen by remember { mutableStateOf(false) }
@@ -325,14 +340,17 @@ private fun AppScaffold(
     }
 
     // Manual "Controlla aggiornamenti" handler — bypasses 6h rate-limit
-    // and per-version dismissal. Updated → AppUpdateDialog pops via
-    // pendingUpdate; UpToDate / Error surface as a toast since there's
-    // no UI for them otherwise.
+    // and per-version dismissal. Updated → AppUpdateChecker.state flips,
+    // banner renders on Home; we toast "Disponibile" so users in Profile
+    // know the trip up to Home is worth it.
     val updateScope = rememberCoroutineScope()
     val onCheckUpdates: () -> Unit = {
         updateScope.launch {
             when (val result = AppUpdateChecker.forceCheck(ctx)) {
-                AppUpdateChecker.ManualResult.Updated -> Unit
+                AppUpdateChecker.ManualResult.Updated ->
+                    android.widget.Toast.makeText(
+                        ctx, "Aggiornamento disponibile in Home", android.widget.Toast.LENGTH_SHORT,
+                    ).show()
                 AppUpdateChecker.ManualResult.UpToDate ->
                     android.widget.Toast.makeText(
                         ctx, "App già aggiornata", android.widget.Toast.LENGTH_SHORT,
@@ -351,6 +369,15 @@ private fun AppScaffold(
     // physically slides + scales between the two positions on open/close —
     // see `NOW_PLAYING_COVER_KEY`.
     androidx.compose.animation.SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+        // Broadcast current track + playing state to every list screen so
+        // SongRow can light up the active row + render MHPlayingBars
+        // (mockup `mh-screens.jsx:91-95`).
+        CompositionLocalProvider(
+            LocalNowPlaying provides NowPlayingState(
+                currentSongId = currentSong?.id,
+                isPlaying = isPlaying,
+            ),
+        ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
@@ -413,10 +440,15 @@ private fun AppScaffold(
                     onArtistClick = { name ->
                         navController.navigate(Routes.artistDetail(name))
                     },
+                    onTrim = {
+                        sheetOpen = false
+                        navController.navigate(Routes.TRIM)
+                    },
                     sharedTransitionScope = this@SharedTransitionLayout,
                     animatedVisibilityScope = this,
                 )
             }
+        }
         }
     }
 
@@ -450,11 +482,11 @@ private fun AppScaffold(
         )
     }
 
-    pendingUpdate?.let { manifest ->
-        AppUpdateDialog(
-            manifest = manifest,
-            onDismiss = { AppUpdateChecker.dismiss(ctx, manifest) },
-        )
+    // Non-required updates render as a banner inside HomeScreen via
+    // `AppUpdateBannerHost`. Required updates render as a full-screen
+    // blocking overlay here so the user cannot scroll past them.
+    if (pendingUpdate?.required == true) {
+        com.mediaplayer.android.ui.common.AppUpdateRequiredOverlay()
     }
 
     val playbackError by playbackVm.playbackError.collectAsStateWithLifecycle()
@@ -629,6 +661,11 @@ private fun NavHostBody(
                     onBack = { navController.popBackStack() },
                 )
             }
+            composable(Routes.SETTINGS_QUEUED_EVENTS) {
+                com.mediaplayer.android.ui.profile.settings.QueuedEventsScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
             composable(Routes.SEARCH) {
                 SearchScreen(
                     onSongClick = playbackVm::play,
@@ -642,11 +679,14 @@ private fun NavHostBody(
                         navController.navigate(Routes.artistDetail(name))
                     },
                     onArtistListClick = { navController.navigate(Routes.ARTIST_LIST) },
+                    onGenreOpen = { display, tag ->
+                        navController.navigate(Routes.genreDetail(tag, display))
+                    },
                     onProfileClick = { navController.navigate(Routes.PROFILE) },
                 )
             }
             composable(Routes.FIND) {
-                FindScreen()
+                FindScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.LIBRARY) {
                 PlaylistsScreen(
@@ -690,6 +730,9 @@ private fun NavHostBody(
                         playbackVm.playPlaylist(songs, index)
                     },
                     onShufflePlay = playbackVm::playPlaylistShuffled,
+                    onOpenMembers = { pid, isOwner ->
+                        navController.navigate(Routes.playlistMembers(pid, isOwner))
+                    },
                 )
             }
             composable(Routes.ALBUM_LIST) {
@@ -744,6 +787,59 @@ private fun NavHostBody(
                     onAlbumClick = { albumName, albumArtist ->
                         navController.navigate(Routes.albumDetail(albumName, albumArtist))
                     },
+                )
+            }
+            composable(
+                route = Routes.PLAYLIST_MEMBERS,
+                arguments = listOf(
+                    navArgument("playlistId") { type = NavType.LongType },
+                    navArgument("owner") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    },
+                ),
+            ) { backStackEntry ->
+                val pid = backStackEntry.arguments?.getLong("playlistId") ?: return@composable
+                val owner = backStackEntry.arguments?.getBoolean("owner") ?: false
+                com.mediaplayer.android.ui.playlists.MembersScreen(
+                    playlistId = pid,
+                    isOwnerView = owner,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.TRIM) {
+                val current = playbackVm.currentSong.collectAsStateWithLifecycle().value
+                if (current == null) {
+                    LaunchedEffect(Unit) { navController.popBackStack() }
+                } else {
+                    com.mediaplayer.android.ui.trim.TrimScreen(
+                        song = current,
+                        playbackVm = playbackVm,
+                        onClose = { navController.popBackStack() },
+                        onSaved = { navController.popBackStack() },
+                    )
+                }
+            }
+            composable(
+                route = Routes.GENRE_DETAIL,
+                arguments = listOf(
+                    navArgument("tag") { type = NavType.StringType },
+                    navArgument("display") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                ),
+            ) { backStackEntry ->
+                val tag = backStackEntry.arguments?.getString("tag") ?: return@composable
+                val display = backStackEntry.arguments?.getString("display").orEmpty()
+                    .ifEmpty { tag.replaceFirstChar { it.uppercase() } }
+                com.mediaplayer.android.ui.genre.GenreDetailScreen(
+                    tag = tag,
+                    displayName = display,
+                    onBack = { navController.popBackStack() },
+                    onSongClick = playbackVm::play,
+                    onPlayAll = { songs -> playbackVm.playPlaylist(songs, 0) },
+                    onShufflePlay = playbackVm::playPlaylistShuffled,
                 )
             }
         }

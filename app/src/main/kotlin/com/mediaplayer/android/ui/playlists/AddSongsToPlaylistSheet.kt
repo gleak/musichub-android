@@ -224,7 +224,7 @@ private fun SongPickerRow(
         IconButton(onClick = onAdd, enabled = !isAdded) {
             Icon(
                 imageVector = if (isAdded) Icons.Filled.Check else Icons.Filled.Add,
-                contentDescription = if (isAdded) "Already added" else "Add to playlist",
+                contentDescription = if (isAdded) "Già aggiunto" else "Aggiungi alla playlist",
                 tint = if (isAdded) MaterialTheme.colorScheme.primary
                        else MaterialTheme.colorScheme.onSurface,
             )

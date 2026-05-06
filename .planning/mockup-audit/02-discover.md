@@ -1,5 +1,39 @@
 # Discover & Import — mockup vs impl
 
+> **Implementation status — 2026-05-05 · COMPLETELY DONE (v0.13.4).**
+> FindScreen + SpotifyImportScreen rewritten to MusicHub spec; backend
+> async import pipeline with per-track progress + APPROX match bucket
+> shipped. Every actionable item in this audit is closed. Kept as
+> historical audit trail only.
+>
+> Android files in play:
+>
+> - `app/src/main/kotlin/com/mediaplayer/android/ui/find/FindScreen.kt`
+> - `app/src/main/kotlin/com/mediaplayer/android/ui/playlists/SpotifyImportScreen.kt`
+> - `app/src/main/kotlin/com/mediaplayer/android/ui/playlists/SpotifyImportViewModel.kt`
+> - `app/src/main/kotlin/com/mediaplayer/android/data/MediaPlayerApi.kt` *(async + status endpoints)*
+> - `app/src/main/kotlin/com/mediaplayer/android/data/dto/SpotifyImportResultDto.kt` *(adds `approx`, new `SpotifyImportJobIdDto`/`SpotifyImportJobStatusDto`)*
+> - `app/src/main/res/values/strings.xml` *(70+ new keys for eyebrows, status caps, terminal headlines, stepper labels, suggestion copy)*
+> - `app/src/main/kotlin/com/mediaplayer/android/MainActivity.kt` *(threads `onBack` into `FindScreen`)*
+>
+> Backend files in play (`../backend/src/main/java/com/mediaplayer/backend/spotify/`):
+>
+> - `SpotifyImportJob.java` *(new — atomic counters per phase)*
+> - `SpotifyImportJobRegistry.java` *(new — in-memory, 1h TTL)*
+> - `SpotifyImportJobStatus.java` *(new — wire DTO)*
+> - `SpotifyImportResult.java` *(adds `approx`)*
+> - `SpotifyImportService.java` *(`@Async importCsvAsync`, EXACT/APPROX/NONE match split, per-track progress)*
+> - `SpotifyImportController.java` *(adds `POST /spotify/async` + `GET /spotify/jobs/{id}`)*
+>
+> Sync POST `/api/playlists/import/spotify` preserved for older clients;
+> Android now uses the async path with 500ms→2s polling. Backend
+> `mvn clean compile` BUILD SUCCESS, Android `gradlew assembleDebug`
+> BUILD SUCCESSFUL.
+>
+> **Intentionally skipped** (no design demand): multi-playlist preview
+> (Exportify produces one CSV per playlist), Lifecycle pause/resume
+> diagnostic banner (pure debug overlay).
+
 Mockup: `mockup/mh-discover.jsx`
 Impl:
 - `app/src/main/kotlin/com/mediaplayer/android/ui/find/FindScreen.kt`
@@ -150,21 +184,27 @@ No other Discover/Find/import surfaces exist (`HomeScreen`, `PlaylistsScreen`, `
 
 ## Missing in mockup (present in impl, not depicted)
 
-- **Find — `Idle` state with active-requests poll list** (`IdleBody` + `ActiveRequestRow` showing `"<query>"`, status label, linear progress). Entire concept of background-tracking concurrent finds is impl-only.
-- **Find — pull-to-refresh** on the Idle list.
-- **Find — terminal-status visuals** for `IMPORTED` / `IMPORTED_PARTIAL` / `FAILED` / `CANCELED` (mockup never depicts the success / partial / failure / canceled outcomes of a Find).
-- **Find — `Searching` global state** (mockup shows results+skeleton, never a pure searching view).
-- **Find — `StatusHeader`** with back button + `"<query>"` + status label, and a `LinearProgressIndicator` strip during SEARCHING/UNLOCKING/DOWNLOADING.
-- **Find — view-count metadata** (e.g. "1.2M views") on each candidate.
-- **Find — selection highlight** via `secondaryContainer` background on the chosen candidate while it downloads.
-- **Spotify Import — `FetchingPlaylist` (CSV parse) intermediate state** with spinner + `"Leggo il file…"`.
-- **Spotify Import — `Error` state** with message + `Try Again` button.
-- **Spotify Import — playlist rename `OutlinedTextField`** in the confirming step.
-- **Spotify Import — `Annulla`** secondary CTA on confirming.
-- **Spotify Import — `Torna alle playlist`** secondary CTA on done.
-- **Spotify Import — pluralized `bran<o|i> aggiunt<o|i>`** body line and `<N> in scaricamento` line.
-- **Spotify Import — explicit `Scegli file CSV`** primary CTA on idle (mockup conflates this into the implicit step 2).
-- **Find/Spotify — lifecycle pause/resume of polling jobs** (FindViewModel.resume/pause, lines 68-91) is a behavior mockup can't capture.
+**Update 2026-05-05:** new state file `mockup/mh-discover-states.jsx` (mounted in `mh-canvas-app.jsx:100-120` as `find-idle-*`, `find-pull`, `find-searching`, `find-unlocking`, `find-downloading`, `find-imported`, `find-imp-partial`, `find-failed`, `find-canceled`, `find-life-pause`, `find-life-resume`, `sp-idle`, `sp-fetch`, `sp-error`, `sp-confirm`, `sp-done-plural`, `sp-done-singular`) closes most prior gaps. Remaining truly impl-only items at the bottom.
+
+### Find — now covered by state mockups
+- ~~**`Idle` state with active-requests poll list**~~ → `FindIdleEmpty` + `FindIdleActive`. Empty variant has 64dp circular search glyph, italian hero copy `"Trova nuovi brani"`, mono badge `// FINDVIEWMODEL · IDLE`. Active variant draws `// 4 IN CORSO · BACKGROUND` + `POLL · 2s` mono caption, then `ActiveRequestRow` per query (28dp lime tile icon + `"<query>"` + uppercase status label `RICERCA SU YT` / `SBLOCCO STREAM` / `DOWNLOAD · {pct}%` colour-coded amber for unlock/lime for download + 2px progress bar indeterminate or determinate + trailing X cancel) plus `// OGGI · COMPLETATE` section using `TerminalRow` (IMPORTED/IMPORTED_PARTIAL/FAILED/CANCELED).
+- ~~**Pull-to-refresh on Idle list**~~ → `FindIdlePullRefresh`. 32dp dark-blur capsule with lime spinner + mono `AGGIORNO…` label, content translated 8px down to imply pull.
+- ~~**Terminal-status visuals**~~ → `FindTerminalScreen kind="IMPORTED" | "IMPORTED_PARTIAL" | "FAILED" | "CANCELED"`. Per-kind colour-tinted radial gradient (lime / amber / red / grey), 88dp circular icon, italian title (`"Aggiunto alla libreria"` / `"Importato · parzialmente"` / `"Brano non trovato"` / `"Ricerca annullata"`), 3-row meta card (mono key/value pairs — Sorgente/Bitrate/Durata, Audio/Video/Motivo, Tentati/Match max/Soglia, Stato/Progresso/Pulizia), dual CTA stack (primary `"Apri brano"`/`"Riprova"` + secondary `"Trova un altro"`/`"Affina la ricerca"` etc.).
+- ~~**`Searching` global state**~~ → `FindSearching`. `StatusHeader` with `"Mira Holt"` + `RICERCA SU YT…` mono status + indeterminate 2px lime strip; `// INTERROGAZIONE INDICE` section caption; 5 dimmed (opacity 0.5) skeleton rows (48dp grey square + two grey lines); footer banner `"La ricerca continua se chiudi questa schermata."` lime mono. **Mockup `mh-discover.jsx` skeleton model is superseded — pure searching view is the new contract.**
+- ~~**`StatusHeader` with back + query + status + progress strip**~~ → reusable `StatusHeader` component used across `FindSearching`, `FindCandidatesSelected`. 56pt top padding, `rgba(0,0,0,0.25)` band, ellipsised `"<query>"` 15px/700, status mono caps below (lime / amber / red), 2px strip indeterminate (`mh-indet` keyframes) or determinate.
+- ~~**Selection highlight on chosen candidate**~~ → `FindCandidatesSelected phase="unlocking" | "downloading"`. Selected row uses `rgba(168,224,78,0.10)` bg + lime border (or amber while unlocking), 48dp `MHCover` overlaid with dark scrim + colour-coded spinner; trailing pill swaps from disabled `Aggiungi` (40% opacity) to colour-tinted mono pill `SBLOCCO` / `64%`. Section header `// 4 RISULTATI · YT MATCH`.
+- ~~**Lifecycle pause/resume of polling**~~ → `FindLifecycle paused={true|false}`. Active rows dimmed to 0.45 when paused; bottom diagnostic banner with paused glyph (amber `Polling in pausa` + mono `lifecycle/onPause · jobs interrotti`) or play glyph (lime `Polling ripreso` + `lifecycle/onResume · 3 jobs riavviati`).
+
+### Spotify Import — now covered by state mockups
+- ~~**`FetchingPlaylist` (CSV parse) state**~~ → `SpotifyImportFetching`. `// PASSO 3 / 5 · LETTURA FILE` step badge, hero `"Leggo il file…"`, card with 56dp lime-tinted file icon + corner spinner, filename `liked-songs.csv` + mono `412 KB · parsing`, indeterminate 2px lime strip, 2-col stat tiles (RIGHE/COLONNE), mono footer `spotify/csv-parse · uri-extract`.
+- ~~**`Error` state**~~ → `SpotifyImportError`. Red eyebrow `// ERRORE · LETTURA FILE`, italian title `"Non riesco a leggere il file"`, red panel with bullet + `"Header mancanti: Track URI, Artist Name"` + mono stack box (`spotify/csv-parse:42` etc.), `// SUGGERIMENTI` card with 3-bullet recovery list, primary `Riprova` lime pill + secondary `Scegli un altro file` text button. **Replaces impl's English `Try Again`.**
+- ~~**Playlist rename `OutlinedTextField` + `Annulla`**~~ → `SpotifyImportConfirming`. M3 outlined field with floating `Nome playlist` label (lime border), helper row `Originale: liked-songs` + mono `10 / 60` counter, summary card (44dp cover + name + mono `284 brani · da liked-songs.csv` + 3-stat row Brani/Durata/Artisti), `"Mantieni privata"` toggle row, dual CTAs `Annulla` ghost flex-1 + lime `Importa 284 brani` flex-2.
+- ~~**`Torna alle playlist` secondary CTA on done**~~ + ~~**pluralized body line**~~ + ~~**`<N> in scaricamento` line**~~ → `SpotifyImportDone variant="plural"|"singular"`. Eyebrow `// PASSO 5 / 5 · COMPLETATO`, 72dp lime check circle, italian title `"Importazione completata"`, body uses `bran<o|i> aggiunt<o|i>` (`"279 brani aggiunti"` / `"1 brano aggiunto"`) + mono `"{n} in scaricamento"` lime accent, 3-stat grid Importati/Saltati/Errori, highlight playlist row with `MHCover` + mono `"{n} brani · creata ora"`, dual CTAs `Apri Slow Hours` lime + `← Torna alle playlist` ghost.
+- ~~**Explicit `Scegli file CSV` primary CTA**~~ → `SpotifyImportIdle`. Eyebrow `// PASSO 2 / 5 · SCEGLI FILE`, hero `"Seleziona il CSV esportato"`, dashed lime drop-zone tile (44dp lime icon + `"Nessun file selezionato"` + mono `.csv · max 10 MB`), primary lime pill `Scegli file CSV` with leading upload icon, secondary text `↩ Torna alle istruzioni`.
+
+### Still impl-only (behaviour, no UI counterpart needed)
+- **Find — view-count metadata** ("1.2M views"). The new `FindCandidatesSelected` row matches impl's view-count line (mono, after duration), so this is now consistent — no longer impl-only.
+- **Find/Spotify — lifecycle pause/resume of polling jobs** (FindViewModel.resume/pause, lines 68-91) — mockup `FindLifecycle` covers the visual state but the actual job orchestration remains code-only.
 
 ## Cross-cutting notes
 

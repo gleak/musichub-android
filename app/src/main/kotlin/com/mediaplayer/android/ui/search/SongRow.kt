@@ -31,9 +31,12 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.LocalNowPlaying
+import com.mediaplayer.android.ui.common.MHPlayingBars
 import com.mediaplayer.android.ui.common.SongCover
 import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.theme.LocalMHMono
+import com.mediaplayer.android.ui.theme.MHColors
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -47,7 +50,20 @@ fun SongRow(
     onMore: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     rowGestureModifier: Modifier = Modifier,
+    /**
+     * Optional contributor tag rendered as a lime mono uppercase pill in
+     * the subtitle (mockup `mh-library.jsx:319`). Used on collaborative
+     * playlists to mark per-track contributors. Null on every other surface.
+     */
+    contributorTag: String? = null,
 ) {
+    // Auto-detect the active row from the ambient `LocalNowPlaying` state so
+    // every call site picks up the lime title + animated `MHPlayingBars`
+    // indicator (mockup `mh-screens.jsx:91-95`, `mh-shared.jsx:282-298`)
+    // without having to plumb the playback VM through.
+    val nowPlaying = LocalNowPlaying.current
+    val isCurrentTrack = nowPlaying.currentSongId == song.id
+    val isPlaying = isCurrentTrack && nowPlaying.isPlaying
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -64,19 +80,27 @@ fun SongRow(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(
-                text = song.title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .basicMarquee(),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = song.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (isCurrentTrack) MHColors.Lime
+                            else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .basicMarquee(),
+                )
+                if (isCurrentTrack && isPlaying) {
+                    Spacer(Modifier.width(6.dp))
+                    MHPlayingBars(height = 12.dp)
+                }
+            }
             SubtitleRow(
                 song = song,
                 onArtistClick = onArtistClick,
                 isDownloaded = isDownloaded,
+                contributorTag = contributorTag,
             )
         }
 
@@ -107,7 +131,7 @@ fun SongRow(
             IconButton(onClick = onMore, modifier = Modifier.size(32.dp)) {
                 Icon(
                     imageVector = Icons.Filled.MoreVert,
-                    contentDescription = "More options",
+                    contentDescription = "Altre opzioni",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp),
                 )
@@ -121,12 +145,13 @@ private fun SubtitleRow(
     song: SongDto,
     onArtistClick: ((String) -> Unit)?,
     isDownloaded: Boolean,
+    contributorTag: String? = null,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (isDownloaded) {
             Icon(
                 imageVector = Icons.Filled.FileDownloadDone,
-                contentDescription = "Downloaded",
+                contentDescription = "Scaricato",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(12.dp),
             )
@@ -145,7 +170,7 @@ private fun SubtitleRow(
         val duration = formatDuration(song.durationMs)
         if (duration.isNotEmpty()) {
             Text(
-                text = " • ",
+                text = " · ",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -153,6 +178,16 @@ private fun SubtitleRow(
                 text = duration,
                 style = LocalMHMono.current.duration,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+        if (!contributorTag.isNullOrBlank()) {
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "· ${contributorTag.uppercase()}",
+                style = LocalMHMono.current.badge.copy(
+                    color = com.mediaplayer.android.ui.theme.MHColors.Lime,
+                ),
                 maxLines = 1,
             )
         }

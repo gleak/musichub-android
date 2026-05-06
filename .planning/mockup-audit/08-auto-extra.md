@@ -3,6 +3,43 @@
 Mockup file: `mockup/mh-auto-extra.jsx` — three AA increments:
 9.1 Genres tile, 9.2 Now-playing lyric ticker, 9.3 Sleep-timer driver-safe.
 
+> **2026-05-06 — closed in v0.16.4.** Implementable diffs landed:
+> - **D1** — 8 bundled `res/drawable/genre_*.xml` gradient drawables
+>   matching the mockup MHCover palettes; surfaced via `android.resource://...`
+>   artworkUri so AA fetches locally (no LAN dependency).
+> - **D2** — genre tile subtitle `"Genere"` dropped.
+> - **D7** — lyric line clipped to 60 chars + ellipsis before reaching
+>   `MediaMetadata.description` (consistent across head units).
+> - **D8** — lyric line prefixed with `// ORA · ` so AA's third metadata
+>   line reads as a lyric, not a generic caption.
+> - **D9** — new `Coda corrente` folder at the AA browse root: lists
+>   the current player timeline (`▸` marker on the active row), tap
+>   jumps to that index without rebuilding the queue. The mockup's
+>   chip-in-now-playing-card variant remains unimplementable
+>   (custom-layout buttons cannot navigate AA's UI), but the browse-tree
+>   surface delivers the same intent — driver gets a glanceable
+>   queue list in the MusicHub design language instead of AA's
+>   generic queue affordance.
+> - **D11** — live `Annulla · N min` countdown chip via new
+>   `SleepTimer.remainingMs` minute-boundary tick.
+> - **D14** — three minute presets (`Sospendi tra 15m / 30m / 60m`) +
+>   `Fine traccia` chip in the AA custom layout instead of one fixed
+>   `Sospendi tra 30m`.
+> - **D15** — `SleepTimer.setEndOfTrack(player, onExpire)` listens for
+>   AUTO/REPEAT transition; `EXTRA_SLEEP_END_OF_TRACK` published on
+>   session extras; chip label `Annulla · fine traccia` while armed.
+> - **D17** — `EXTRA_SLEEP_REMAINING_MS` (Long) on session extras.
+> - **D18** — cancel chip relabeled `Annulla · N min` / `Annulla · fine traccia`
+>   so the cancel intent is explicit alongside the countdown.
+>
+> D12/D13 were already shipped Italian — audit was stale on them.
+> Stays open and routed to design: **D6** (lyric block chrome —
+> Media3 has no card-styling primitive; design review filed at
+> `Claude_design_review.md`). Stays open by platform constraint:
+> **D10** (cast chip — AA-owned audio-route picker), **D16** (driver-
+> safety warning — no `CarConnection` listener wired, intentional skip).
+> See updated verdict per row in the summary table at the bottom.
+
 Source files inspected:
 - `app/src/main/kotlin/com/mediaplayer/android/playback/LibraryTree.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/playback/AALyricsTicker.kt`
@@ -241,38 +278,57 @@ minute values from the phone sleep sheet, but AA cannot do this.
 
 | ID | Surface | Severity | Note |
 |---|---|---|---|
-| D1 | Genres tile artwork | Med | No per-genre covers — flat labels |
-| D2 | Genres tile subtitle | Low | Redundant `Genere` on every row |
+| D1 | Genres tile artwork | ✅ v0.16.4 | 8 bundled `genre_*.xml` gradient drawables, `android.resource://` URIs |
+| D2 | Genres tile subtitle | ✅ v0.16.4 | `subtitle = null` in `genreTiles()` |
 | D3 | Genres order | OK | Matches mockup |
 | D4 | Genres root path | OK | Acceptable |
 | D5 | Genres empty state | OK | Not in spec, harmless |
-| D6 | Lyric ticker chrome | High | Cannot match mockup; AA owns chrome |
-| D7 | Lyric truncation | Low | Delegated to AA |
-| D8 | Lyric eyebrow `// ORA` | Low | Not expressible |
-| D9 | Custom strip — queue chip | Med | Not implemented |
-| D10 | Custom strip — cast chip | OK | AA-owned, intentional |
-| D11 | Sleep label countdown | Med | Static label, not live minutes |
-| D12 | Like label localisation | Low | `Like` should be `Mi piace` |
-| D13 | Sleep label localisation | Low | `Sleep 30m` should be Italian |
-| D14 | Sleep preset chips | High | Only 30-min default, no picker |
-| D15 | `Fine traccia` mode | Med | Not in SleepTimer at all |
-| D16 | Driver-safety warning | Low | No driving-mode signal wired |
-| D17 | Countdown extra | Med | No remaining-ms/min extra emitted |
-| D18 | `Annulla` label | Low | Chip flip is acceptable |
+| D6 | Lyric ticker chrome | Design review | Routed — see `Claude_design_review.md` |
+| D7 | Lyric truncation | ✅ v0.16.4 | Clipped to ~60 chars + ellipsis before reaching AA |
+| D8 | Lyric eyebrow `// ORA` | ✅ v0.16.4 | `// ORA · ` text prefix on `MediaMetadata.description` |
+| D9 | Custom queue surface | ✅ v0.16.4 | `Coda corrente` browse-tree folder at AA root (chip-in-card variant unreachable) |
+| D10 | Custom strip — cast chip | OK | AA-owned audio-route picker, intentional |
+| D11 | Sleep label countdown | ✅ v0.16.4 | `Annulla · N min` ticks at minute boundaries |
+| D12 | Like label localisation | ✅ stale | Already `Mi piace` / `Rimuovi mi piace` pre-audit |
+| D13 | Sleep label localisation | ✅ stale | Already `Sospendi tra Nm` / `Annulla timer` pre-audit |
+| D14 | Sleep preset chips | ✅ v0.16.4 | 15 / 30 / 60 + `Fine traccia` quick-set presets |
+| D15 | `Fine traccia` mode | ✅ v0.16.4 | `SleepTimer.setEndOfTrack(player, onExpire)` |
+| D16 | Driver-safety warning | Skip | Per audit owner — no `CarConnection` listener wired |
+| D17 | Countdown extra | ✅ v0.16.4 | `EXTRA_SLEEP_REMAINING_MS` (Long) on session extras |
+| D18 | `Annulla` label | ✅ v0.16.4 | Cancel chip relabeled `Annulla · N min` / `Annulla · fine traccia` |
 
 ### Highest-impact gaps
 
-1. **D14** — Sleep timer in AA has no minute picker; only the
-   30-minute default fires. The whole point of the driver-safe
-   panel in the mockup is preset selection, and impl ships none.
+1. ~~**D14** — Sleep timer in AA has no minute picker; only the
+   30-minute default fires.~~ ✅ Closed v0.16.4 — three minute
+   presets (`15m / 30m / 60m`) + `Fine traccia` chip when no
+   timer is armed; single live countdown chip while armed.
 2. **D6** — Lyric ticker visual block in mockup is unreachable
    via Media3 metadata. The implementation is functionally
    correct (line cycling) but visually doesn't match the spec.
-3. **D1** — Genre tiles are visual-identity-less; mockup invests
+   **Routed to design review** — `Claude_design_review.md`
+   walks through the platform constraint, the rejected hacks
+   (title hijack, artwork overlay), and asks design to either
+   respec the AA-side lyric for the description-line surface
+   (Path A, recommended) or sign off on the trade-offs of one
+   of the hacks (Path B). Partial relief in v0.16.4: the line
+   is now prefixed with `// ORA · ` (D8) and clipped to ~60
+   chars (D7), so AA's third metadata line at least reads like
+   a lyric eyebrow rather than a generic caption.
+3. ~~**D1** — Genre tiles are visual-identity-less; mockup invests
    heavily in per-genre covers and impl renders blank
-   placeholders.
-4. **D11/D17** — Live remaining-minutes UI is impossible without
+   placeholders.~~ ✅ Closed v0.16.4 — 8 bundled `genre_*.xml`
+   gradient drawables matching the mockup MHCover palettes,
+   referenced via `android.resource://...` artworkUri (no LAN
+   backend dependency, no FileProvider gymnastics).
+4. ~~**D11/D17** — Live remaining-minutes UI is impossible without
    either a per-second `setCustomLayout` thrash (rejected) or a
-   new session-extras + AA-card binding scheme.
-5. **D12/D13** — AA custom-strip labels are English in an
-   otherwise Italian app.
+   new session-extras + AA-card binding scheme.~~ ✅ Closed
+   v0.16.4 — `SleepTimer.remainingMs` ticks only at minute
+   boundaries (no per-second thrash); custom layout rebuilds
+   once per minute with the new label, and `EXTRA_SLEEP_REMAINING_MS`
+   + `EXTRA_SLEEP_END_OF_TRACK` are published on session extras
+   for any controller that wants to render its own countdown.
+5. ~~**D12/D13** — AA custom-strip labels are English in an
+   otherwise Italian app.~~ Stale at audit time — labels were
+   already `Mi piace` / `Sospendi tra 30m` pre-v0.16.4.

@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.mediaplayer.android.R
 import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.AlbumDto
@@ -65,6 +66,16 @@ internal object LibraryTree {
     const val MADE_FOR_YOU_ID = "made-for-you"
     /** Mirrors the phone Search "Sfoglia · Tutti i generi" tile in AA. */
     const val GENRES_ID = "genres"
+    /**
+     * Custom-queue browse folder. AA already exposes a generic queue
+     * affordance derived from `Player.timeline`, but it has none of the
+     * MusicHub design language and cannot mark the current row. This
+     * folder mirrors the mockup §9.2 `Coda` chip's intent (audit
+     * `08-auto-extra.md` D9): a browseable list of the current player
+     * timeline with the playing item flagged, where a tap jumps to that
+     * position without rebuilding the queue.
+     */
+    const val QUEUE_ID = "queue"
 
     private const val PLAYLIST_PREFIX = "playlist:"
     private const val SONG_PREFIX = "song:"
@@ -77,6 +88,8 @@ internal object LibraryTree {
     private const val GENRE_LEAF_PREFIX = "gn:"
     private const val LIKED_LEAF_PREFIX = "lk:"
     private const val RECENT_LEAF_PREFIX = "rc:"
+    /** `qu:{pos}|{sid}` — leaf inside the custom queue folder. */
+    const val QUEUE_LEAF_PREFIX = "qu:"
 
     /**
      * Genre catalogue exposed in the AA browse tree. Display name + backend
@@ -94,6 +107,32 @@ internal object LibraryTree {
         "Rock" to "rock",
         "Pop" to "pop",
     )
+
+    /**
+     * Per-genre cover drawable mapping. Each XML drawable is a gradient
+     * matching the duotone palette of the corresponding `MHCover` kind in
+     * `mockup/mh-auto-extra.jsx`, so AA tiles render with distinct visual
+     * identity instead of blank slate (audit `08-auto-extra.md` D1).
+     * Exposed as `android.resource://...` URIs so AA fetches them locally
+     * without depending on the LAN backend (see [genreArtworkUri]).
+     */
+    private val GENRE_ART_RES: Map<String, Int> = mapOf(
+        "indie" to R.drawable.genre_indie,
+        "electronic" to R.drawable.genre_electronic,
+        "hip-hop" to R.drawable.genre_hiphop,
+        "jazz" to R.drawable.genre_jazz,
+        "classical" to R.drawable.genre_classical,
+        "ambient" to R.drawable.genre_ambient,
+        "rock" to R.drawable.genre_rock,
+        "pop" to R.drawable.genre_pop,
+    )
+
+    /** App package id — hardcoded so [LibraryTree] stays a context-free
+     *  singleton. Matches `applicationId` in `app/build.gradle.kts`. */
+    private const val APP_PACKAGE = "com.mediaplayer.android"
+
+    private fun genreArtworkUri(tag: String): Uri? =
+        GENRE_ART_RES[tag]?.let { Uri.parse("android.resource://$APP_PACKAGE/$it") }
 
     /** Used by paged catalog fetches. AA typically shows ~50 at a time. */
     private const val PAGE_SIZE = 50
@@ -197,6 +236,7 @@ internal object LibraryTree {
         mediaId == ALBUMS_ID -> sectionFolder(ALBUMS_ID, "Album", grid = true)
         mediaId == ARTISTS_ID -> sectionFolder(ARTISTS_ID, "Artisti", grid = false)
         mediaId == GENRES_ID -> sectionFolder(GENRES_ID, "Generi", grid = true)
+        mediaId == QUEUE_ID -> sectionFolder(QUEUE_ID, "Coda corrente", grid = false)
         mediaId.startsWith(GENRE_PREFIX) -> {
             val tag = mediaId.removePrefix(GENRE_PREFIX)
             val display = GENRES.firstOrNull { it.second == tag }?.first ?: tag
@@ -320,6 +360,50 @@ internal object LibraryTree {
         return Triple(decodePart(parts[0]), pos, sid)
     }
 
+    /**
+     * Renders the current player timeline as browse leaves under the
+     * custom queue folder. The current item is marked with a `▸` prefix
+     * so AA's list view shows the playhead at a glance; subtitle keeps
+     * the artist + per-row position so the driver can tell duplicates
+     * apart. The MediaItems handed back here carry no URIs — playback
+     * starts via the `qu:` leaf path in `onSetMediaItems`, which
+     * returns the same player timeline + the chosen index (no rebuild).
+     */
+    fun queueChildren(timeline: List<MediaItem>, currentIndex: Int): List<MediaItem> {
+        if (timeline.isEmpty()) {
+            return listOf(infoItem("Nessun brano in coda"))
+        }
+        return timeline.mapIndexedNotNull { index, item ->
+            val songId = item.mediaId.removePrefix(SONG_PREFIX).toLongOrNull()
+                ?: return@mapIndexedNotNull null
+            val rawTitle = item.mediaMetadata.title?.toString() ?: "Brano ${index + 1}"
+            val title = if (index == currentIndex) "▸ $rawTitle" else rawTitle
+            val artist = item.mediaMetadata.artist?.toString()
+            val subtitle = listOfNotNull(
+                "${index + 1}",
+                artist,
+            ).joinToString(" · ")
+            val artwork = item.mediaMetadata.artworkUri ?: aaArtworkUri(songId)
+            MediaItem.Builder()
+                .setMediaId("$QUEUE_LEAF_PREFIX$index|$songId")
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setIsBrowsable(false)
+                        .setIsPlayable(true)
+                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                        .setTitle(title)
+                        .setArtist(subtitle)
+                        .apply { if (artwork != null) setArtworkUri(artwork) }
+                        .build()
+                )
+                .build()
+        }
+    }
+
+    /** Parses `qu:{pos}|{sid}` into `(position, songId)`. */
+    fun parseQueueLeaf(mediaId: String): Pair<Int, Long>? =
+        parseSimpleLeaf(mediaId, QUEUE_LEAF_PREFIX)
+
     /** Parses leaves of shape `{prefix}{pos}|{sid}` (liked, recents). */
     fun parseSimpleLeaf(mediaId: String, prefix: String): Pair<Int, Long>? {
         if (!mediaId.startsWith(prefix)) return null
@@ -394,6 +478,10 @@ internal object LibraryTree {
     // --- internals -----------------------------------------------------------
 
     private fun rootChildren(): List<MediaItem> = listOf(
+        // Coda first — driver-glance order: "what's queued right now"
+        // is the most time-sensitive entry in a car session.
+        sectionFolder(QUEUE_ID, "Coda corrente", grid = false,
+            type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
         sectionFolder(MADE_FOR_YOU_ID, "Per te", grid = true,
             type = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS),
         sectionFolder(RECENTS_ID, "Ascoltati di recente", grid = false,
@@ -513,17 +601,21 @@ internal object LibraryTree {
 
     /**
      * Genre tile grid for AA. Static list — same 8 buckets as the phone's
-     * `Sfoglia · Tutti i generi`. Subtitle hints at the action so the
-     * driver-glance reading is unambiguous.
+     * `Sfoglia · Tutti i generi`. No subtitle: the mockup's grid renders
+     * the genre name directly over a coloured cover, so a literal "Genere"
+     * caption on every row was redundant noise (audit `08-auto-extra.md` D2).
+     * Per-tile artwork is sourced from bundled `genre_*.xml` gradient
+     * drawables matching the mockup's MHCover palettes (audit D1).
      */
     private fun genreTiles(): List<MediaItem> = GENRES.map { (display, tag) ->
         folderTile(
             mediaId = "$GENRE_PREFIX$tag",
             title = display,
-            subtitle = "Genere",
+            subtitle = null,
             type = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
             artworkSongId = null,
             grid = false,
+            artworkUri = genreArtworkUri(tag),
         )
     }
 
@@ -635,6 +727,7 @@ internal object LibraryTree {
         type: Int,
         artworkSongId: Long?,
         grid: Boolean,
+        artworkUri: Uri? = null,
     ): MediaItem {
         val extras = Bundle().apply {
             val hint = if (grid) CONTENT_STYLE_GRID else CONTENT_STYLE_LIST
@@ -651,9 +744,10 @@ internal object LibraryTree {
                     .setTitle(title)
                     .apply {
                         if (subtitle != null) setSubtitle(subtitle)
-                        if (artworkSongId != null) {
-                            aaArtworkUri(artworkSongId)?.let { setArtworkUri(it) }
-                        }
+                        // Explicit URI wins; otherwise resolve from songId
+                        // (skipped when the LAN backend is unreachable).
+                        val art = artworkUri ?: artworkSongId?.let { aaArtworkUri(it) }
+                        if (art != null) setArtworkUri(art)
                     }
                     .setExtras(extras)
                     .build()

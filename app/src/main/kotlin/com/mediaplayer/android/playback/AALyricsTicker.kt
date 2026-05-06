@@ -164,7 +164,7 @@ internal class AALyricsTicker(
         val idx = lines.indexOfLast { it.positionMs <= pos }
         if (idx == lastLineIndex) return
         lastLineIndex = idx
-        val text = if (idx >= 0) lines[idx].text else originalDescription?.toString()
+        val text = if (idx >= 0) eyebrowed(lines[idx].text) else originalDescription?.toString()
         applyDescription(text)
     }
 
@@ -178,7 +178,35 @@ internal class AALyricsTicker(
         player.replaceMediaItem(player.currentMediaItemIndex, newItem)
     }
 
+    /**
+     * Wraps a raw lyric line so AA's description-line render reads as a
+     * lyric (not a generic third-line caption). The `// ORA` prefix gives
+     * provenance — closes audit `08-auto-extra.md` D8, partial mapping of
+     * the mockup's accent-bordered lyric block (D6 chrome stays open
+     * because Media3 has no styled-card primitive). Long lines are clipped
+     * to [MAX_LINE_CHARS] with a trailing ellipsis so different head-unit
+     * renderers don't wrap or truncate inconsistently (D7).
+     */
+    private fun eyebrowed(text: String): String {
+        val collapsed = text.replace('\n', ' ').trim()
+        val clipped = if (collapsed.length > MAX_LINE_CHARS) {
+            collapsed.substring(0, MAX_LINE_CHARS - 1).trimEnd() + "…"
+        } else {
+            collapsed
+        }
+        return "// ORA · $clipped"
+    }
+
     private companion object {
         const val POLL_MS = 1_000L
+
+        /**
+         * Single-line clip target for `MediaMetadata.description`. Mockup
+         * specifies `whiteSpace: nowrap; overflow: hidden; textOverflow:
+         * ellipsis` for the lyric block; Media3 has no truncation hint, so
+         * we cap before AA sees it. ~60 chars matches the typical ~14-word
+         * sung line and fits the AA card without wrapping on common heads.
+         */
+        const val MAX_LINE_CHARS = 60
     }
 }

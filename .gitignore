@@ -43,3 +43,5 @@ captures/
 desktop.ini
 /screenshot/
 /graphify-out/
+/mockup/.design-canvas.state.json
+/app/release/

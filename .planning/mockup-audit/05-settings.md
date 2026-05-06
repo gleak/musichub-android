@@ -4,6 +4,8 @@ Mockup source: `mockup/mh-settings.jsx` (defines `SettingsSubScreen`, `Crossfade
 
 App version at audit: **v0.13.1**.
 
+Re-audit at **v0.16.0** (2026-05-05): bulk of gaps closed in v0.15.1 (Settings restyle) + v0.15.2 (Eventi in coda screen). Two intentional drops remain — see §8 below for what would be required to close them.
+
 Implementation files audited:
 - `app/src/main/kotlin/com/mediaplayer/android/ui/profile/settings/SettingsSubScreen.kt`
 - `app/src/main/kotlin/com/mediaplayer/android/ui/profile/settings/CrossfadeScreen.kt`
@@ -224,3 +226,51 @@ SettingsRow(
 - **Mono unit suffix style**: mockup glues short forms (`6s`, `1.8GB`); Android prefers spaced long forms (`6 sec`, `1.8 GB`). One direction or the other should be chosen and applied consistently — `ProfileScreen.kt:217` already uses `sec`, so flipping to `s` would also touch that surface.
 - **Destructive CTA visual** treatment is the most user-visible regression — mockup expects a bordered pill with translucent red fill (`mh-settings.jsx:99-101`); current code is a plain row. Pattern recurs anywhere a destructive action exists (Disconnetti row in `ProfileScreen.kt:289-294` uses red text on a card too). Consider promoting a `DestructiveButton` composable to align both.
 - **Toggle component**: mockup uses a custom 44×26 lime/dark thumb design (`Toggle`, `mh-settings.jsx:60-66`); Android uses Material3 `Switch` with `MHColors.Lime` track. Visually close enough but not pixel-identical — out of scope to swap unless a generic MH toggle is desired across the app.
+
+---
+
+## 8. Open work — undone
+
+Two intentional drops at v0.16.0. Documented in code comments (`CrossfadeScreen.kt:37-40`, `DownloadOfflineScreen.kt:51-56`). Status: **deferred, not closed**.
+
+### 8.1 Crossfade `Audizione` audition toggle
+
+Mockup `mh-settings.jsx:48-54` — hard-coded `Toggle on={true}` row labelled `"Audizione"` with subtitle `"Riproduce un'anteprima ad ogni cambio valore"`. Triggers a short crossfade preview every time the slider value changes.
+
+**To close:**
+
+1. Add flag `PlayerSettings.crossfadePreview` (Boolean, default `true`, persisted in DataStore alongside `crossfadeSeconds`).
+2. New API on `PlaybackViewModel`: `fun previewCrossfade(seconds: Int)` — seek current track to `duration - seconds - 1s`, set crossfade window, let `MediaPlaybackService` transition fire on natural end. Restore prior position when preview track ends. No-op if nothing playing.
+3. Hook in `CrossfadeScreen.kt:103` `onValueChangeFinished`: `if (previewEnabled && playerHasItem) vm.previewCrossfade(seconds.toInt())`.
+4. UI: second `SettingsCard` after existing `Durata` card with `SettingsToggleRow(label="Audizione", detail="Riproduce un'anteprima ad ogni cambio valore", checked=…)`.
+
+**Risk**: preview wiring touches `MediaPlaybackService` transition logic — same code paths app-owned shuffle relies on (memory `project_app_owned_shuffle`). Test against user-queue ordering so preview seek doesn't reorder the timeline.
+
+**Cost**: user-visible feature → version bump per `CLAUDE.md` (changelog + `AppVersion.VERSION` + `versionName` + `versionCode`).
+
+### 8.2 Download offline `// GESTIONE` triplet rows
+
+Mockup `mh-settings.jsx:93-97` — three chevron rows: `Riscarica da origine`, `Svuota cache locale`, `Forza rigenerazione Daily Mix`. Last is shipped (`DownloadOfflineScreen.kt:156-175`); first two not implemented.
+
+**Blocker**: `PlayerCache` is single-tier — no distinction between "downloaded" (pinned) and "buffered" (transient). Without that split the two rows alias to the same `cache.removeResource` loop the destructive pill triggers.
+
+**Two paths:**
+
+**Option A — split cache (correct, slow):**
+1. Two `SimpleCache` instances: `DownloadsCache` (pinned tracks, never evicted) + `StreamCache` (LRU, current 1 GiB cap).
+2. Migration: walk current cache, move keys present in `playlist_song.downloaded=true` to downloads dir, leave rest in stream.
+3. `Riscarica da origine` → drop `DownloadsCache` keys + enqueue redownload via existing `redownloadCurrent` loop applied globally. Confirm dialog (`"Riscaricare X brani? Userà ~Y MB"`).
+4. `Svuota cache locale` → wipe `StreamCache.keys`, leave `DownloadsCache` alone.
+
+**Option B — redefine semantics (faster, fudgier):**
+1. `Riscarica da origine` = drop all + re-trigger autoDownload pipeline (wipe + autoDownload sweep).
+2. `Svuota cache locale` = drop only auto-downloaded tracks (those without manual playlist pin), keep playlist-pinned. Needs `PlaylistRepository.pinnedSongIds()` lookup to decide what to keep.
+
+Option A is correct, Option B ships in a day.
+
+**For both options:**
+- Add `SettingsActionRow` × 2 above existing Daily Mix row in `DownloadOfflineScreen.kt:156`.
+- New `SettingsConfirmDialog` composable (or reuse existing dialog infra) for destructive confirmation.
+- Update memory `project_redownload_paths` — current `redownloadCurrent` / `refreshLocalDownload` are single-track scoped; the global variants need new entries.
+
+**Cost**: user-visible feature → version bump per `CLAUDE.md`.

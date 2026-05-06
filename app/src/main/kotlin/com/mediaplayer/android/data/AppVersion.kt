@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.13.1"
+    const val VERSION = "0.16.5"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,153 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.16.5",
+            title = "Parità mockup — schermate principali",
+            highlights = listOf(
+                "Indicatore brano in riproduzione nelle liste: ogni riga della libreria, ricerca, playlist, album, artista o genere mostra adesso titolo lime + tre barre lime animate accanto al brano effettivamente in riproduzione (mockup MusicHub `MHPlayingBars`). Prima nessuna riga era marcata e dovevi controllare il mini-player per capire dov'eri.",
+                "Logo MusicHub in cima alle schermate Home e Per te (monogramma + wordmark) come da specifica MusicHub. Prima la chrome del top bar era solo il saluto / titolo.",
+                "Testi sincronizzati: la riga corrente è ora più grande (titleSmall → headlineSmall) e in lime, le righe già passate sfumano al 35%, quelle future al 50%. Prima il fade era binario (attiva vs tutto il resto): adesso si vede chiaramente dove sei nel testo.",
+                "Stato \"Testo non disponibile\" finalmente in italiano (prima diceva \"No lyrics available\" / \"No lyrics found\"). Il pulsante di import era già localizzato.",
+                "Saluto in Home: la riga della data ora aggiunge \"· N nuove uscite per te\" quando Release Radar contiene novità (es. \"Ven 6 Mag · 3 nuove uscite per te\"). Quando Release Radar è vuoto la coda non compare. Allineato al mockup MusicHub.",
+                "Card playlist nella griglia di Home: contatore brani in italiano (\"3 brani\" invece di \"3 songs\", \"Generata per te\" invece di \"Made for you\").",
+                "Sottotitolo delle righe brano: separatore al middle-dot · come da mockup (prima era •).",
+                "Per te: badge mono lime \"OGGI\" accanto al titolo \"I tuoi mix giornalieri\", come da specifica MusicHub.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.16.4",
+            title = "Android Auto — preset timer, fine traccia, copertine generi",
+            highlights = listOf(
+                "Sleep timer in Android Auto: la striscia comandi del now-playing card mostra ora pillole rapide \"Sospendi tra 15m / 30m / 60m\" + \"Fine traccia\" quando nessun timer è attivo, invece dell'unica pillola fissa a 30 minuti. Tap su una preset arma il timer per quella durata senza dover passare dal telefono.",
+                "Nuova modalità \"Fine traccia\": l'app mette in pausa quando il brano corrente termina naturalmente (skip manuale non conta). Funziona sia in macchina sia come logica condivisa col telefono.",
+                "Quando un timer è in corso le pillole collassano in un'unica chip live \"Annulla · N min\" (o \"Annulla · fine traccia\") che decresce a ogni minuto fino a zero; il tap la annulla. Prima la chip mostrava solo \"Annulla timer\" senza countdown.",
+                "I controlli che leggono la sessione (telefono + AA) hanno due nuovi extra: `sleep_remaining_ms` (Long, ms residui) e `sleep_end_of_track` (Boolean), in linea con `sleep_active`. Aggiornati a confine di minuto per non far thrashare il custom layout.",
+                "Tile Generi in Android Auto: ogni tile ha ora una copertina a gradiente con la palette del genere (Indie viola→rosa, Elettronica blu→ciano, Hip-hop nero→arancio, Jazz oro→nero, Classica viola→rosa pesca, Ambient verde scuro→lime, Rock corallo→indaco, Pop blu notte→lime), invece del placeholder bianco. Rimosso anche il sottotitolo ridondante \"Genere\" da ogni riga.",
+                "Testi sincronizzati in AA: la riga corrente mostra ora il prefisso mono \"// ORA · \" davanti al testo, così si distingue subito da titolo/artista. Le righe lunghe vengono troncate a ~60 caratteri con ellissi (prima la riga si avvolgeva o tagliava in modo diverso da head unit a head unit).",
+                "Coda corrente in Android Auto: nuova voce a livello root del browse tree che elenca i brani della coda di riproduzione attuale. La traccia in riproduzione è marcata con una freccia ▸; toccando una riga si salta direttamente a quella posizione senza ricaricare la coda.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.16.3",
+            title = "Taglio — fade in/out davvero udibile",
+            highlights = listOf(
+                "La pillola \"Fade in/out\" nell'editor di Taglio adesso applica davvero la dissolvenza: 0.5s in entrata e 0.5s in uscita sul brano salvato. Prima il toggle era solo cosmetico — ora il file `(cut)` parte da zero e finisce in silenzio.",
+                "Il salvataggio con fade attivo richiede qualche secondo in più (il server passa dal frame-copy lossless alla ricodifica MP3 a ~190 kbps VBR per poter stendere la dissolvenza sui campioni). Il salvataggio senza fade resta veloce come prima.",
+                "Su finestre molto corte la durata della dissolvenza si auto-riduce per non sovrapporre fade-in e fade-out, in modo che entrambe vadano a fondo silenzio.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.16.2",
+            title = "Taglio — waveform reale dall'audio",
+            highlights = listOf(
+                "L'editor di Taglio ora analizza davvero la traccia: scarica lo stream, lo decodifica con MediaCodec e calcola le ampiezze reali. La waveform che vedi (sia nella card di scrub che nella card di taglio) rispecchia il brano vero, non più un disegno sintetico generato dall'id.",
+                "Di conseguenza la pillola \"Aggancia al silenzio\" funziona davvero: IN e OUT saltano alle valli reali dell'onda — punti di volume basso, transizioni naturali — invece che a buchi finti.",
+                "L'analisi gira in background al primo accesso al brano (~1-3 secondi su un MP3 medio); l'editor è subito utilizzabile con la waveform sintetica e poi si sostituisce automaticamente quando il calcolo finisce.",
+                "Risultato cachato su disco per (songId, 96 bin): riaprire l'editor sullo stesso brano è istantaneo.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.16.1",
+            title = "Taglio — zoom, A/B, snap-silenzio, sostituisci nelle playlist",
+            highlights = listOf(
+                "Long-press su una maniglia IN o OUT attiva lo zoom ×8: la timeline si stringe a 1/8 dell'originale centrata sulla maniglia, perfetto per posizionare il taglio al millisecondo. La maniglia in zoom prende un colore goldenrod e in alto a destra compare il badge `ZOOM ×8 · IN/OUT` — toccalo (o tocca fuori dalla maniglia) per uscire dallo zoom.",
+                "Pillola \"Anteprima A/B\" attiva il loop IN→OUT: appena il playhead supera OUT torna automaticamente a IN, così puoi sentire il taglio in loop senza dover scrubare a mano.",
+                "Pillola \"Aggancia al silenzio\": sposta IN e OUT al valle più vicino della waveform (entro ±4s), così il taglio cade su un punto di transizione naturale invece che a metà di una nota.",
+                "Toast salvataggio rinnovato: dopo il save compaiono inline le scelte \"Sì / No\" — \"Sostituirà l'originale nelle playlist?\". Sì chiama il nuovo endpoint backend e sostituisce ogni riferimento al brano originale nelle tue playlist (incluse quelle condivise di cui sei membro), mantenendo la posizione. No esce e basta.",
+                "Backend: nuovo endpoint `POST /api/playlists/replace-song` con swap atomico via update SQL e guardia anti-duplicato.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.16.0",
+            title = "Modalità Taglio — ringtone editor",
+            highlights = listOf(
+                "Nuova modalità Taglio raggiungibile dal menu kebab del Now Playing → \"Taglia traccia…\". Editor a tutto schermo con due timeline: in alto la card \"01 · Ascolto · scrub libero\" con waveform, playhead giallo in stile mockup, chip ora corrente lime, e transport −5 / Vai a IN / Play / Vai a OUT / +5; in basso la card \"02 · Taglio · sposta i punti IN / OUT\" con barra lime attiva, due maniglie trascinabili e i nudge box mono ±1s / ±.1.",
+                "Tasto \"Salva\" lime in alto a destra: invia inMs/outMs al backend, che ritaglia la traccia con ffmpeg `-c copy` (allineamento al frame MP3, nessuna ricodifica) e crea una nuova riga master con titolo \"<originale> (cut)\". Le copertine vengono duplicate; le righe testo dentro alla finestra vengono copiate spostate di -inMs. La traccia tagliata diventa un brano normale: appare in libreria, è riproducibile, può essere salvata come suoneria con il flusso esistente.",
+                "Card \"Risultato\" mono lime con la durata del taglio e quanti minuti/secondi sono stati rimossi dall'originale. Hint \"TIENI PREMUTO UN MARCATORE PER ZOOM ×8\" in fondo (la zoom sarà attivata in una versione futura).",
+                "Backend: nuovo endpoint POST /api/songs/{id}/cut, dedup automatico per content_hash (riutilizza la riga esistente se la stessa finestra è già stata salvata).",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.15.2",
+            title = "Aggiornamenti, novità e diagnostica rinnovati",
+            highlights = listOf(
+                "Banner aggiornamento: la card lime in Home ora ha tre stati come da specifica MusicHub. \"Disponibile\" mostra eyebrow `// AGGIORNAMENTO`, diff `vX → vY` con la nuova versione in lime monospazio e una pillola lime \"Installa\" esplicita. \"Scaricamento\" prende il posto della stessa card con spinner, percentuale lime in monospazio e barra di progresso da 4dp che si aggiorna ogni mezzo secondo — non serve più scendere nella shade di sistema per vedere a che punto è il download. \"Fallito\" tinta la card di rosa, mostra triangolo di warning e una pillola \"Riprova\" al posto della X.",
+                "Cosa c'è di nuovo: il foglio modale è stato rifatto con hero a gradiente lime, eyebrow `// NOVITÀ · vX`, diff `vY → vX` in monospazio e titolo grande della release. Le novità sono numerate `01`, `02`, … in lime monospazio con divisore sottile fra una e l'altra, e in fondo c'è un pulsante lime a piena larghezza \"Continua\" per chiudere senza dover trascinare. Mostra solo le novità dell'ultima versione invece di tutto lo storico.",
+                "Eventi in coda: nuova schermata diagnostica raggiungibile da Profilo → App → Eventi in coda (prima era solo una riga con il conteggio). Card hero con il totale in cifre lime 56sp monospazio e didascalia che spiega che si svuotano da soli quando torni online. Sotto, sezione `// DETTAGLIO` con il dettaglio per tipo (Mi piace, Segui artista, Riproduzioni, Non consigliarmi, …) — ogni riga ha icona squircle lime, label, sottotitolo e pillola `×N` lime monospazio. Footer mostra spinner + \"Sincronizzazione in corso…\" quando sei online, oppure \"In attesa di rete\" se sei offline.",
+                "Il modale che si apriva all'avvio per gli aggiornamenti è stato rimosso: il banner in Home è l'unico punto di entrata. Da Profilo → \"Controlla aggiornamenti\" ora compare un toast \"Aggiornamento disponibile in Home\" e basta tornare alla Home per installarlo.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.15.1",
+            title = "Impostazioni rinnovate",
+            highlights = listOf(
+                "Le sotto-pagine di Impostazioni adottano lo stile MusicHub: ogni schermata ha eyebrow lime in monospazio sopra il titolo (\"// IMPOSTAZIONI\", \"// CONSIGLI\") e contenuti scrollabili anziché fissi.",
+                "Crossfade: paragrafo introduttivo \"Sovrappone le tracce in transizione…\" sopra la card, valore in lime extra-grande con suffisso \"s\" senza spazio (es. \"6s\"), e tick numerici in monospazio (0/2/4/6/8/10/12) sotto il cursore — i tick già passati si colorano di lime.",
+                "Download offline: card \"Spazio usato\" con conteggio reale dei brani scaricati come sub-line in monospazio (es. \"42 brani scaricati\"), barra di progresso più sottile, sezione \"Gestione\" con scorciatoia \"Forza rigenerazione Daily Mix\" in linea, e pulsante distruttivo \"Cancella tutti i download\" finalmente come pillola con bordo + sfondo rossi traslucidi al posto del semplice testo rosso.",
+                "Tema: tre card cliccabili a piena larghezza ognuna con tile di anteprima 56dp del tema (chiaro / scuro / sistema con split diagonale), check lime sulla card selezionata e bordo lime inset; al posto della lista radio compatta. L'ordine ora è Chiaro / Scuro / Sistema come da specifica.",
+                "Non consigliati: tab a pillola (Brani · N / Artisti · N) al posto delle tab Material, righe con opacità ridotta perché rappresentano elementi rimossi, e pulsante testuale \"Ripristina\" lime al posto della sola icona.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.15.0",
+            title = "Collaborazione playlist al completo",
+            highlights = listOf(
+                "Le playlist condivise tracciano chi ha aggiunto ogni brano: nelle righe della playlist trovi una pillola lime in monospazio con le iniziali del collaboratore (\"· LUCA\", \"· MARTA\") accanto alla durata. La pillola appare solo per brani aggiunti da membri diversi dal proprietario.",
+                "Nuova schermata Membri raggiungibile dal pulsante \"Gestisci\" sulla card membri della playlist condivisa: elenca proprietario + collaboratori con avatar a colori e ruolo. Il proprietario può rimuovere singoli membri con un tasto rosso PersonRemove (con conferma). Chi viene rimosso perde l'accesso ma chi resta non viene toccato.",
+                "Il foglio di condivisione playlist ora ha una vera revoca link: tocca \"Revoca link\", conferma e tutti i link attivi smettono di funzionare per chi non li ha ancora aperti. I membri già accettati restano nella playlist.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.14.0",
+            title = "Sfoglia per genere e libreria con filtri",
+            highlights = listOf(
+                "La schermata Album ora ha un campo di ricerca \"Cerca album…\" e un pulsante che alterna l'ordine tra \"Recenti\" e \"A → Z\". La ricerca filtra in tempo reale gli album già caricati per nome o artista.",
+                "Sulla schermata Artisti compare una scorbar verticale A→Z lungo il bordo destro: tocca una lettera per scorrere fino al primo artista che inizia con quella iniziale. Le lettere senza corrispondenze restano in grigio.",
+                "I generi nella griglia \"Sfoglia per genere\" della Ricerca aprono ora una pagina dedicata GenreDetailScreen con eyebrow \"// SFOGLIA · GENERE\", pill rimovibile, tasti \"Riproduci tutti\" + Casuale e elenco dei brani del genere.",
+                "Su Brani che ti piacciono ogni riga ora mostra un indice numerico in monospazio a sinistra della copertina (1, 2, 3…) e l'header ha un terzo pulsante per scaricare/rimuovere tutti i brani offline accanto a Riproduci e Casuale.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.13.5",
+            title = "Libreria e Condivisione playlist rinnovate",
+            highlights = listOf(
+                "Album, Artisti e Mi piace adottano lo stile MusicHub: eyebrow lime \"// LIBRERIA\" sopra il titolo, conteggio totale in monospazio accanto al titolo (\"Album · 42\"), sottotitoli in italiano. Su Mi piace ora vedi anche la durata totale dei brani caricati (\"284 brani · 18h 42m\").",
+                "Le righe Artisti hanno una freccia chevron a destra e il sottotitolo è in italiano (\"3 album · 47 brani\").",
+                "Le playlist condivise mostrano una card Membri sotto la copertina con avatar a stack e un tasto \"Gestisci\" (per il proprietario) o chevron (per i membri). I membri vedono anche un pulsante ghost \"Rimuovi dalla libreria\" inline, oltre alla scorciatoia long-press.",
+                "Il tasto Condividi del proprietario apre ora un foglio dedicato: vedi e copi il link \"mh.duckdns.org/p/...\" in monospazio, hai un pulsante \"Condividi via sistema\" e un footer con il numero di membri attivi. La revoca del link arriverà in una versione futura.",
+                "Quando ricevi un link condiviso vedi un modal a tutto schermo con copertina 220dp, titolo della playlist, \"Playlist collaborativa di <nome>\" e tasto lime \"Aggiungi alla mia libreria\", al posto del vecchio dialog testuale.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.13.4",
+            title = "Scopri e Importa da Spotify rinnovati",
+            highlights = listOf(
+                "La schermata Scopri adotta lo stile MusicHub: titolo \"Trova brani\" con eyebrow lime \"// SCOPRI · YT\", barra di ricerca a card con magnifier e tasto X per pulire il testo, invio della ricerca direttamente dalla tastiera (niente più pulsante Cerca separato).",
+                "I risultati YouTube ora hanno una piccola pill rossa \"YT\", la durata in monospazio e un tasto lime \"Aggiungi\" sulla destra; mentre un brano è in download la riga si evidenzia con bordo lime e mostra una pill di stato (SBLOCCO / percentuale).",
+                "Errori di ricerca compaiono come banner rosso non-bloccante in cima alla lista invece di sostituire l'intera schermata; i caricamenti mostrano righe skeleton al posto del cerchio centrato.",
+                "Quando una ricerca termina vedi una schermata di esito dedicata: cerchio verde \"Aggiunto alla libreria\", ambra \"Importato parzialmente\", rossa \"Brano non trovato\" o grigia \"Ricerca annullata\", con riepilogo sorgente/durata e doppio tasto azione.",
+                "Importa da Spotify ora ha una stepper a 5 segmenti in alto e ogni passaggio ha la sua label \"// PASSO N / 5\": istruzioni numerate con drop-zone tratteggiata, parsing del CSV con card dedicata, conferma del nome con campo Material 3 + contatore caratteri, e schermata finale con cerchio lime, griglia stat (Importati/Saltati/Errori) e tasti \"Apri <playlist>\" / \"Torna alle playlist\".",
+                "Errori di lettura del CSV mostrano un pannello rosso con suggerimenti puntati per ripristinare l'esportazione invece di un semplice messaggio in inglese.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.13.3",
+            title = "Schermata di accesso rinnovata",
+            highlights = listOf(
+                "La schermata di accesso adotta il marchio MusicHub: monogramma con barre di equalizzatore lime al posto della vecchia \"M\" piatta, alone radiale lime sul bordo superiore e pulsante \"Accedi con Google\" bianco con la G ufficiale Google a colori.",
+                "Quando un accesso fallisce ora compare un riquadro rosso con titolo \"Accesso non riuscito\" e codice tecnico in monospazio: capisci subito se è la connessione, le credenziali o il server.",
+                "Mentre l'accesso è in corso il pulsante mostra \"Accesso in corso…\" con spinner inline; non vedi più la schermata vuota con il solo cerchio caricamento.",
+                "Sotto al pulsante una nota in piccolo conferma che proseguendo accetti i Termini e l'Informativa privacy.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.13.2",
+            title = "Tutto in italiano",
+            highlights = listOf(
+                "Sweep di localizzazione: le ultime stringhe inglesi sparse nell'interfaccia (descrizioni di accessibilità del player, intestazioni della coda, voci dell'azione \"Aggiungi alla playlist\", \"Scarica testo\" e affini) sono ora in italiano. Per chi usa TalkBack o uno screen reader, ogni icona del player viene letta in italiano.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.13.1",
             title = "Errori di riproduzione spiegati",

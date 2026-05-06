@@ -36,6 +36,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.guava.future
 import kotlinx.coroutines.launch
 
@@ -70,6 +72,20 @@ class MediaPlaybackService : MediaLibraryService() {
         const val ACTION_SLEEP_TIMER = "com.mediaplayer.android.SLEEP_TIMER"
         /** Bundle key on session extras: Boolean. True when a sleep timer is armed. */
         const val EXTRA_SLEEP_ACTIVE = "sleep_active"
+        /**
+         * Bundle key on session extras: Long. Remaining ms while the sleep
+         * timer is armed; 0 when no timer is active OR when the timer is
+         * armed in end-of-track mode (which has no countdown). Updated at
+         * minute boundaries — controllers reading this value should ceil
+         * to minutes.
+         */
+        const val EXTRA_SLEEP_REMAINING_MS = "sleep_remaining_ms"
+        /**
+         * Bundle key on session extras: Boolean. True when sleep timer is
+         * armed in `Fine traccia` (end-of-track) mode — pause fires on the
+         * next AUTO/REPEAT track transition, no countdown.
+         */
+        const val EXTRA_SLEEP_END_OF_TRACK = "sleep_end_of_track"
         /** Bundle key on session extras: Boolean. True when current song is liked. */
         const val EXTRA_LIKED = "liked"
 
@@ -146,8 +162,18 @@ class MediaPlaybackService : MediaLibraryService() {
     private val sleepTimer = SleepTimer(serviceScope)
     private val sleepTimerCommand =
         SessionCommand(ACTION_SLEEP_TIMER, Bundle.EMPTY)
-    /** Default minutes used when AA presses the Sleep button without args. */
+    /** Default minutes used when a controller invokes the sleep command without args. */
     private val defaultSleepMinutes = 30
+
+    /**
+     * Quick-set sleep durations exposed as preset chips in the AA custom
+     * layout while no timer is active. Mirrors the driver-safe panel from
+     * `mockup/mh-auto-extra.jsx` (subset that fits AA's button budget — the
+     * full 5/10/15/30/45/60 set would exceed what most heads render). When
+     * a timer is armed the chips collapse to a single live-countdown
+     * `Annulla` button.
+     */
+    private val sleepPresetMinutes = listOf(15, 30, 60)
 
     override fun onCreate() {
         super.onCreate()
@@ -217,16 +243,37 @@ class MediaPlaybackService : MediaLibraryService() {
 
         mediaSession = MediaLibrarySession.Builder(this, player, LibraryCallback())
             .setSessionActivity(pendingIntent)
-            .setCustomLayout(buildCustomLayout(liked = false, sleepActive = false))
+            .setCustomLayout(
+                buildCustomLayout(
+                    liked = false,
+                    sleepActive = false,
+                    sleepRemainingMs = 0L,
+                    sleepEndOfTrack = false,
+                )
+            )
             .build()
 
         // Mirror service-owned sleep timer state to controllers (phone VM + AA)
-        // via session extras + a refresh of the custom layout.
+        // via session extras + a refresh of the custom layout. Combine
+        // isActive + remainingMs + endOfTrackActive so the AA chip flips
+        // from preset chips → live `Annulla · N min` countdown (or
+        // `Annulla · fine traccia`) the moment the timer is armed, and
+        // ticks at minute boundaries until expiration / cancel.
         serviceScope.launch {
-            sleepTimer.isActive.collectLatest { active ->
+            combine(
+                sleepTimer.isActive,
+                sleepTimer.remainingMs,
+                sleepTimer.endOfTrackActive,
+            ) { active, remaining, eot ->
+                Triple(active, remaining, eot)
+            }.collectLatest { (active, remaining, eot) ->
                 mediaSession?.let { session ->
-                    session.setSessionExtras(buildSessionExtras(currentLiked, active))
-                    session.setCustomLayout(buildCustomLayout(currentLiked, active))
+                    session.setSessionExtras(
+                        buildSessionExtras(currentLiked, active, remaining, eot)
+                    )
+                    session.setCustomLayout(
+                        buildCustomLayout(currentLiked, active, remaining, eot)
+                    )
                 }
             }
         }
@@ -329,23 +376,58 @@ class MediaPlaybackService : MediaLibraryService() {
 
     private fun updateCustomLayout() {
         val sleepActive = sleepTimer.isActive.value
+        val remainingMs = sleepTimer.remainingMs.value
+        val endOfTrack = sleepTimer.endOfTrackActive.value
         mediaSession?.let { session ->
-            session.setCustomLayout(buildCustomLayout(currentLiked, sleepActive))
-            session.setSessionExtras(buildSessionExtras(currentLiked, sleepActive))
+            session.setCustomLayout(
+                buildCustomLayout(currentLiked, sleepActive, remainingMs, endOfTrack)
+            )
+            session.setSessionExtras(
+                buildSessionExtras(currentLiked, sleepActive, remainingMs, endOfTrack)
+            )
         }
     }
 
-    private fun buildSessionExtras(liked: Boolean, sleepActive: Boolean): Bundle =
-        Bundle().apply {
-            putBoolean(EXTRA_LIKED, liked)
-            putBoolean(EXTRA_SLEEP_ACTIVE, sleepActive)
-        }
+    private fun buildSessionExtras(
+        liked: Boolean,
+        sleepActive: Boolean,
+        sleepRemainingMs: Long,
+        sleepEndOfTrack: Boolean,
+    ): Bundle = Bundle().apply {
+        putBoolean(EXTRA_LIKED, liked)
+        putBoolean(EXTRA_SLEEP_ACTIVE, sleepActive)
+        putLong(EXTRA_SLEEP_REMAINING_MS, sleepRemainingMs)
+        putBoolean(EXTRA_SLEEP_END_OF_TRACK, sleepEndOfTrack)
+    }
 
-    private fun buildCustomLayout(liked: Boolean, sleepActive: Boolean): ImmutableList<CommandButton> =
-        ImmutableList.of(
-            buildLikeButton(liked),
-            buildSleepButton(sleepActive),
-        )
+    /**
+     * AA / lockscreen custom layout. While no timer is armed, surface one
+     * preset chip per [sleepPresetMinutes] entry plus a `Fine traccia`
+     * end-of-track chip so the driver picks a duration without leaving the
+     * now-playing card (mockup §9.3 driver-safe panel — closest
+     * representation in AA's chip strip primitive). While a timer is
+     * armed the strip collapses to Like + a single `Annulla · …` cancel
+     * button that ticks down via [SleepTimer.remainingMs] (or reads
+     * `Annulla · fine traccia` for the end-of-track mode).
+     */
+    private fun buildCustomLayout(
+        liked: Boolean,
+        sleepActive: Boolean,
+        sleepRemainingMs: Long,
+        sleepEndOfTrack: Boolean,
+    ): ImmutableList<CommandButton> {
+        val buttons = ImmutableList.builder<CommandButton>()
+        buttons.add(buildLikeButton(liked))
+        if (sleepActive) {
+            buttons.add(buildSleepCancelButton(sleepRemainingMs, sleepEndOfTrack))
+        } else {
+            sleepPresetMinutes.forEach { minutes ->
+                buttons.add(buildSleepPresetButton(minutes))
+            }
+            buttons.add(buildSleepEndOfTrackButton())
+        }
+        return buttons.build()
+    }
 
     private fun buildLikeButton(liked: Boolean): CommandButton =
         CommandButton.Builder()
@@ -356,14 +438,64 @@ class MediaPlaybackService : MediaLibraryService() {
             )
             .build()
 
-    private fun buildSleepButton(active: Boolean): CommandButton =
-        CommandButton.Builder()
-            .setSessionCommand(sleepTimerCommand)
-            .setDisplayName(if (active) "Annulla timer" else "Sospendi tra ${defaultSleepMinutes}m")
-            .setIconResId(
-                if (active) R.drawable.ic_bedtime else R.drawable.ic_bedtime_off
-            )
+    /**
+     * Quick-set chip for a fixed sleep duration. The minute count is baked
+     * into the [SessionCommand]'s `customExtras` so a tap routes to
+     * [ACTION_SLEEP_TIMER] with the right value — no per-button action name.
+     */
+    private fun buildSleepPresetButton(minutes: Int): CommandButton {
+        val cmd = SessionCommand(
+            ACTION_SLEEP_TIMER,
+            Bundle().apply { putInt("minutes", minutes) },
+        )
+        return CommandButton.Builder()
+            .setSessionCommand(cmd)
+            .setDisplayName("Sospendi tra ${minutes}m")
+            .setIconResId(R.drawable.ic_bedtime_off)
             .build()
+    }
+
+    /**
+     * Live-countdown cancel chip. In minute mode the label reads
+     * `Annulla · N min` (ceils [remainingMs] so it reads naturally); in
+     * end-of-track mode the label reads `Annulla · fine traccia`. Tap with
+     * no args cancels the armed timer (state-aware branch in
+     * `onCustomCommand`). Closes audit `08-auto-extra.md` D18 — the chip
+     * doubles as countdown display + explicit cancel intent.
+     */
+    private fun buildSleepCancelButton(
+        remainingMs: Long,
+        endOfTrack: Boolean,
+    ): CommandButton {
+        val label = if (endOfTrack) {
+            "Annulla · fine traccia"
+        } else {
+            val mins = ((remainingMs + 59_999L) / 60_000L).toInt().coerceAtLeast(1)
+            "Annulla · $mins min"
+        }
+        return CommandButton.Builder()
+            .setSessionCommand(sleepTimerCommand)
+            .setDisplayName(label)
+            .setIconResId(R.drawable.ic_bedtime)
+            .build()
+    }
+
+    /**
+     * `Fine traccia` end-of-track preset chip. Carries `end_of_track=true`
+     * in the session command's `customExtras` so the service routes it to
+     * [SleepTimer.setEndOfTrack] instead of the minute-mode path.
+     */
+    private fun buildSleepEndOfTrackButton(): CommandButton {
+        val cmd = SessionCommand(
+            ACTION_SLEEP_TIMER,
+            Bundle().apply { putBoolean("end_of_track", true) },
+        )
+        return CommandButton.Builder()
+            .setSessionCommand(cmd)
+            .setDisplayName("Fine traccia")
+            .setIconResId(R.drawable.ic_bedtime_off)
+            .build()
+    }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
         mediaSession
@@ -476,11 +608,18 @@ class MediaPlaybackService : MediaLibraryService() {
         ): ListenableFuture<SessionResult> = serviceScope.future {
             when (customCommand.customAction) {
                 ACTION_TOGGLE_LIKE -> {
-                    val songId = songIdOf(session.player.currentMediaItem)
+                    val item = session.player.currentMediaItem
+                    val songId = songIdOf(item)
                         ?: return@future SessionResult(SessionError.ERROR_INVALID_STATE)
+                    val title = item?.mediaMetadata?.title?.toString()
+                    val artist = item?.mediaMetadata?.artist?.toString()
+                    val label = listOfNotNull(
+                        title?.takeIf { it.isNotBlank() },
+                        artist?.takeIf { it.isNotBlank() },
+                    ).joinToString(" — ").ifBlank { null }
                     try {
-                        if (currentLiked) likedRepository.unlike(songId)
-                        else likedRepository.like(songId)
+                        if (currentLiked) likedRepository.unlike(songId, displayLabel = label)
+                        else likedRepository.like(songId, displayLabel = label)
                         currentLiked = !currentLiked
                         updateCustomLayout()
                         SessionResult(SessionResult.RESULT_SUCCESS)
@@ -489,16 +628,23 @@ class MediaPlaybackService : MediaLibraryService() {
                     }
                 }
                 ACTION_SLEEP_TIMER -> {
-                    // 0 cancels; absent / negative defaults to AA's quick-set value.
-                    val minutes = if (args.containsKey("minutes")) {
-                        args.getInt("minutes")
-                    } else {
-                        defaultSleepMinutes
-                    }
-                    if (minutes <= 0 || sleepTimer.isActive.value) {
-                        sleepTimer.cancel()
-                    } else {
-                        sleepTimer.set(minutes) { session.player.pause() }
+                    // Phone VM sends the minute count via `args`; AA preset
+                    // chips bake their value into the button's SessionCommand
+                    // `customExtras`. Inspect both keys (`minutes`, `end_of_track`)
+                    // across both bundles so either entry point routes to the
+                    // same logic. Tap while armed always cancels — independent
+                    // of which mode the chip targets.
+                    val sources = listOf(args, customCommand.customExtras)
+                    val endOfTrack = sources.any { it.getBoolean("end_of_track", false) }
+                    val minutesSource = sources.firstOrNull { it.containsKey("minutes") }
+                    val minutes = minutesSource?.getInt("minutes") ?: defaultSleepMinutes
+                    when {
+                        sleepTimer.isActive.value -> sleepTimer.cancel()
+                        endOfTrack -> sleepTimer.setEndOfTrack(session.player) {
+                            session.player.pause()
+                        }
+                        minutes <= 0 -> sleepTimer.cancel()
+                        else -> sleepTimer.set(minutes) { session.player.pause() }
                     }
                     SessionResult(SessionResult.RESULT_SUCCESS)
                 }
@@ -540,6 +686,22 @@ class MediaPlaybackService : MediaLibraryService() {
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
             serviceScope.future {
+                // Custom queue folder: snapshot the player's timeline on the
+                // application main thread (Player is single-thread-confined)
+                // and render via LibraryTree. Done here instead of inside
+                // LibraryTree so the singleton stays player-agnostic.
+                if (parentId == LibraryTree.QUEUE_ID) {
+                    val (timeline, currentIndex) = withContext(Dispatchers.Main) {
+                        val p = session.player
+                        val items = (0 until p.mediaItemCount).map { p.getMediaItemAt(it) }
+                        items to p.currentMediaItemIndex
+                    }
+                    return@future LibraryResult.ofItemList(
+                        ImmutableList.copyOf(LibraryTree.queueChildren(timeline, currentIndex)),
+                        params,
+                    )
+                }
+
                 val currentItem = session.player.currentMediaItem
                 val currentSongId = currentItem?.mediaId?.removePrefix("song:")?.toLongOrNull()
 
@@ -677,6 +839,21 @@ class MediaPlaybackService : MediaLibraryService() {
                     LibraryTree.parseGenreLeaf(id)?.let { (tag, pos, _) ->
                         return@future MediaSession.MediaItemsWithStartPosition(
                             LibraryTree.genreQueue(tag), pos, C.TIME_UNSET
+                        )
+                    }
+
+                    // Queue leaf → re-hand the existing player timeline with
+                    // the chosen index so AA effectively jumps to that row
+                    // without us rebuilding the queue. The MediaItems are
+                    // the same instances the player already owns (URIs +
+                    // KEY_USER_QUEUED extras preserved).
+                    LibraryTree.parseQueueLeaf(id)?.let { (pos, _) ->
+                        val current = withContext(Dispatchers.Main) {
+                            val p = mediaSession.player
+                            (0 until p.mediaItemCount).map { p.getMediaItemAt(it) }
+                        }
+                        return@future MediaSession.MediaItemsWithStartPosition(
+                            current, pos, C.TIME_UNSET
                         )
                     }
 

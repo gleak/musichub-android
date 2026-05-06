@@ -115,6 +115,7 @@ fun NowPlayingSheet(
     viewModel: PlaybackViewModel,
     onDismiss: () -> Unit,
     onArtistClick: ((String) -> Unit)? = null,
+    onTrim: (() -> Unit)? = null,
     sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
     animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null,
 ) {
@@ -123,6 +124,7 @@ fun NowPlayingSheet(
         viewModel = viewModel,
         onDismiss = onDismiss,
         onArtistClick = onArtistClick,
+        onTrim = onTrim,
         sharedTransitionScope = sharedTransitionScope,
         animatedVisibilityScope = animatedVisibilityScope,
     )
@@ -138,6 +140,7 @@ private fun NowPlayingContent(
     viewModel: PlaybackViewModel,
     onDismiss: () -> Unit,
     onArtistClick: ((String) -> Unit)? = null,
+    onTrim: (() -> Unit)? = null,
     sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
     animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null,
 ) {
@@ -245,7 +248,7 @@ private fun NowPlayingContent(
                 IconButton(onClick = onDismiss) {
                     Icon(
                         imageVector = Icons.Filled.KeyboardArrowDown,
-                        contentDescription = "Collapse",
+                        contentDescription = "Comprimi",
                         tint = MHColors.OnHero,
                     )
                 }
@@ -270,7 +273,7 @@ private fun NowPlayingContent(
                     IconButton(onClick = { showSleepMenu = true }) {
                         Icon(
                             imageVector = Icons.Filled.Bedtime,
-                            contentDescription = "Sleep timer",
+                            contentDescription = "Timer di sospensione",
                             tint = if (sleepActive) MaterialTheme.colorScheme.primary else MHColors.OnHero,
                         )
                     }
@@ -398,7 +401,7 @@ private fun NowPlayingContent(
                         activeTrackColor = MHColors.OnHero,
                         inactiveTrackColor = MHColors.OnHeroTrack,
                     ),
-                    modifier = Modifier.semantics { contentDescription = "Playback position" },
+                    modifier = Modifier.semantics { contentDescription = "Posizione di riproduzione" },
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -426,7 +429,7 @@ private fun NowPlayingContent(
                     IconButton(onClick = viewModel::toggleShuffle) {
                         Icon(
                             imageVector = Icons.Filled.Shuffle,
-                            contentDescription = "Shuffle",
+                            contentDescription = "Casuale",
                             tint = if (shuffleEnabled) MaterialTheme.colorScheme.primary
                                    else MHColors.OnHeroMuted,
                         )
@@ -438,7 +441,7 @@ private fun NowPlayingContent(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.SkipPrevious,
-                            contentDescription = "Previous",
+                            contentDescription = "Precedente",
                             tint = MHColors.OnHero,
                             modifier = Modifier.size(40.dp),
                         )
@@ -456,7 +459,7 @@ private fun NowPlayingContent(
                     ) {
                         Icon(
                             imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            contentDescription = if (isPlaying) "Pausa" else "Riproduci",
                             modifier = Modifier.size(40.dp),
                         )
                     }
@@ -467,7 +470,7 @@ private fun NowPlayingContent(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.SkipNext,
-                            contentDescription = "Next",
+                            contentDescription = "Successivo",
                             tint = MHColors.OnHero,
                             modifier = Modifier.size(40.dp),
                         )
@@ -476,7 +479,7 @@ private fun NowPlayingContent(
                         Icon(
                             imageVector = if (repeatMode == Player.REPEAT_MODE_ONE)
                                 Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                            contentDescription = "Repeat",
+                            contentDescription = "Ripeti",
                             tint = if (repeatMode != Player.REPEAT_MODE_OFF)
                                 MaterialTheme.colorScheme.primary
                             else MHColors.OnHeroMuted,
@@ -606,6 +609,15 @@ private fun NowPlayingContent(
                                 viewModel.saveCurrentAsAlarmSound()
                             },
                         )
+                        if (onTrim != null) {
+                            DropdownMenuItem(
+                                text = { Text("Taglia traccia…") },
+                                onClick = {
+                                    overflowOpen = false
+                                    onTrim()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("Segnala brano sbagliato") },
                             onClick = {

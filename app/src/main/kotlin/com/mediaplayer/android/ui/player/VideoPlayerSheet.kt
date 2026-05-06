@@ -189,7 +189,7 @@ private fun VideoSurface(
         ) {
             Icon(
                 imageVector = Icons.Filled.Close,
-                contentDescription = "Close video",
+                contentDescription = "Chiudi video",
                 tint = Color.White,
             )
         }

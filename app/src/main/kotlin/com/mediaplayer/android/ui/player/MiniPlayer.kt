@@ -153,7 +153,7 @@ fun MiniPlayer(
             }) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    contentDescription = if (isPlaying) "Pausa" else "Riproduci",
                     tint = MaterialTheme.colorScheme.onSurface,
                 )
             }

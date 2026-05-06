@@ -96,7 +96,7 @@ fun LyricsView(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = if (importFailed) "No lyrics found" else "No lyrics available",
+                    text = if (importFailed) "Testo non trovato" else "Testo non disponibile",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -128,9 +128,9 @@ fun LyricsView(
                             color = MaterialTheme.colorScheme.onPrimary,
                         )
                         Spacer(Modifier.size(8.dp))
-                        Text("Downloading…")
+                        Text("Scaricamento…")
                     } else {
-                        Text(if (importFailed) "Try again" else "Download lyrics")
+                        Text(if (importFailed) "Riprova" else "Scarica testo")
                     }
                 }
             }
@@ -141,13 +141,20 @@ fun LyricsView(
                 modifier = Modifier.heightIn(max = 420.dp),
             ) {
                 itemsIndexed(items = lines, key = { i, _ -> i }) { index, line ->
+                    val isActive = index == activeIndex
+                    val isPast = index < activeIndex
+                    val baseColor = MaterialTheme.colorScheme.onSurface
                     Text(
                         text = line.text,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (index == activeIndex)
-                            MaterialTheme.colorScheme.primary
+                        style = if (isActive)
+                            MaterialTheme.typography.headlineSmall
                         else
-                            MaterialTheme.colorScheme.onSurfaceVariant,
+                            MaterialTheme.typography.bodyLarge,
+                        color = when {
+                            isActive -> MaterialTheme.colorScheme.primary
+                            isPast -> baseColor.copy(alpha = 0.35f)
+                            else -> baseColor.copy(alpha = 0.5f)
+                        },
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )

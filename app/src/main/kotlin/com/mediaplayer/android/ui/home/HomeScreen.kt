@@ -65,12 +65,14 @@ import coil3.request.crossfade
 import android.widget.Toast
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.PlaylistDto
+import com.mediaplayer.android.ui.common.AppUpdateBannerHost
 import com.mediaplayer.android.update.AppUpdateChecker
 import kotlinx.coroutines.launch
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.LocalCurrentUser
+import com.mediaplayer.android.ui.common.MHLogo
 import com.mediaplayer.android.ui.common.SectionHeader
 import com.mediaplayer.android.ui.common.SongCover
 import com.mediaplayer.android.ui.theme.CoverShapes
@@ -180,7 +182,16 @@ private fun HomeContent(
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         item(key = "greeting") {
+            // Mockup `mh-screens.jsx:43-45` adds a "· N nuove uscite per te" tail
+            // when there are new releases. We use Release Radar's songCount as
+            // the count: the auto-playlist literally is "tracks released since
+            // your last visit by artists you follow", so its size is the most
+            // honest number to show.
+            val newReleases = playlists
+                .firstOrNull { it.kind.equals("RELEASE_RADAR", ignoreCase = true) }
+                ?.songCount ?: 0
             GreetingHeader(
+                newReleaseCount = newReleases,
                 onSignOut = onSignOut,
                 onShowChangelog = onShowChangelog,
                 onProfileClick = onProfileClick,
@@ -189,6 +200,10 @@ private fun HomeContent(
 
         item(key = "filter_chips") {
             HomeFilterChips(selected = filter, onSelect = { filter = it })
+        }
+
+        item(key = "app_update_banner") {
+            AppUpdateBannerHost()
         }
 
         val autoPlaylists = playlists.filter { it.isAuto }
@@ -439,6 +454,7 @@ private fun ColdStartTile(
 
 @Composable
 private fun GreetingHeader(
+    newReleaseCount: Int,
     onSignOut: () -> Unit,
     onShowChangelog: () -> Unit,
     onProfileClick: () -> Unit,
@@ -448,6 +464,25 @@ private fun GreetingHeader(
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
     ) {
+        // Brand lockup pinned to the top of the surface per mockup
+        // `mh-screens.jsx:35-40`. Sits above the greeting so the
+        // headline still anchors the screen.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+        ) {
+            MHLogo(tileSize = 22.dp, modifier = Modifier.weight(1f))
+            IconButton(onClick = onProfileClick, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Profilo",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = greetingForNow(),
@@ -455,16 +490,14 @@ private fun GreetingHeader(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = onProfileClick) {
-                Icon(
-                    imageVector = Icons.Filled.Settings,
-                    contentDescription = "Profilo",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
+        }
+        val tail = when {
+            newReleaseCount <= 0 -> ""
+            newReleaseCount == 1 -> " · 1 nuova uscita per te"
+            else -> " · $newReleaseCount nuove uscite per te"
         }
         Text(
-            text = currentDateLabel(),
+            text = currentDateLabel() + tail,
             style = com.mediaplayer.android.ui.theme.LocalMHMono.current.caption,
             color = com.mediaplayer.android.ui.theme.MHColors.TextLo,
             modifier = Modifier.padding(top = 4.dp),
@@ -729,9 +762,9 @@ private fun PlaylistCardSquare(playlist: PlaylistDto, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = if (playlist.isAuto) "Made for you"
-            else if (playlist.songCount == 1) "1 song"
-            else "${playlist.songCount} songs",
+            text = if (playlist.isAuto) "Generata per te"
+            else if (playlist.songCount == 1) "1 brano"
+            else "${playlist.songCount} brani",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

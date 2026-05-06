@@ -83,8 +83,8 @@ android {
         applicationId = "com.mediaplayer.android"
         minSdk = 24
         targetSdk = 35
-        versionCode = 73
-        versionName = "0.13.1"
+        versionCode = 87
+        versionName = "0.16.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -385,3 +385,108 @@ already forces that URL to be set.
 
 All planned milestones shipped through M11b. See [../README.md](../README.md)
 for the full cross-repo roadmap.
+
+## Mockup audit
+
+`.planning/mockup-audit/REPORT.md` lists every place the shipped UI drifts
+from the MusicHub design contract (`mockup/*.jsx`). Each area has a per-file
+detail doc — mark items resolved there as the rebrand lands.
+
+| # | Area                                              | Detail                                          | Status                |
+|---|---------------------------------------------------|-------------------------------------------------|-----------------------|
+| 1 | Auth & first-run                                  | [01-auth.md](.planning/mockup-audit/01-auth.md) | **Done** (post-v0.13.3) |
+| 2 | Discover & Spotify import                         | [02-discover.md](.planning/mockup-audit/02-discover.md) | Pending               |
+| 3 | Library drilldowns + sharing                      | [03-library.md](.planning/mockup-audit/03-library.md) | Pending               |
+| 4 | Player sheets / dialogs                           | [04-player-sheets.md](.planning/mockup-audit/04-player-sheets.md) | Pending               |
+| 5 | Profile / settings sub-pages                      | [05-settings.md](.planning/mockup-audit/05-settings.md) | Pending               |
+| 6 | App-update + changelog + event-queue              | [06-update.md](.planning/mockup-audit/06-update.md) | Pending               |
+| 7 | Ringtone trim editor                              | [07-trim.md](.planning/mockup-audit/07-trim.md) | **Done** (v0.16.1)    |
+| 8 | Android Auto extras                               | [08-auto-extra.md](.planning/mockup-audit/08-auto-extra.md) | Pending               |
+| 9 | Core screens parity                               | [09-core-screens.md](.planning/mockup-audit/09-core-screens.md) | Pending               |
+
+### Area 1 — Auth & first-run
+
+Brand contract from `mockup/mh-auth.jsx` + state contract from
+`mockup/mh-auth-states.jsx` are both implemented:
+
+- `LoginScreen.kt` — equalizer-bars monogram, white pill with multi-color
+  Google G, lime-tinted radial gradient, italian copy + T&C footer, boxed
+  red error panel with categorized mono code (`auth/network-error` /
+  `auth/server-rejected` / `auth/google-rejected` / `auth/unknown`, mapped
+  by `AuthViewModel.classifyAuthError`), signing-in button-label swap with
+  `auth/google · credential-exchange` diagnostic, soft `auth/picker-cancel`
+  toast on Google picker dismiss.
+- `OnboardingScreen.kt` — 12 italian-cased pill cloud (FlowRow), `// PASSO 1 / 1`
+  eyebrow, footer row with thin top divider + mono counter, dashed-look
+  ghost lime CTA "Scegli ancora N" below threshold, dimmed grid + spinner
+  CTA + "SALVATAGGIO…" counter while saving, red error band with retry pill
+  + `onboarding/seed-genres` code on save failure.
+- `OnboardingSheet.kt` — lime-tinted gradient sheet, custom drag handle,
+  `// BENVENUTO IN MUSICHUB` eyebrow, "La tua libreria, il tuo ritmo."
+  tagline, three lime-tile feature rows, single "Inizia" pill CTA.
+- `ProfileScreen.kt#AccountSwitchDialog` — custom `Dialog` (not stock
+  `AlertDialog`) with `// CAMBIA ACCOUNT` eyebrow, account-preview row
+  (gradient avatar + email + "Account corrente" mono caption), side-by-side
+  pill buttons (Annulla subtle + Disconnetti red filled), cloud-sync warning
+  copy.
+- `AuthProbeScreen.kt` — brand-locked splash for the initial silent token
+  probe with Token / Me / RejectedSilent stages: lime (or red, when muted)
+  radial gradient, equalizer monogram, animated progress strip, mono
+  diagnostic line (`auth/token-refresh` / `auth/refresh-me` /
+  `auth/token-rejected · clear`).
+- `AuthViewModel.kt` — `State.Probe(stage)` and `State.SigningIn` split out
+  from the old single `Loading`; `pickerCancelled: SharedFlow<Unit>` emits
+  on Google picker dismiss; rejected-token path flashes the splash for
+  ~900ms before falling back to `NotSignedIn`.
+
+### Area 7 — Modalità Taglio (ringtone trim editor)
+
+Implements `mockup/mh-trim.jsx` end-to-end. Reachable from Now Playing →
+overflow → **Taglia traccia…**:
+
+- `ui/trim/TrimScreen.kt` — full-screen editor: top bar (X / `// MODALITÀ ·
+  TAGLIO` lime eyebrow / lime `Salva` pill), track header with cover, **01 ·
+  ASCOLTO** preview card (96-bar pseudo-random waveform mask, dashed lime
+  IN/OUT region overlay, yellow `#FFC857` playhead with flag head, mono
+  playhead chip, transport row of 5 buttons), **02 · TAGLIO** trim card
+  (mini lime-masked waveform, 8dp lime active bar, two draggable handles —
+  picks the closest one on press-down so the cursor doesn't hop —, two
+  `NudgeBox`es with mono `±1s` / `±.1` quad), Fade in/out pill, Risultato
+  card showing window duration + amount cut, saved/error toast pinned to
+  the bottom edge, hint footer.
+- `ui/trim/TrimViewModel.kt` — IN/OUT cursors with `MIN_WINDOW_MS = 1000`
+  guard, fade-toggle state, `save()` round-trip to the backend cut endpoint
+  with `friendlyMessage`-shaped error fallback.
+- Preview audio reuses the host `PlaybackViewModel` instead of spawning a
+  second ExoPlayer — scrubbing on the waveform, `Vai a IN/OUT`, and `±5s`
+  all map onto `MediaController.seekTo`. The lockscreen / Auto / mini-player
+  surfaces stay in sync with the editor cursor.
+- Backend: `POST /api/songs/{id}/cut` (`SongCutService` + `CutSongRequest`).
+  Runs `ffmpeg -i src -ss <inSec> -to <outSec> -c copy …` so the cut snaps
+  to the nearest MP3 frame boundary (~26ms) without re-encoding. The new
+  `Song` row gets a `(cut)` title suffix, copies the cover bytes (so
+  relocating one row doesn't break the other), and ports lyric lines whose
+  `position_ms` lands inside the window with positions shifted by `-inMs`.
+  Dedup by `content_hash` — saving the same window twice returns the
+  existing row instead of failing on the unique constraint.
+
+All four mockup pills are now live (v0.16.1):
+
+- **Long-press ×8 zoom** — long-press a handle and the timeline narrows to
+  1/8 of the song centered on that handle. The focused handle paints in
+  goldenrod and a `ZOOM ×8 · IN/OUT` badge floats top-right of the trim
+  card; tap the badge or anywhere outside the handle to exit zoom.
+- **Anteprima A/B** — pill that flips a loop flag in `TrimViewModel`. A
+  `LaunchedEffect` watching `playbackVm.positionMs` seeks back to IN
+  whenever the playhead crosses OUT, so the user hears the cut on repeat
+  without manually scrubbing.
+- **Aggancia al silenzio** — `TrimViewModel.snapToSilence(waveform)` walks
+  ±4s around each handle and pulls IN/OUT to the lowest waveform bar
+  inside that window. The waveform seed is `song.id` so the snap is stable
+  per track.
+- **Replace-in-playlists Yes/No** — backend ships `POST /api/playlists/replace-song`
+  (`PlaylistRepository.replaceSongInAccessiblePlaylists` does the bulk
+  `UPDATE` with a duplicate guard). The `Saved` toast renders inline `Sì / No`
+  CTAs matching the mockup copy; `Sì` flips the VM into `Replacing` and
+  shows a spinner inside the toast badge until the swap completes, then
+  pops the editor with the new master.

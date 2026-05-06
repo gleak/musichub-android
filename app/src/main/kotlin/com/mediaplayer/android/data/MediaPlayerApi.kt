@@ -12,11 +12,14 @@ import com.mediaplayer.android.data.dto.ArtistDetailDto
 import com.mediaplayer.android.data.dto.ArtistDto
 import com.mediaplayer.android.data.dto.CreatePlaylistRequest
 import com.mediaplayer.android.data.dto.CreateRequestBody
+import com.mediaplayer.android.data.dto.CutSongRequest
 import com.mediaplayer.android.data.dto.GenreSeedRequest
 import com.mediaplayer.android.data.dto.PageResponse
 import com.mediaplayer.android.data.dto.PlaylistDetailDto
 import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.data.dto.RenamePlaylistRequest
+import com.mediaplayer.android.data.dto.ReplaceSongRequest
+import com.mediaplayer.android.data.dto.ReplaceSongResponse
 import com.mediaplayer.android.data.dto.RequestDto
 import com.mediaplayer.android.data.dto.RequestSummaryDto
 import com.mediaplayer.android.data.dto.ReorderSongsRequest
@@ -24,6 +27,8 @@ import com.mediaplayer.android.data.dto.SelectCandidateBody
 import com.mediaplayer.android.data.dto.SetAutoSyncRequest
 import com.mediaplayer.android.data.dto.ReinitStatusDto
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.data.dto.SpotifyImportJobIdDto
+import com.mediaplayer.android.data.dto.SpotifyImportJobStatusDto
 import com.mediaplayer.android.data.dto.SpotifyImportResultDto
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
@@ -79,6 +84,17 @@ interface MediaPlayerApi {
     suspend fun redownloadSong(@Path("id") id: Long): SongDto
 
     /**
+     * Slice the source song into a new catalog row covering only the given
+     * window. Server runs ffmpeg `-c copy`, so the cut snaps to the nearest
+     * MP3 frame boundary (~26ms) without re-encoding. Returns the new master.
+     */
+    @POST("api/songs/{id}/cut")
+    suspend fun cutSong(
+        @Path("id") id: Long,
+        @Body body: CutSongRequest,
+    ): SongDto
+
+    /**
      * Report a song as "wrong" (mismatched audio for the title/artist).
      * Backend hard-removes references from playlists/likes/history,
      * deletes the audio/cover/video files from disk, and keeps the row
@@ -116,6 +132,22 @@ interface MediaPlayerApi {
         @Part file: MultipartBody.Part,
         @Part("playlistName") playlistName: RequestBody,
     ): SpotifyImportResultDto
+
+    /**
+     * Async variant — returns a jobId immediately; client polls
+     * [getSpotifyImportJobStatus] for progress. Server is 202 Accepted.
+     */
+    @Multipart
+    @POST("api/playlists/import/spotify/async")
+    suspend fun importSpotifyPlaylistAsync(
+        @Part file: MultipartBody.Part,
+        @Part("playlistName") playlistName: RequestBody,
+    ): SpotifyImportJobIdDto
+
+    @GET("api/playlists/import/spotify/jobs/{jobId}")
+    suspend fun getSpotifyImportJobStatus(
+        @Path("jobId") jobId: String,
+    ): SpotifyImportJobStatusDto
 
     // ---------- Playlists (M6) ----------
 
@@ -163,6 +195,14 @@ interface MediaPlayerApi {
         @Body body: ReorderSongsRequest,
     ): PlaylistDetailDto
 
+    /**
+     * Bulk swap: replace every reference of [ReplaceSongRequest.oldSongId] with
+     * [ReplaceSongRequest.newSongId] across the caller's accessible playlists.
+     * Used by the trim editor's "sostituirà l'originale nelle playlist?" CTA.
+     */
+    @POST("api/playlists/replace-song")
+    suspend fun replaceSongInPlaylists(@Body body: ReplaceSongRequest): ReplaceSongResponse
+
     // ---------- Playlist share (M15a) ----------
 
     /** Recompute Daily Mix on demand. */
@@ -183,6 +223,22 @@ interface MediaPlayerApi {
     suspend fun acceptPlaylistShare(
         @Path("token") token: String,
     ): PlaylistDetailDto
+
+    @DELETE("api/playlists/{id}/share")
+    suspend fun revokePlaylistShares(
+        @Path("id") id: Long,
+    ): retrofit2.Response<Unit>
+
+    @GET("api/playlists/{id}/members")
+    suspend fun listPlaylistMembers(
+        @Path("id") id: Long,
+    ): List<com.mediaplayer.android.data.dto.PlaylistMemberDto>
+
+    @DELETE("api/playlists/{id}/members/{userId}")
+    suspend fun kickPlaylistMember(
+        @Path("id") id: Long,
+        @Path("userId") userId: Long,
+    ): retrofit2.Response<Unit>
 
     // ---------- Followed artists / Release Radar (M15b) ----------
 

@@ -1,5 +1,15 @@
 # Core surfaces — mockup vs implementation parity audit
 
+> **Status: ✅ Closed in v0.16.5.** Actionable polish items shipped:
+> tri-state Lyrics fade + larger active line, Italian no-lyrics copy,
+> Home greeting "· N nuove uscite per te" tail (sourced from Release
+> Radar count), Italian playlist card subtitles, middle-dot `·`
+> separator on SongRow, lime `OGGI` mono badge on Per te mix grid.
+> Remaining items (NowPlaying 360dp ceiling, ForYou hero heart
+> shortcut, MHLogo / MHPlayingBars / full-screen Lyrics+Video mockups)
+> are design-locked or require data plumbing that doesn't exist yet —
+> tracked in REPORT.md "Area 9 closure" block.
+
 App version at audit time: **v0.13.1**.
 Mockup bundle: `mockup/mh-screens.jsx`, `mockup/mh-extras.jsx`,
 `mockup/mh-foryou.jsx`, `mockup/mh-shared.jsx`, `mockup/mh-canvas-app.jsx`.
