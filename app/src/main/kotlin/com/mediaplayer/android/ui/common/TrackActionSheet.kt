@@ -21,8 +21,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonOff
+import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -70,6 +73,9 @@ fun TrackActionSheet(
     onShowLyrics: (() -> Unit)? = null,
     onShowVideo: (() -> Unit)? = null,
     onSleepTimer: (() -> Unit)? = null,
+    onDislikeSong: (() -> Unit)? = null,
+    onDislikeArtist: (() -> Unit)? = null,
+    onFlagWrong: (() -> Unit)? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -124,6 +130,14 @@ fun TrackActionSheet(
             }
             androidx.compose.material3.HorizontalDivider(color = MHColors.Divider)
 
+            // `// AZIONI` eyebrow per mockup `mh-player-sheets.jsx:407-465`.
+            Text(
+                text = "// AZIONI",
+                style = mono.eyebrow,
+                color = MHColors.TextLo,
+                modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp),
+            )
+
             onPlayNext?.let { ActionRow(Icons.AutoMirrored.Filled.QueueMusic, "Riproduci dopo", onClick = { onDismiss(); it() }) }
             onAddToQueue?.let { ActionRow(Icons.AutoMirrored.Filled.QueueMusic, "Aggiungi alla coda", onClick = { onDismiss(); it() }) }
             onAddToPlaylist?.let { ActionRow(Icons.AutoMirrored.Filled.PlaylistAdd, "Aggiungi a playlist", onClick = { onDismiss(); it() }) }
@@ -143,6 +157,40 @@ fun TrackActionSheet(
             onGoToAlbum?.let { ActionRow(Icons.Filled.Album, "Vai all'album", onClick = { onDismiss(); it() }) }
             onShare?.let { ActionRow(Icons.Filled.Share, "Condividi", onClick = { onDismiss(); it() }) }
             onSleepTimer?.let { ActionRow(Icons.Filled.Bedtime, "Timer di spegnimento", onClick = { onDismiss(); it() }) }
+
+            // Destructive group — divider per mockup, then dislike/report rows
+            // grouped together. Rendered only when at least one callback is set
+            // so non-destructive call sites stay clean.
+            val anyDestructive = onDislikeSong != null || onDislikeArtist != null ||
+                onFlagWrong != null || onRemoveFromPlaylist != null
+            if (anyDestructive) {
+                Spacer(Modifier.size(4.dp))
+                androidx.compose.material3.HorizontalDivider(color = MHColors.Divider)
+            }
+            onDislikeSong?.let {
+                ActionRow(
+                    Icons.Filled.ThumbDown,
+                    "Non consigliarmi questo brano",
+                    iconTint = MHColors.TextLo2,
+                    onClick = { onDismiss(); it() },
+                )
+            }
+            onDislikeArtist?.let {
+                ActionRow(
+                    Icons.Filled.PersonOff,
+                    "Non consigliarmi questo artista",
+                    iconTint = MHColors.TextLo2,
+                    onClick = { onDismiss(); it() },
+                )
+            }
+            onFlagWrong?.let {
+                ActionRow(
+                    Icons.Filled.ReportProblem,
+                    "Segnala brano sbagliato",
+                    iconTint = Color(0xFFFF4D2E),
+                    onClick = { onDismiss(); it() },
+                )
+            }
             onRemoveFromPlaylist?.let {
                 ActionRow(
                     Icons.Filled.Delete,

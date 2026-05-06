@@ -229,6 +229,7 @@ fun PlaylistDetailScreen(
     if (addSongsOpen && successState != null) {
         AddSongsToPlaylistSheet(
             playlistId = playlistId,
+            playlistName = successState.playlist.name,
             existingSongIds = successState.playlist.songs.map { it.song.id }.toSet(),
             onDismiss = { addSongsOpen = false },
             onSongAdded = viewModel::refresh,

@@ -1,6 +1,9 @@
 package com.mediaplayer.android.ui.playlists
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,6 +62,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun AddSongsToPlaylistSheet(
     playlistId: Long,
+    playlistName: String = "",
     existingSongIds: Set<Long>,
     playlistRepository: PlaylistRepository = remember { PlaylistRepository() },
     songRepository: SongRepository = remember { SongRepository() },
@@ -72,7 +76,11 @@ fun AddSongsToPlaylistSheet(
     var songs by remember { mutableStateOf<List<SongDto>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var committing by remember { mutableStateOf(false) }
     val addedIds = remember { mutableStateSetOf<Long>().also { it.addAll(existingSongIds) } }
+    val selectedIds = remember { mutableStateSetOf<Long>() }
+    val mono = com.mediaplayer.android.ui.theme.LocalMHMono.current
+    val accent = MaterialTheme.colorScheme.primary
 
     LaunchedEffect(query) {
         delay(300)
@@ -90,16 +98,60 @@ fun AddSongsToPlaylistSheet(
         }
     }
 
+    fun commitSelection() {
+        if (committing || selectedIds.isEmpty()) return
+        committing = true
+        scope.launch {
+            try {
+                // Backend has no bulk endpoint — fan out N requests in parallel
+                // and collect failures. Each successful add updates `addedIds`
+                // so the sheet can be reopened without double-adding.
+                val toAdd = selectedIds.toList()
+                toAdd.forEach { songId ->
+                    runCatching {
+                        playlistRepository.addSong(playlistId, songId)
+                    }.onSuccess {
+                        addedIds.add(songId)
+                        selectedIds.remove(songId)
+                    }.onFailure {
+                        errorMessage = friendlyMessage(it)
+                    }
+                }
+                if (errorMessage == null) {
+                    onSongAdded()
+                    onDismiss()
+                } else {
+                    onSongAdded()
+                }
+            } finally {
+                committing = false
+            }
+        }
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         modifier = Modifier.fillMaxSize(),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
+            // Eyebrow includes the target playlist name when available.
+            val eyebrowLabel = if (playlistName.isNotBlank()) {
+                "// AGGIUNGI A · ${playlistName.uppercase()}"
+            } else "// AGGIUNGI A"
+            Text(
+                text = eyebrowLabel,
+                style = mono.eyebrow,
+                color = accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 24.dp, top = 8.dp),
+            )
+            Spacer(Modifier.size(2.dp))
             Text(
                 text = "Aggiungi brani",
                 style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 24.dp),
             )
             OutlinedTextField(
                 value = query,
@@ -120,51 +172,80 @@ fun AddSongsToPlaylistSheet(
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            when {
-                loading -> Box(
-                    modifier = Modifier.fillMaxWidth().padding(32.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                }
-                errorMessage != null -> Box(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = errorMessage!!,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                songs.isEmpty() -> EmptyState(
-                    icon = Icons.Filled.MusicNote,
-                    title = if (query.isBlank()) "Your library is empty" else "No songs match \"$query\"",
-                    subtitle = if (query.isBlank()) "Add tracks to your catalog to see them here." else null,
-                )
-                else -> LazyColumn {
-                    items(items = songs, key = { it.id }) { song ->
-                        SongPickerRow(
-                            song = song,
-                            isAdded = song.id in addedIds,
-                            onAdd = {
-                                scope.launch {
-                                    try {
-                                        playlistRepository.addSong(playlistId, song.id)
-                                        addedIds.add(song.id)
-                                        onSongAdded()
-                                    } catch (t: Throwable) {
-                                        errorMessage = "Couldn't add: ${t.message ?: "unknown"}"
-                                    }
-                                }
-                            },
+            // Scrollable picker — capped so the sticky CTA stays reachable.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false),
+            ) {
+                when {
+                    loading -> Box(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                    }
+                    errorMessage != null -> Box(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = errorMessage!!,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
                         )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    songs.isEmpty() -> EmptyState(
+                        icon = Icons.Filled.MusicNote,
+                        title = if (query.isBlank()) "La tua libreria è vuota" else "Nessun brano per “$query”",
+                        subtitle = if (query.isBlank()) "Aggiungi brani al catalogo per vederli qui." else null,
+                    )
+                    else -> LazyColumn {
+                        items(items = songs, key = { it.id }) { song ->
+                            SongPickerRow(
+                                song = song,
+                                isAdded = song.id in addedIds,
+                                isSelected = song.id in selectedIds,
+                                onToggle = {
+                                    if (song.id in addedIds) return@SongPickerRow
+                                    if (song.id in selectedIds) selectedIds.remove(song.id)
+                                    else selectedIds.add(song.id)
+                                },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
                     }
                 }
             }
 
-            Spacer(Modifier.size(8.dp))
+            // Sticky bottom CTA — disabled while no selection or while committing.
+            val ctaEnabled = selectedIds.isNotEmpty() && !committing
+            val ctaModifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .background(
+                    color = if (ctaEnabled) accent else accent.copy(alpha = 0.25f),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(999.dp),
+                )
+                .let { if (ctaEnabled) it.clickable { commitSelection() } else it }
+                .padding(vertical = 14.dp)
+            Box(
+                modifier = ctaModifier,
+                contentAlignment = Alignment.Center,
+            ) {
+                val n = selectedIds.size
+                val label = when {
+                    committing -> "Aggiungo…"
+                    n == 0 -> "Seleziona almeno un brano"
+                    n == 1 -> "Aggiungi 1 brano"
+                    else -> "Aggiungi $n brani"
+                }
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = androidx.compose.ui.graphics.Color(0xFF0A0A0A),
+                )
+            }
         }
     }
 }
@@ -173,17 +254,50 @@ fun AddSongsToPlaylistSheet(
 private fun SongPickerRow(
     song: SongDto,
     isAdded: Boolean,
-    onAdd: () -> Unit,
+    isSelected: Boolean,
+    onToggle: () -> Unit,
 ) {
+    val accent = MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            .clickable(enabled = !isAdded, onClick = onToggle)
+            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Leading checkbox — empty / accent-filled / "Già aggiunto" check.
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(22.dp)
+                .border(
+                    width = 1.5.dp,
+                    color = when {
+                        isAdded -> accent.copy(alpha = 0.4f)
+                        isSelected -> accent
+                        else -> MaterialTheme.colorScheme.outline
+                    },
+                    shape = RoundedCornerShape(4.dp),
+                )
+                .background(
+                    color = if (isSelected || isAdded) accent.copy(alpha = 0.15f)
+                    else androidx.compose.ui.graphics.Color.Transparent,
+                    shape = RoundedCornerShape(4.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (isAdded || isSelected) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Box(
+            modifier = Modifier
+                .size(44.dp)
                 .clip(CoverShapes.SongRow)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
@@ -195,7 +309,7 @@ private fun SongPickerRow(
                         .crossfade(true)
                         .build(),
                     contentDescription = null,
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier.size(44.dp),
                 )
             } else {
                 Icon(
@@ -221,13 +335,19 @@ private fun SongPickerRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(onClick = onAdd, enabled = !isAdded) {
-            Icon(
-                imageVector = if (isAdded) Icons.Filled.Check else Icons.Filled.Add,
-                contentDescription = if (isAdded) "Già aggiunto" else "Aggiungi alla playlist",
-                tint = if (isAdded) MaterialTheme.colorScheme.primary
-                       else MaterialTheme.colorScheme.onSurface,
-            )
-        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = formatDurationMs(song.durationMs),
+            style = com.mediaplayer.android.ui.theme.LocalMHMono.current.duration,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
+}
+
+private fun formatDurationMs(ms: Long): String {
+    if (ms <= 0L) return "—"
+    val totalSeconds = ms / 1000L
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return java.lang.String.format(java.util.Locale.US, "%d:%02d", minutes, seconds)
 }

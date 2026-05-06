@@ -1,22 +1,27 @@
 package com.mediaplayer.android.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.Brush
 import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 import androidx.compose.material.icons.Icons
@@ -93,9 +98,41 @@ fun MiniPlayer(
     LaunchedEffect(current.id) { dismissState.reset() }
 
     val cardShape = CoverShapes.Card
+    val accent = MaterialTheme.colorScheme.primary
+    val swipeProgress = dismissState.progress
     SwipeToDismissBox(
         state = dismissState,
-        backgroundContent = {},
+        backgroundContent = {
+            // Mockup `mh-player-sheets.jsx:269-315` shows a fade trail with a
+            // "Rilascia per fermare" hint behind the dragged card. We approximate
+            // by tinting the trail with the accent + showing the hint once the
+            // user has dragged past ~25% — kept subtle so it doesn't compete
+            // with the foreground card.
+            val target = dismissState.targetValue
+            val active = target == SwipeToDismissBoxValue.StartToEnd ||
+                target == SwipeToDismissBoxValue.EndToStart
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = MediaPlayerSpacing.S, vertical = MediaPlayerSpacing.Xs)
+                    .clip(cardShape)
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to accent.copy(alpha = if (active) 0.10f else 0.04f),
+                            1f to accent.copy(alpha = 0.02f),
+                        )
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (active && swipeProgress > 0.25f) {
+                    Text(
+                        text = "Rilascia per fermare",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = accent,
+                    )
+                }
+            }
+        },
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = MediaPlayerSpacing.S, vertical = MediaPlayerSpacing.Xs),
@@ -105,6 +142,16 @@ fun MiniPlayer(
             .fillMaxWidth()
             .clip(cardShape)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            // Brand gradient outline (mockup uses a 1px lime→transparent
+            // frame to lift the mini-player off the screen background).
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(
+                    0f to accent.copy(alpha = 0.45f),
+                    1f to accent.copy(alpha = 0.05f),
+                ),
+                shape = cardShape,
+            )
             .clickable { onExpand() },
     ) {
         Row(
@@ -128,8 +175,13 @@ fun MiniPlayer(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                // Artist · Album line per mockup. Album is dropped silently
+                // when the song has none (unknown / missing metadata).
+                val subtitle = current.album?.takeIf { it.isNotBlank() }
+                    ?.let { "${current.artist} · $it" }
+                    ?: current.artist
                 Text(
-                    text = current.artist,
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -147,14 +199,19 @@ fun MiniPlayer(
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                viewModel.togglePlayPause()
-            }) {
+            FilledIconButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    viewModel.togglePlayPause()
+                },
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = accent,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+            ) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                     contentDescription = if (isPlaying) "Pausa" else "Riproduci",
-                    tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }

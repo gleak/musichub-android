@@ -60,6 +60,13 @@ data class EqState(
     val enabled: Boolean,
     val preset: EqPreset,
     val bands: List<BandInfo>,
+    /**
+     * The hardware audio session id this Equalizer instance is bound to.
+     * Surfaced in the EQ bottom sheet's `// SESSIONE AUDIO` info card so
+     * power users debugging effects routing can confirm which session the
+     * EQ is actually applying to. 0 means "unknown / not yet bound".
+     */
+    val audioSessionId: Int = 0,
 )
 
 object EqualizerController {
@@ -69,6 +76,7 @@ object EqualizerController {
 
     private var eq: Equalizer? = null
     private var appContext: Context? = null
+    private var boundSessionId: Int = 0
 
     /**
      * Singleton scope for async DataStore reads/writes. SupervisorJob so a
@@ -82,6 +90,7 @@ object EqualizerController {
         if (audioSessionId == 0) return
         val app = context.applicationContext
         appContext = app
+        boundSessionId = audioSessionId
         try {
             val e = Equalizer(0, audioSessionId)
             eq = e
@@ -197,6 +206,7 @@ object EqualizerController {
                     maxLevel = range[1].toInt(),
                 )
             },
+            audioSessionId = boundSessionId,
         )
     }
 

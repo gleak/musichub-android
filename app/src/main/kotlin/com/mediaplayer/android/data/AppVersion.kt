@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.16.5"
+    const val VERSION = "0.16.7"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,32 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.16.7",
+            title = "Parità mockup — schermate del player",
+            highlights = listOf(
+                "Mini-player ridisegnato: bordo a gradiente lime intorno alla card, pulsante Play/Pausa pieno in lime invece dell'icona vuota, riga \"Artista · Album\" al posto del solo artista. Quando trascini per chiudere ora compare uno sfondo con scia lime e l'etichetta \"Rilascia per fermare\" oltre il 25% di trascinamento.",
+                "Sleep timer: completato il sheet e cablato anche \"Fine traccia\" (vedi 0.16.6). Tap su una preset mentre un timer è attivo ora rimpiazza il timer invece di cancellarlo (prima dovevi annullare prima e poi rimettere la nuova durata).",
+                "Dialogo errore di playback ridisegnato: card scura con eyebrow rosso \"// ERRORE PLAYBACK\", titolo specifico (es. \"Codec non supportato\"), pillola mono \"CODE | <code>\" e tre pulsanti footer \"Chiudi / Riprova / Riscarica\". Il pulsante \"Riscarica\" innesca il re-download dalla sorgente (YouTube), \"Riprova\" reinizializza l'item corrente. Prima c'era solo \"OK\".",
+                "Conferma \"Brano sbagliato?\" ridisegnata: card con eyebrow rosso \"// SEGNALA · DEFINITIVO\", anteprima brano (cover + titolo + artista) embedded e pulsante \"Segnala\" rosso destrutturato. Stesso visuale ovunque la conferma viene innescata (Now Playing, AddToPlaylist).",
+                "AddToPlaylist sheet ridisegnato: eyebrow \"// AGGIUNGI A · LE MIE PLAYLIST\", barra di ricerca per filtrare le tue playlist mentre digiti, copertine reali al posto dell'icona generica (le auto-playlist tengono il loro gradiente), pallino di selezione radio sul lato destro di ogni riga, pulsante sticky \"Crea nuova playlist\" outlined lime in fondo (prima inline tra le righe).",
+                "AddSongs sheet ridisegnato: eyebrow \"// AGGIUNGI A · {nome playlist}\" che ti ricorda dove stai aggiungendo, multi-selezione (checkbox a sinistra di ogni brano), durata mostrata a destra di ogni riga e pulsante sticky \"Aggiungi N brani\" che committa la selezione in batch. Prima ogni tap aggiungeva subito un brano alla volta.",
+                "QueueSheet ridisegnato: eyebrow \"// CODA\", titolo \"In riproduzione\", chip header Shuffle/Repeat/More che riflettono lo stato del player, etichette mono per ogni sezione (\"// IN RIPRODUZIONE\", \"// IN CODA · UTENTE · N\", \"// SUCCESSIVI · DA \\\"album\\\"\"), pulsante sticky \"Cancella coda\" rosso outlined in fondo che svuota tutto ciò che è davanti al brano corrente.",
+                "EqualizerSheet ridisegnato: eyebrow \"// AUDIO\", pillola lime \"ATTIVO\" quando l'EQ è acceso, slider verticali per banda (prima orizzontali) con dB sopra e frequenza sotto, card preset singola tap-aperta con dialog di scelta (prima FilterChip orizzontale), card info \"// SESSIONE AUDIO\" in fondo che mostra `session_id` (hex) e l'output audio attivo (Bluetooth A2DP, USB Headset, Altoparlante interno…).",
+                "TrackActionSheet ora include eyebrow \"// AZIONI\", divider prima del gruppo distruttivo e i nuovi callback \"Non consigliarmi questo brano/artista\" + \"Segnala brano sbagliato\" (prima esposti solo via AddToPlaylist).",
+                "Tre nuove voci nel design review (`Claude_design_review.md` §6/§7/§8): banda 10-fissa dell'EQ (vincolato all'API android.media.audiofx.Equalizer di sistema), drag-to-reorder della coda (Compose non ha primitiva first-party), annotazione \"// GESTO · Da v0.12.6\" del mini-player (probabile chrome di canvas Figma).",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.16.6",
+            title = "Sleep timer — sheet pieno con countdown e Fine traccia",
+            highlights = listOf(
+                "Il timer di sospensione adesso apre un bottom sheet completo (prima era un dropdown a 3 voci sul tasto comodino del Now Playing). Le preset disponibili passano da 15/30/60 a 5/10/15/30/45/60 minuti, in griglia 3×2, con numero mono grosso e sotto-label \"MIN\".",
+                "Quando un timer è attivo, in cima al sheet compare una card lime con eyebrow `// ATTIVO`, countdown live `mm:ss` (tick locale a ogni secondo, sincronizzato col valore di servizio a confine di minuto), riga \"L'audio si fermerà alle hh:mm\" e pillola \"Annulla\" sul lato destro.",
+                "Nuova preset full-width \"Fine traccia\" sotto la griglia: arma la modalità end-of-track del servizio (pause sul prossimo passaggio AUTO/REPEAT, già esposta in Android Auto) anche dal telefono. Quando questa modalità è attiva, la card mostra \"Fine traccia\" + \"Si fermerà alla fine del brano corrente\" al posto del countdown.",
+                "Tap su una preset mentre un timer è già attivo ora rimpiazza il timer (prima il primo tap cancellava e basta — bisognava toccare due volte per cambiare durata). La pillola Annulla in AA continua a cancellare come prima.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.16.5",
             title = "Parità mockup — schermate principali",

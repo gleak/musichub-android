@@ -104,6 +104,14 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     private val _sleepTimerActive = MutableStateFlow(false)
     val sleepTimerActive: StateFlow<Boolean> = _sleepTimerActive.asStateFlow()
 
+    /** Remaining ms while a minute-mode sleep timer is armed; 0 otherwise. */
+    private val _sleepTimerRemainingMs = MutableStateFlow(0L)
+    val sleepTimerRemainingMs: StateFlow<Long> = _sleepTimerRemainingMs.asStateFlow()
+
+    /** True only when the sleep timer is armed in `Fine traccia` end-of-track mode. */
+    private val _sleepTimerEndOfTrack = MutableStateFlow(false)
+    val sleepTimerEndOfTrack: StateFlow<Boolean> = _sleepTimerEndOfTrack.asStateFlow()
+
     /** Liked state of the currently playing song. Mirrored from the service via session extras. */
     private val _currentLiked = MutableStateFlow(false)
     val currentLiked: StateFlow<Boolean> = _currentLiked.asStateFlow()
@@ -137,6 +145,18 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     val playbackError: StateFlow<PlaybackErrorInfo?> = _playbackError.asStateFlow()
 
     fun dismissPlaybackError() { _playbackError.value = null }
+
+    /**
+     * Re-prepare and resume the current MediaItem after a transient playback
+     * failure (`Riprova` button on the error dialog). No item swap, no
+     * cache invalidation — that's [redownloadCurrent]'s job.
+     */
+    fun retryCurrent() {
+        val c = controller ?: return
+        _playbackError.value = null
+        c.prepare()
+        c.playWhenReady = true
+    }
 
     // Per-session set of song IDs we've already auto-recovered after a
     // playback error. Prevents an infinite refresh→error→refresh loop when
@@ -410,6 +430,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             PlayerConnection.sessionExtras.collectLatest { extras ->
                 _sleepTimerActive.value =
                     extras.getBoolean(MediaPlaybackService.EXTRA_SLEEP_ACTIVE, false)
+                _sleepTimerRemainingMs.value =
+                    extras.getLong(MediaPlaybackService.EXTRA_SLEEP_REMAINING_MS, 0L)
+                _sleepTimerEndOfTrack.value =
+                    extras.getBoolean(MediaPlaybackService.EXTRA_SLEEP_END_OF_TRACK, false)
                 _currentLiked.value =
                     extras.getBoolean(MediaPlaybackService.EXTRA_LIKED, false)
             }
@@ -594,6 +618,20 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         if (index < 0 || index >= c.mediaItemCount) return
         if (index == c.currentMediaItemIndex) return
         c.removeMediaItem(index)
+    }
+
+    /**
+     * Drop every track ahead of the currently-playing one — both user-queued
+     * and source items. Wired to the QueueSheet "Cancella coda" sticky CTA.
+     * Current track keeps playing; tapping play-next or queueing a new track
+     * after this rebuilds the queue from scratch.
+     */
+    fun clearQueue() {
+        val c = controller ?: return
+        val current = c.currentMediaItemIndex
+        val last = c.mediaItemCount - 1
+        if (last <= current) return
+        c.removeMediaItems(current + 1, last + 1)
     }
 
     /**
@@ -878,9 +916,25 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** Arms the service-side sleep timer. Triggers a pause when it expires. */
+    /**
+     * Arms the service-side sleep timer. Triggers a pause when it expires.
+     *
+     * Local state flips optimistically so the UI reflects the new timer
+     * immediately — in-process `MediaController` instances do not reliably
+     * receive `onExtrasChanged` callbacks, so we cannot wait for the
+     * service to publish fresh extras (same trick used by [toggleCurrentLike]).
+     */
     fun setSleepTimer(minutes: Int) {
         val c = controller ?: return
+        if (minutes > 0) {
+            _sleepTimerActive.value = true
+            _sleepTimerRemainingMs.value = minutes * 60_000L
+            _sleepTimerEndOfTrack.value = false
+        } else {
+            _sleepTimerActive.value = false
+            _sleepTimerRemainingMs.value = 0L
+            _sleepTimerEndOfTrack.value = false
+        }
         val args = android.os.Bundle().apply { putInt("minutes", minutes) }
         c.sendCustomCommand(
             SessionCommand(MediaPlaybackService.ACTION_SLEEP_TIMER, android.os.Bundle.EMPTY),
@@ -891,7 +945,26 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     /** Cancels the service-side sleep timer if armed. */
     fun cancelSleepTimer() {
         val c = controller ?: return
-        val args = android.os.Bundle().apply { putInt("minutes", 0) }
+        _sleepTimerActive.value = false
+        _sleepTimerRemainingMs.value = 0L
+        _sleepTimerEndOfTrack.value = false
+        c.sendCustomCommand(
+            SessionCommand(MediaPlaybackService.ACTION_SLEEP_TIMER, android.os.Bundle.EMPTY),
+            android.os.Bundle.EMPTY,
+        )
+    }
+
+    /**
+     * Arms the service-side sleep timer in end-of-track mode. Pause fires
+     * on the next AUTO/REPEAT track transition; user-driven skips do not
+     * count. Replaces any minute-mode timer already armed.
+     */
+    fun setEndOfTrackSleepTimer() {
+        val c = controller ?: return
+        _sleepTimerActive.value = true
+        _sleepTimerRemainingMs.value = 0L
+        _sleepTimerEndOfTrack.value = true
+        val args = android.os.Bundle().apply { putBoolean("end_of_track", true) }
         c.sendCustomCommand(
             SessionCommand(MediaPlaybackService.ACTION_SLEEP_TIMER, android.os.Bundle.EMPTY),
             args,

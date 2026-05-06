@@ -1,6 +1,7 @@
 package com.mediaplayer.android.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -80,6 +81,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -269,23 +271,11 @@ private fun NowPlayingContent(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Box {
-                    IconButton(onClick = { showSleepMenu = true }) {
-                        Icon(
-                            imageVector = Icons.Filled.Bedtime,
-                            contentDescription = "Timer di sospensione",
-                            tint = if (sleepActive) MaterialTheme.colorScheme.primary else MHColors.OnHero,
-                        )
-                    }
-                    SleepTimerMenu(
-                        expanded = showSleepMenu,
-                        sleepActive = sleepActive,
-                        onDismiss = { showSleepMenu = false },
-                        onSelect = { minutes ->
-                            showSleepMenu = false
-                            if (minutes == 0) viewModel.cancelSleepTimer()
-                            else viewModel.setSleepTimer(minutes)
-                        },
+                IconButton(onClick = { showSleepMenu = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.Bedtime,
+                        contentDescription = "Timer di sospensione",
+                        tint = if (sleepActive) MaterialTheme.colorScheme.primary else MHColors.OnHero,
                     )
                 }
             }
@@ -649,6 +639,13 @@ private fun NowPlayingContent(
         EqualizerSheet(onDismiss = { showEqualizer = false })
     }
 
+    if (showSleepMenu) {
+        SleepTimerSheet(
+            viewModel = viewModel,
+            onDismiss = { showSleepMenu = false },
+        )
+    }
+
     if (confirmRedownload) {
         AlertDialog(
             onDismissRequest = { confirmRedownload = false },
@@ -673,24 +670,16 @@ private fun NowPlayingContent(
     }
 
     if (confirmFlagWrong) {
-        AlertDialog(
-            onDismissRequest = { confirmFlagWrong = false },
-            title = { Text("Segnalare brano sbagliato?") },
-            text = {
-                Text(
-                    "“${current.title}” verrà rimosso dalle tue playlist, dai mi piace e dalla " +
-                        "cronologia, e il file sarà eliminato dal server. L'azione è definitiva."
-                )
+        com.mediaplayer.android.ui.common.FlagWrongConfirmDialog(
+            songId = current.id,
+            songTitle = current.title,
+            songArtist = current.artist,
+            hasCoverArt = current.hasCoverArt,
+            onConfirm = {
+                confirmFlagWrong = false
+                viewModel.flagWrong(current.id)
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmFlagWrong = false
-                    viewModel.flagWrong(current.id)
-                }) { Text("Segnala") }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmFlagWrong = false }) { Text("Annulla") }
-            },
+            onDismiss = { confirmFlagWrong = false },
         )
     }
 
@@ -776,27 +765,282 @@ private fun NowPlayingContent(
     }
 }
 
+/**
+ * Bottom sheet replacing the legacy `SleepTimerMenu` dropdown. Mirrors
+ * `mockup/mh-player-sheets.jsx:171-206`:
+ *
+ * - eyebrow `// TIMER`, title `Timer di sospensione`
+ * - active hero card (gradient lime alpha bg + lime border) with mono
+ *   countdown `mm:ss`, scheduled-end hint `L'audio si fermerà alle hh:mm`,
+ *   and an `Annulla` pill. End-of-track variant swaps the countdown for
+ *   `Fine traccia` and the hint for "Si fermerà alla fine del brano corrente".
+ * - 3×2 preset grid (5/10/15/30/45/60 min) — chip number is mono 22sp,
+ *   `MIN` sub-label is mono 10sp.
+ * - full-width outlined `Fine traccia` end-of-track CTA (lime border alpha 0.3).
+ *
+ * Service routes preset / end-of-track taps through `SleepTimer.set` /
+ * `setEndOfTrack`, both of which cancel any currently-armed timer before
+ * arming the new mode — so the sheet does not need to cancel first.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun SleepTimerMenu(
-    expanded: Boolean,
-    sleepActive: Boolean,
+private fun SleepTimerSheet(
+    viewModel: PlaybackViewModel,
     onDismiss: () -> Unit,
-    onSelect: (minutes: Int) -> Unit,
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        if (sleepActive) {
-            DropdownMenuItem(
-                text = { Text("Annulla timer") },
-                onClick = { onSelect(0) },
+    val sleepActive by viewModel.sleepTimerActive.collectAsStateWithLifecycle()
+    val remainingMs by viewModel.sleepTimerRemainingMs.collectAsStateWithLifecycle()
+    val endOfTrack by viewModel.sleepTimerEndOfTrack.collectAsStateWithLifecycle()
+
+    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+    )
+    val mono = com.mediaplayer.android.ui.theme.LocalMHMono.current
+    val accent = MaterialTheme.colorScheme.primary
+
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF161616),
+        scrimColor = Color.Black.copy(alpha = 0.5f),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 8.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .background(
+                        color = MHColors.TextLo2,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                    ),
             )
-        }
-        listOf(15, 30, 60).forEach { min ->
-            DropdownMenuItem(
-                text = { Text("$min minutes") },
-                onClick = { onSelect(min) },
+        },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            Text(
+                text = "// TIMER",
+                style = mono.eyebrow,
+                color = accent,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Timer di sospensione",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MHColors.TextHi,
+            )
+            Spacer(Modifier.height(20.dp))
+
+            if (sleepActive) {
+                ActiveTimerCard(
+                    endOfTrack = endOfTrack,
+                    remainingMs = remainingMs,
+                    onCancel = { viewModel.cancelSleepTimer() },
+                    accent = accent,
+                    monoEyebrow = mono.eyebrow,
+                )
+                Spacer(Modifier.height(22.dp))
+            }
+
+            val presets = listOf(5, 10, 15, 30, 45, 60)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                presets.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { minutes ->
+                            SleepPresetChip(
+                                minutes = minutes,
+                                modifier = Modifier.weight(1f),
+                                onClick = { viewModel.setSleepTimer(minutes) },
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            EndOfTrackButton(
+                accent = accent,
+                onClick = { viewModel.setEndOfTrackSleepTimer() },
             )
         }
     }
+}
+
+@Composable
+private fun ActiveTimerCard(
+    endOfTrack: Boolean,
+    remainingMs: Long,
+    onCancel: () -> Unit,
+    accent: Color,
+    monoEyebrow: androidx.compose.ui.text.TextStyle,
+) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.linearGradient(
+                    0f to accent.copy(alpha = 0.12f),
+                    1f to accent.copy(alpha = 0.04f),
+                ),
+                shape = shape,
+            )
+            .thinBorder(accent.copy(alpha = 0.25f), shape)
+            .padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "// ATTIVO",
+                style = monoEyebrow,
+                color = accent,
+            )
+            Spacer(Modifier.height(4.dp))
+            if (endOfTrack) {
+                Text(
+                    text = "Fine traccia",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = accent,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Si fermerà alla fine del brano corrente",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MHColors.TextLo,
+                )
+            } else {
+                // Service updates `remainingMs` only at minute boundaries (it
+                // sleeps until the next whole-minute roll-over). The hero card
+                // wants a live `mm:ss` so we tick locally between snapshots —
+                // each new snapshot resets the wall-clock baseline.
+                val targetEndAt = remember(remainingMs) {
+                    System.currentTimeMillis() + remainingMs.coerceAtLeast(0L)
+                }
+                var liveMs by remember(remainingMs) {
+                    mutableStateOf(remainingMs.coerceAtLeast(0L))
+                }
+                LaunchedEffect(remainingMs) {
+                    while (true) {
+                        val left = targetEndAt - System.currentTimeMillis()
+                        liveMs = left.coerceAtLeast(0L)
+                        if (left <= 0L) break
+                        kotlinx.coroutines.delay(1000L)
+                    }
+                }
+                Text(
+                    text = formatRemaining(liveMs),
+                    fontFamily = com.mediaplayer.android.ui.theme.MonoFamily,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                    fontSize = 38.sp,
+                    color = accent,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "L'audio si fermerà alle ${formatClockAt(targetEndAt)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MHColors.TextLo,
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Box(
+            modifier = Modifier
+                .background(
+                    color = Color.White.copy(alpha = 0.08f),
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                )
+                .clickable(onClick = onCancel)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+        ) {
+            Text(
+                text = "Annulla",
+                style = MaterialTheme.typography.labelLarge,
+                color = MHColors.TextHi,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SleepPresetChip(
+    minutes: Int,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
+    val mono = com.mediaplayer.android.ui.theme.LocalMHMono.current
+    Column(
+        modifier = modifier
+            .background(
+                color = MHColors.Card,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = minutes.toString(),
+            fontFamily = com.mediaplayer.android.ui.theme.MonoFamily,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+            fontSize = 22.sp,
+            color = MHColors.TextHi,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = "MIN",
+            style = mono.badge,
+            color = MHColors.TextLo,
+        )
+    }
+}
+
+@Composable
+private fun EndOfTrackButton(
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = accent.copy(alpha = 0.06f),
+                shape = shape,
+            )
+            .thinBorder(accent.copy(alpha = 0.3f), shape)
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "Fine traccia",
+            style = MaterialTheme.typography.titleSmall,
+            color = accent,
+        )
+    }
+}
+
+/** Convenience to apply a 1dp solid border with a given shape. */
+private fun Modifier.thinBorder(
+    color: Color,
+    shape: androidx.compose.ui.graphics.Shape,
+): Modifier = this.border(width = 1.dp, color = color, shape = shape)
+
+private fun formatRemaining(ms: Long): String {
+    val safe = ms.coerceAtLeast(0L)
+    val totalSeconds = (safe + 999L) / 1000L
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return String.format(Locale.US, "%02d:%02d", minutes, seconds)
+}
+
+private fun formatClockAt(epochMs: Long): String {
+    val fmt = java.text.SimpleDateFormat("HH:mm", Locale.getDefault())
+    return fmt.format(java.util.Date(epochMs))
 }
 
 private fun formatMs(ms: Long): String {

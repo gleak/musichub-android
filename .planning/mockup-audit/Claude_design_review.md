@@ -10,6 +10,9 @@ Open requests:
 3. ForYou hero heart shortcut (audit `09-core-screens.md` §3) — § 3
 4. Full-screen Lyrics + Video screens (audit `09-core-screens.md` §5/§6) — § 4
 5. Home + Per te top-bar `History` icon (audit `09-core-screens.md` cross-cut §3) — § 5
+6. EqualizerSheet 10-band lock (audit `04-player-sheets.md` § Equalizer) — § 6
+7. QueueSheet drag-to-reorder (audit `04-player-sheets.md` § QueueSheet) — § 7
+8. Mini-player swipe-trail mockup chrome (audit `04-player-sheets.md` § Mini-player) — § 8
 
 ---
 
@@ -519,3 +522,352 @@ doesn't).
 | `app/.../ui/home/HomeScreen.kt:445-510`             | Current GreetingHeader (logo + settings only)      |
 | `app/.../ui/foryou/ForYouScreen.kt:114-145`         | Current header (logo + settings only)              |
 | `09-core-screens.md` cross-cutting drift §3         | Audit row (open)                                   |
+
+---
+
+# § 6 — EqualizerSheet 10-band lock (audit `04-player-sheets.md` Equalizer)
+
+**Submitted to:** Claude Design
+**From:** MediaPlayer Android · audit `04-player-sheets.md` · v0.16.7
+**Status:** Blocked on platform constraint — needs design decision
+**Mockup at issue:** `mockup/mh-player-sheets.jsx:101-168` § 3.2 `EqualizerSheet`
+
+---
+
+## TL;DR
+
+The EqualizerSheet mockup specifies a **fixed 10-band vertical-slider grid**
+at frequencies `[32, 64, 125, 250, 500, 1k, 2k, 4k, 8k, 16k] Hz` with `+12/-12 dB`
+head-room. We **cannot ship a hard-coded 10-band layout** because Android's
+system Equalizer API (`android.media.audiofx.Equalizer`) reports band count
+and centre frequencies *per device*. Most phones expose 5 bands; some OEMs
+expose 10; Pixel "Adaptive Sound" exposes 0 (the API is disabled entirely).
+
+We need either (a) acceptance that the band count is system-driven and the
+mockup's "10 bands" is illustrative, or (b) a design call to ship our own
+DSP chain (BiquadFilter graph + AudioTrack write loop) so we can guarantee
+10 bands across all devices.
+
+In v0.16.7 we ship **vertical sliders bound to whatever bands the system
+reports**. The visual chrome (vertical layout, lime accent thumb, dB
+read-out per column, mono freq label below) matches the mockup exactly —
+only the column count varies.
+
+---
+
+## 1 · What the mockup specifies
+
+From `mh-player-sheets.jsx:118-150`:
+
+```jsx
+const bands = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+// 10 vertical sliders, +12 dB headroom, -12 dB floor
+// Above-zero in lime, below-zero in dimmed lime
+// Per-column dB read-out above the slider, mono freq label below
+```
+
+| Element                  | Spec                                                  |
+|--------------------------|-------------------------------------------------------|
+| Band count               | **10, fixed**                                         |
+| Frequencies              | `[32, 64, 125, 250, 500, 1k, 2k, 4k, 8k, 16k] Hz`     |
+| Range                    | `+12 dB` to `-12 dB`                                  |
+| Slider orientation       | Vertical                                              |
+| Track                    | Lime above 0 dB, dimmed lime below 0 dB               |
+| Label above              | `"+5.2 dB"` mono                                      |
+| Label below              | `"125 Hz"` / `"4 kHz"` mono                           |
+
+---
+
+## 2 · What ships in v0.16.7
+
+`app/src/main/kotlin/com/mediaplayer/android/ui/player/EqualizerSheet.kt`
+now renders a **vertical-slider grid where each column is one of the
+system-reported `BandInfo` entries** (`EqualizerController.kt:81-110`,
+`snapshot()` at `:186-201`). The visual chrome is the mockup's:
+- Vertical orientation via `Modifier.layout {}` swap + `Modifier.rotate(-90f)`
+- Per-band dB label above (lime when ≥ 0 dB, lo-text otherwise)
+- Per-band freq label below (`band.freqLabel` mono)
+- Lime accent thumb + 20%-alpha inactive track
+
+What's **device-dependent**:
+- The number of columns. Pixel 7: 5. Some Sony XPERIA: 10. Some OnePlus: 5.
+- The centre frequencies. The 5-band devices typically expose
+  `[60, 230, 910, 3600, 14k] Hz`; the 10-band devices match the mockup
+  spec almost exactly.
+- The dB range. Reported by `Equalizer.getBandLevelRange()` — usually
+  `±15 dB`, sometimes `±12 dB`, occasionally `±9 dB`.
+
+The frontend only needs the band count + frequencies + range to render —
+the audit row is technically "covered" for any user on a 10-band device,
+"approximated" on a 5-band device.
+
+---
+
+## 3 · Why we can't force 10 bands
+
+Android's audio-effects API is a thin shim over the device's effects
+library. `Equalizer(priority, audioSessionId)` returns whatever the
+device's `effect_factory_libraries` config emits — there's no parameter
+to request a specific band count. The only knob is which preset to apply
+to those bands.
+
+To ship a guaranteed 10-band EQ on all devices we'd need to:
+1. Replace `android.media.audiofx.Equalizer` with our own `BiquadFilter`
+   chain (10 cascaded peaking-EQ filters at the 10 mockup centre
+   frequencies).
+2. Tap into Media3's `AudioProcessor` SPI to inject the chain into the
+   audio pipeline before output.
+3. Write a fixed-point implementation for performance (Java/Kotlin double
+   maths blow the per-buffer budget on low-end devices).
+4. Ship a tone-control DSP-test plan to verify against
+   `android.media.audiofx.Equalizer`'s reference behaviour on each ROM
+   we support.
+
+This is roughly **a 2-3 week effort** with maintenance ongoing. Worth it
+only if the design team commits to "10 bands across all devices, no
+exceptions."
+
+---
+
+## 4 · Hacks we considered and rejected
+
+### 4.1 — Pad the UI to 10 columns regardless
+
+Show 10 columns but only 5 are interactive on 5-band devices. Bad UX:
+the disabled columns either (a) look broken, or (b) confuse users who
+think they can adjust 16k Hz when they actually can't.
+
+### 4.2 — Use 10-band only on supported devices
+
+Detect `Equalizer.numberOfBands == 10` and render the spec layout when
+it's true; fall back to 5 columns otherwise. This is what we already do
+*by accident* — `s.bands.forEach { … }` produces 10 columns on 10-band
+devices. Documenting this behaviour as the contract closes the audit row
+without any new code.
+
+---
+
+## 5 · What we need from design
+
+A decision on **one of**:
+
+A. **Accept device-driven band count.** The current 5-or-10 column behaviour
+   is the contract; mockup's 10-band figure is illustrative. Audit row
+   closes.
+
+B. **Commit to custom DSP chain.** Engineering ships the Biquad chain and
+   guarantees 10 bands. ~2-3 weeks of work + ongoing DSP maintenance.
+
+C. **Drop the EQ feature on 5-band devices.** Show "Equalizzatore non
+   supportato — non abbastanza bande disponibili" message. Aggressive,
+   probably not what the user expects.
+
+We strongly prefer (A): the perceived audio difference between 5-band
+and 10-band parametric EQ is small for most listeners, and the
+maintenance burden of a custom chain is high.
+
+## Reference
+
+| Source                                                            | Notes                                  |
+|-------------------------------------------------------------------|----------------------------------------|
+| `mockup/mh-player-sheets.jsx:101-168`                             | EqualizerSheet 10-band spec             |
+| `app/.../ui/player/EqualizerSheet.kt`                             | Current vertical-slider grid (v0.16.7) |
+| `app/.../playback/EqualizerController.kt:81-110`                  | System-EQ binding                      |
+| `04-player-sheets.md` § EqualizerSheet                            | Audit row (open)                       |
+
+---
+
+# § 7 — QueueSheet drag-to-reorder (audit `04-player-sheets.md` QueueSheet)
+
+**Submitted to:** Claude Design
+**From:** MediaPlayer Android · audit `04-player-sheets.md` · v0.16.7
+**Status:** Blocked on missing Compose primitive — needs design decision
+**Mockup at issue:** `mockup/mh-player-sheets.jsx:30-71` § 3.1 `QueueSheet`
+
+---
+
+## TL;DR
+
+The QueueSheet mockup shows a per-row drag handle (six-dot ⋮⋮ glyph) and
+implies long-press-and-drag reordering of user-queued items. **Compose
+has no first-party drag-to-reorder primitive in `material3` or
+`foundation`**. The community libraries we evaluated either:
+- Drop frames on lists with > ~30 items (the Burnoutcrew `reorderable`
+  library uses raw `pointerInput` recomposition per drag tick).
+- Don't support `LazyColumn` headers / sticky bottom CTA simultaneously
+  (most libs assume the whole list is reorderable).
+- Force shape mismatches with our existing `SongRow` layout.
+
+We need a design decision: ship without drag-to-reorder (current state),
+adopt a community library and accept its trade-offs, or budget the
+~1-week custom-impl effort to write our own reorder modifier on top of
+`Modifier.pointerInput` + manual offset accounting.
+
+---
+
+## 1 · What the mockup specifies
+
+From `mh-player-sheets.jsx:35-58`:
+
+```jsx
+{rows.map((r, i) => (
+  <QRow key={i} song={r} draggable={r.userQueued}>
+    {/* leading: drag handle (⋮⋮) only when draggable */}
+    {/* tap-and-hold the handle → drag to reorder */}
+    {/* drop = commits new position */}
+  </QRow>
+))}
+```
+
+Behaviour the mockup implies:
+- Drag-to-reorder applies to **user-queued rows only**. Source-of-queue
+  rows are immutable (the source's natural order is preserved).
+- Reorder commits on drop; a haptic fires on lift.
+- The "now playing" row never moves.
+- Reordering preserves the user-queued grouping (a user-queued row can't
+  be dropped into the source-ahead section).
+
+---
+
+## 2 · What ships in v0.16.7
+
+`app/src/main/kotlin/com/mediaplayer/android/ui/player/QueueSheet.kt`
+renders the queue with no reorder gesture. Per-row remove (`X` button)
+is the only mutation. Our `PlaybackViewModel` exposes `removeFromQueue`
+and `clearQueue` but no `moveQueueItem(fromIndex, toIndex)` — adding it
+is straightforward (`controller.moveMediaItem(from, to)` is a one-liner)
+but has no UI affordance to invoke it.
+
+---
+
+## 3 · Why no first-party primitive
+
+Compose Material3 ships `LazyColumn` and `LazyListState` but no
+reorder API. The `material3` team has discussed it (see
+[issue 181822458](https://issuetracker.google.com/issues/181822458))
+but as of `material3:1.4.x` there is no public API. Workarounds:
+
+| Approach                                  | Trade-offs                                                             |
+|-------------------------------------------|------------------------------------------------------------------------|
+| `org.burnoutcrew.composereorderable`      | 3rd-party. Adds 280 KB. Works for ≤ 30 items.                          |
+| `sh.calvin.reorderable:reorderable`        | 3rd-party. ~150 KB. Mature; well-tested. New dep + transitive risk.    |
+| Custom `Modifier.pointerInput` + offsets   | No new deps. ~300 LoC. Need to handle scroll-while-dragging, recomposition cost. ~1 week to ship + test on slow devices. |
+| Separate "Edit queue" full-screen mode     | UX deviation from mockup. Power-user feature only.                     |
+
+---
+
+## 4 · What we need from design
+
+A decision on **one of**:
+
+A. **Ship without drag-reorder** (current state). The `X` remove button
+   covers most cases — users who want to reorder can remove and re-add.
+   Audit row closes as "deferred indefinitely."
+
+B. **Adopt `sh.calvin.reorderable`.** ~150 KB dep, ~1 day of integration.
+   Audit row closes within a sprint.
+
+C. **Custom reorder modifier.** ~1 week of work + ongoing maintenance.
+   Best long-term but slowest to ship.
+
+D. **"Edit queue" mode.** New full-screen surface with reorder UI. Out
+   of scope for this milestone.
+
+We recommend (B) for a v0.17.x patch — the dep is small, the API is
+clean, and we can swap to (C) later if maintenance becomes a problem.
+
+## Reference
+
+| Source                                            | Notes                                          |
+|---------------------------------------------------|------------------------------------------------|
+| `mockup/mh-player-sheets.jsx:30-71`               | QueueSheet drag-handle spec                     |
+| `app/.../ui/player/QueueSheet.kt`                 | Current sheet (v0.16.7) — remove only           |
+| `app/.../playback/PlaybackViewModel.kt:606-640`   | `skipToQueueItem`, `removeFromQueue`, `clearQueue` |
+| `04-player-sheets.md` § QueueSheet                | Audit row (open)                                |
+
+---
+
+# § 8 — Mini-player swipe-trail chrome (audit `04-player-sheets.md` Mini-player)
+
+**Submitted to:** Claude Design
+**From:** MediaPlayer Android · audit `04-player-sheets.md` · v0.16.7
+**Status:** Soft drift — partial implementation needs review
+**Mockup at issue:** `mockup/mh-player-sheets.jsx:269-315` § 3.7 `MiniPlayerSwipe`
+
+---
+
+## TL;DR
+
+The mini-player swipe-to-dismiss mockup shows three visual elements:
+(a) a fading trail behind the dragged card, (b) a `// GESTO · Trascina
+per chiudere · Da v0.12.6` annotation overlay, and (c) a `Rilascia per
+fermare` hint that fades in once the user has dragged past the threshold.
+v0.16.7 ships **(a) and (c)** via the `SwipeToDismissBox.backgroundContent`
+slot, but **(b) — the build-version annotation overlay — is omitted**:
+ahead-of-time annotations like that don't fit a shipped app.
+
+We need confirmation that the version-annotation overlay is
+mockup-only documentation chrome (not user-visible) so we can close the
+audit row without further work.
+
+---
+
+## 1 · What the mockup specifies
+
+From `mh-player-sheets.jsx:280-310`:
+
+```jsx
+<MiniPlayerCard offset={dragOffset}>
+  {/* leading fade trail */}
+  <FadeTrail opacity={dragOffset / 200} />
+  {/* annotation tag pinned top-left */}
+  <Annotation>// GESTO · Trascina per chiudere · Da v0.12.6</Annotation>
+  {/* hint text fades in past 25% drag */}
+  {dragOffset > 0.25 && <Hint>Rilascia per fermare</Hint>}
+</MiniPlayerCard>
+```
+
+The `// GESTO …` annotation tag uses the same `// SECTION` mono font
+the rest of the mockup uses for **author commentary on prototype
+canvases** — the kind of pin you'd see in a Figma flow showing "this is
+the gesture, available since v0.12.6."
+
+---
+
+## 2 · What ships in v0.16.7
+
+`app/src/main/kotlin/com/mediaplayer/android/ui/player/MiniPlayer.kt`
+shipped:
+- ✅ Fade trail bg (lime tint, fades in with drag intent).
+- ✅ "Rilascia per fermare" hint shown when `dismissState.progress > 0.25f`.
+- ✅ Brand gradient outline on the foreground card.
+- ✅ Accent-filled play button (mockup chrome).
+- ✅ Album line under artist when metadata available.
+
+Not shipped:
+- ❌ The `// GESTO · Trascina per chiudere · Da v0.12.6` annotation
+  overlay. We're treating it as **prototype-canvas chrome** (designer's
+  notes on the mockup, not user-visible UI).
+
+---
+
+## 3 · What we need from design
+
+Confirmation that the `// GESTO · Trascina per chiudere · Da v0.12.6`
+annotation is mockup-only — i.e. it shouldn't be painted in the shipped
+app. If design intends it to be visible to end-users (an in-app
+"new feature" pin?), we'll need:
+- A trigger (first-launch on v0.12.6+? Once-per-session? Always?).
+- A dismiss path.
+- A version-bump strategy (the "Da v0.12.6" string would have to update
+  with the codebase).
+
+If yes-it's-canvas-chrome, the audit row closes as covered.
+
+## Reference
+
+| Source                                            | Notes                                  |
+|---------------------------------------------------|----------------------------------------|
+| `mockup/mh-player-sheets.jsx:269-315`             | MiniPlayerSwipe spec                    |
+| `app/.../ui/player/MiniPlayer.kt`                 | Current mini-player (v0.16.7)          |
+| `04-player-sheets.md` § Mini-player swipe         | Audit row (open)                        |

@@ -632,14 +632,21 @@ class MediaPlaybackService : MediaLibraryService() {
                     // chips bake their value into the button's SessionCommand
                     // `customExtras`. Inspect both keys (`minutes`, `end_of_track`)
                     // across both bundles so either entry point routes to the
-                    // same logic. Tap while armed always cancels — independent
-                    // of which mode the chip targets.
+                    // same logic.
+                    //
+                    // The AA cancel chip carries neither key — that's the
+                    // "raw cancel" intent. Phone sheet preset/end-of-track
+                    // taps while a timer is armed must REPLACE the timer
+                    // (`SleepTimer.set` / `setEndOfTrack` already cancel the
+                    // current job before re-arming).
                     val sources = listOf(args, customCommand.customExtras)
+                    val hasMinutes = sources.any { it.containsKey("minutes") }
+                    val hasEndOfTrack = sources.any { it.containsKey("end_of_track") }
                     val endOfTrack = sources.any { it.getBoolean("end_of_track", false) }
                     val minutesSource = sources.firstOrNull { it.containsKey("minutes") }
                     val minutes = minutesSource?.getInt("minutes") ?: defaultSleepMinutes
                     when {
-                        sleepTimer.isActive.value -> sleepTimer.cancel()
+                        !hasMinutes && !hasEndOfTrack -> sleepTimer.cancel()
                         endOfTrack -> sleepTimer.setEndOfTrack(session.player) {
                             session.player.pause()
                         }

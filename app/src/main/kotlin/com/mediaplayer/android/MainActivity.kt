@@ -12,20 +12,29 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -494,64 +503,148 @@ private fun AppScaffold(
         PlaybackErrorDialog(
             info = info,
             onDismiss = playbackVm::dismissPlaybackError,
+            onRetry = playbackVm::retryCurrent,
+            onRedownload = {
+                playbackVm.dismissPlaybackError()
+                playbackVm.redownloadCurrent()
+            },
         )
     }
 }
 
+/**
+ * Custom playback-error dialog matching mockup `mh-player-sheets.jsx:209-235`:
+ * red triangle + `// ERRORE PLAYBACK` eyebrow, specific reason as title,
+ * mono `CODE | …` pill with the error code name, three-button footer
+ * (Chiudi / Riprova / Riscarica — Riscarica is the accent CTA).
+ */
 @Composable
 private fun PlaybackErrorDialog(
     info: com.mediaplayer.android.playback.PlaybackErrorInfo,
     onDismiss: () -> Unit,
+    onRetry: () -> Unit,
+    onRedownload: () -> Unit,
 ) {
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                imageVector = Icons.Filled.CloudOff,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.error,
-            )
-        },
-        title = { Text("Impossibile riprodurre") },
-        text = {
+    val mono = com.mediaplayer.android.ui.theme.LocalMHMono.current
+    val danger = Color(0xFFFF7A7A)
+    val cardShape = RoundedCornerShape(16.dp)
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .padding(horizontal = 24.dp)
+                .background(color = Color(0xFF1A1A1A), shape = cardShape)
+                .border(
+                    width = 1.dp,
+                    color = Color(0xFFE14848).copy(alpha = 0.25f),
+                    shape = cardShape,
+                )
+                .padding(22.dp),
+        ) {
             Column {
-                Text(
-                    text = info.songTitle,
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                androidx.compose.foundation.layout.Spacer(
-                    modifier = Modifier.size(8.dp)
-                )
-                Text(
-                    text = info.reason,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                info.recoveryHint?.let { hint ->
-                    androidx.compose.foundation.layout.Spacer(
-                        modifier = Modifier.size(12.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(
+                                color = Color(0xFFE14848).copy(alpha = 0.15f),
+                                shape = CircleShape,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ReportProblem,
+                            contentDescription = null,
+                            tint = danger,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                    Spacer(Modifier.size(10.dp))
                     Text(
-                        text = hint,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "// ERRORE PLAYBACK",
+                        style = mono.eyebrow,
+                        color = danger,
                     )
                 }
-                androidx.compose.foundation.layout.Spacer(
-                    modifier = Modifier.size(12.dp)
-                )
+                Spacer(Modifier.size(14.dp))
                 Text(
-                    text = "Codice: ${info.errorCodeName}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = info.reason,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = com.mediaplayer.android.ui.theme.MHColors.TextHi,
                 )
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    text = info.recoveryHint ?: "Brano: ${info.songTitle}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = com.mediaplayer.android.ui.theme.MHColors.TextLo,
+                )
+                Spacer(Modifier.size(14.dp))
+                Row(
+                    modifier = Modifier
+                        .background(color = Color(0xFF0A0A0A), shape = RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "CODE",
+                        style = mono.eyebrow,
+                        color = com.mediaplayer.android.ui.theme.MHColors.TextLo2,
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        text = info.errorCodeName,
+                        style = mono.duration,
+                        color = com.mediaplayer.android.ui.theme.MHColors.TextLo,
+                    )
+                }
+                Spacer(Modifier.size(18.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DialogPillButton(
+                        label = "Chiudi",
+                        modifier = Modifier.weight(1f),
+                        onClick = onDismiss,
+                    )
+                    DialogPillButton(
+                        label = "Riprova",
+                        modifier = Modifier.weight(1f),
+                        onClick = onRetry,
+                    )
+                    DialogPillButton(
+                        label = "Riscarica",
+                        modifier = Modifier.weight(1.2f),
+                        accent = true,
+                        onClick = onRedownload,
+                    )
+                }
             }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                Text("OK")
-            }
-        },
-    )
+        }
+    }
+}
+
+@Composable
+private fun DialogPillButton(
+    label: String,
+    modifier: Modifier = Modifier,
+    accent: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val accentColor = MaterialTheme.colorScheme.primary
+    Box(
+        modifier = modifier
+            .background(
+                color = if (accent) accentColor else Color.White.copy(alpha = 0.06f),
+                shape = RoundedCornerShape(10.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 11.dp, horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (accent) Color(0xFF0A0A0A)
+            else com.mediaplayer.android.ui.theme.MHColors.TextHi,
+        )
+    }
 }
 
 @Composable

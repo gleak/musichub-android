@@ -1,12 +1,14 @@
 package com.mediaplayer.android.ui.playlists
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -17,16 +19,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddToPhotos
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.ReportProblem
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -72,6 +78,8 @@ import kotlinx.coroutines.launch
 fun AddToPlaylistSheet(
     songTitle: String,
     songId: Long,
+    songArtist: String = "",
+    songHasCoverArt: Boolean = true,
     repository: PlaylistRepository = remember { PlaylistRepository() },
     onPlayNext: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
@@ -115,17 +123,29 @@ fun AddToPlaylistSheet(
         }
     }
 
+    var query by remember { mutableStateOf("") }
+    val mono = com.mediaplayer.android.ui.theme.LocalMHMono.current
+    val accent = MaterialTheme.colorScheme.primary
+    val filteredPlaylists = remember(playlists, query) {
+        if (query.isBlank()) playlists
+        else playlists.filter { it.name.contains(query, ignoreCase = true) }
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 0.dp, vertical = 8.dp),
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Header — eyebrow + title (mockup `mh-player-sheets.jsx:318-358`).
             Text(
-                text = "Aggiungi alla playlist",
+                text = "// AGGIUNGI A",
+                style = mono.eyebrow,
+                color = accent,
+                modifier = Modifier.padding(start = 24.dp, top = 8.dp),
+            )
+            Spacer(Modifier.size(2.dp))
+            Text(
+                text = "Le mie playlist",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(horizontal = 24.dp),
             )
@@ -135,142 +155,195 @@ fun AddToPlaylistSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 24.dp),
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
             )
-            Spacer(Modifier.size(16.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            if (onPlayNext != null) {
-                QueueActionRow(
-                    label = "Riproduci dopo",
-                    icon = { Icon(Icons.Filled.SkipNext, contentDescription = null) },
-                    onClick = { onPlayNext(); onDismiss() },
-                )
+            // Auxiliary track-actions block — only when callbacks supplied.
+            val anyAux = onPlayNext != null || onAddToQueue != null ||
+                onDownload != null || onDislikeSong != null ||
+                onDislikeArtist != null || onFlagWrong != null
+            if (anyAux) {
+                Spacer(Modifier.size(8.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-            if (onAddToQueue != null) {
-                QueueActionRow(
-                    label = "Aggiungi alla coda",
-                    icon = { Icon(Icons.Filled.AddToPhotos, contentDescription = null) },
-                    onClick = { onAddToQueue(); onDismiss() },
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-            if (onDownload != null) {
-                QueueActionRow(
-                    label = "Scarica",
-                    icon = { Icon(Icons.Filled.FileDownload, contentDescription = null) },
-                    onClick = { onDownload(); onDismiss() },
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-            if (onDislikeSong != null) {
-                QueueActionRow(
-                    label = "Non consigliarmi questo brano",
-                    icon = { Icon(Icons.Filled.ThumbDown, contentDescription = null) },
-                    onClick = { onDislikeSong(); onDismiss() },
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-            if (onDislikeArtist != null) {
-                QueueActionRow(
-                    label = "Non consigliarmi questo artista",
-                    icon = { Icon(Icons.Filled.PersonOff, contentDescription = null) },
-                    onClick = { onDislikeArtist(); onDismiss() },
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-            if (onFlagWrong != null) {
-                QueueActionRow(
-                    label = "Segnala brano sbagliato",
-                    icon = {
-                        Icon(
-                            Icons.Filled.ReportProblem,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                    },
-                    onClick = { flagConfirmOpen = true },
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-            // New-playlist row always pinned at the top for discoverability.
-            NewPlaylistRow(onClick = { createOpen = true })
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            when {
-                loading -> Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                }
-                errorMessage != null && playlists.isEmpty() -> Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = errorMessage!!,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
+                onPlayNext?.let {
+                    QueueActionRow(
+                        label = "Riproduci dopo",
+                        icon = { Icon(Icons.Filled.SkipNext, contentDescription = null) },
+                        onClick = { it(); onDismiss() },
                     )
                 }
-                playlists.isEmpty() -> EmptyState(
-                    icon = Icons.AutoMirrored.Filled.QueueMusic,
-                    title = "No playlists yet",
-                    subtitle = "Tap + New playlist to create one.",
-                )
-                else -> LazyColumn {
-                    items(items = playlists, key = { it.id }) { p ->
-                        PlaylistPickerRow(
-                            playlist = p,
-                            onClick = { addTo(p) },
+                onAddToQueue?.let {
+                    QueueActionRow(
+                        label = "Aggiungi alla coda",
+                        icon = { Icon(Icons.Filled.AddToPhotos, contentDescription = null) },
+                        onClick = { it(); onDismiss() },
+                    )
+                }
+                onDownload?.let {
+                    QueueActionRow(
+                        label = "Scarica",
+                        icon = { Icon(Icons.Filled.FileDownload, contentDescription = null) },
+                        onClick = { it(); onDismiss() },
+                    )
+                }
+                onDislikeSong?.let {
+                    QueueActionRow(
+                        label = "Non consigliarmi questo brano",
+                        icon = { Icon(Icons.Filled.ThumbDown, contentDescription = null) },
+                        onClick = { it(); onDismiss() },
+                    )
+                }
+                onDislikeArtist?.let {
+                    QueueActionRow(
+                        label = "Non consigliarmi questo artista",
+                        icon = { Icon(Icons.Filled.PersonOff, contentDescription = null) },
+                        onClick = { it(); onDismiss() },
+                    )
+                }
+                onFlagWrong?.let { _ ->
+                    QueueActionRow(
+                        label = "Segnala brano sbagliato",
+                        icon = {
+                            Icon(
+                                Icons.Filled.ReportProblem,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        onClick = { flagConfirmOpen = true },
+                    )
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+
+            // Search-by-playlist-name field.
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text("Cerca playlist…") },
+                singleLine = true,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Filled.Search,
+                        contentDescription = null,
+                    )
+                },
+                trailingIcon = if (query.isNotEmpty()) {
+                    @Composable {
+                        androidx.compose.material3.IconButton(onClick = { query = "" }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Cancella")
+                        }
+                    }
+                } else null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            )
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            // Scrollable list area — capped so the sticky CTA is always reachable.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false),
+            ) {
+                when {
+                    loading -> Box(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                    }
+                    errorMessage != null && playlists.isEmpty() -> Box(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = errorMessage!!,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
                         )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    filteredPlaylists.isEmpty() && playlists.isEmpty() -> EmptyState(
+                        icon = Icons.AutoMirrored.Filled.QueueMusic,
+                        title = "Nessuna playlist",
+                        subtitle = "Crea la tua prima playlist per iniziare.",
+                    )
+                    filteredPlaylists.isEmpty() -> Box(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "Nessuna playlist per “$query”.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    else -> LazyColumn {
+                        items(items = filteredPlaylists, key = { it.id }) { p ->
+                            PlaylistPickerRow(
+                                playlist = p,
+                                onClick = { addTo(p) },
+                            )
+                        }
                     }
                 }
             }
 
-            // Inline error banner for add-failures once the list is loaded.
             if (errorMessage != null && playlists.isNotEmpty()) {
                 Text(
                     text = errorMessage!!,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                 )
             }
 
-            Spacer(Modifier.size(8.dp))
+            // Sticky bottom CTA — outlined dashed lime per mockup.
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .border(
+                        width = 1.dp,
+                        color = accent.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    .clickable { createOpen = true }
+                    .padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        tint = accent,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Crea nuova playlist",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = accent,
+                    )
+                }
+            }
         }
     }
 
     if (flagConfirmOpen && onFlagWrong != null) {
-        AlertDialog(
-            onDismissRequest = { flagConfirmOpen = false },
-            title = { Text("Segnalare brano sbagliato?") },
-            text = {
-                Text(
-                    "“$songTitle” verrà rimosso dalle tue playlist, dai mi piace e dalla cronologia, " +
-                            "e il file sarà eliminato dal server. L'azione è definitiva."
-                )
+        com.mediaplayer.android.ui.common.FlagWrongConfirmDialog(
+            songId = songId,
+            songTitle = songTitle,
+            songArtist = songArtist,
+            hasCoverArt = songHasCoverArt,
+            onConfirm = {
+                flagConfirmOpen = false
+                onFlagWrong()
+                onDismiss()
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        flagConfirmOpen = false
-                        onFlagWrong()
-                        onDismiss()
-                    },
-                ) { Text("Segnala") }
-            },
-            dismissButton = {
-                TextButton(onClick = { flagConfirmOpen = false }) { Text("Annulla") }
-            },
+            onDismiss = { flagConfirmOpen = false },
         )
     }
 
@@ -300,6 +373,7 @@ private fun PlaylistPickerRow(
     playlist: PlaylistDto,
     onClick: () -> Unit,
 ) {
+    val accent = MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -307,18 +381,37 @@ private fun PlaylistPickerRow(
             .padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Real cover when the playlist has a backing song; auto-playlists keep
+        // their gradient palette; user playlists with no coverSongId fall back
+        // to the queue-music icon.
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(48.dp)
                 .clip(CoverShapes.SongRow)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(
+                    if (playlist.isAuto) {
+                        com.mediaplayer.android.ui.common.autoPlaylistGradient(playlist.kind)
+                    } else {
+                        androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.surfaceVariant)
+                    }
+                ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            val coverId = playlist.coverSongId
+            if (coverId != null && !playlist.isAuto) {
+                coil3.compose.AsyncImage(
+                    model = com.mediaplayer.android.data.Network.coverUrl(coverId),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                    contentDescription = null,
+                    tint = if (playlist.isAuto) androidx.compose.ui.graphics.Color.White
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Spacer(Modifier.width(16.dp))
         Column(
@@ -333,11 +426,22 @@ private fun PlaylistPickerRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = if (playlist.songCount == 1) "1 song" else "${playlist.songCount} songs",
+                text = if (playlist.songCount == 1) "1 brano" else "${playlist.songCount} brani",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        Spacer(Modifier.width(8.dp))
+        // Radio-style trailing dot — empty circle, fills with accent on tap-to-confirm.
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .border(
+                    width = 1.5.dp,
+                    color = accent.copy(alpha = 0.6f),
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                ),
+        )
     }
 }
 
@@ -368,37 +472,6 @@ private fun QueueActionRow(
             text = label,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
-        )
-    }
-}
-
-@Composable
-private fun NewPlaylistRow(onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CoverShapes.SongRow)
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Add,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-        }
-        Spacer(Modifier.width(16.dp))
-        Text(
-            text = "Nuova playlist",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
         )
     }
 }
