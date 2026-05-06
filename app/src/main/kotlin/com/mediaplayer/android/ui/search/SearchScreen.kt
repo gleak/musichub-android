@@ -91,6 +91,7 @@ fun SearchScreen(
     onAlbumListClick: () -> Unit = {},
     onArtistClick: (name: String) -> Unit = {},
     onArtistListClick: () -> Unit = {},
+    onGenreOpen: (display: String, tag: String) -> Unit = { _, _ -> },
     onProfileClick: () -> Unit = {},
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -173,7 +174,10 @@ fun SearchScreen(
                     onRecentClick = viewModel::commitQuery,
                     onRecentRemove = viewModel::removeRecent,
                     onClearRecents = viewModel::clearRecents,
-                    onGenreClick = { display, tag -> viewModel.selectGenre(display, tag) },
+                    // Tile taps open the dedicated GenreDetailScreen now
+                    // (`mh-library.jsx:156-216`); the inline filter pill stays
+                    // available when entered from elsewhere via selectGenre.
+                    onGenreClick = { display, tag -> onGenreOpen(display, tag) },
                 )
                 SearchUiState.Loading -> Column {
                     activeGenre?.let { GenreFilterPill(name = it, onClear = viewModel::clearGenre) }
@@ -205,7 +209,13 @@ fun SearchScreen(
                                     song = song,
                                     onClick = { onSongClick(song) },
                                     isLiked = song.id in likedIds,
-                                    onToggleLike = { viewModel.toggleLike(song.id) },
+                                    onToggleLike = {
+                                        val label = listOfNotNull(
+                                            song.title.takeIf { it.isNotBlank() },
+                                            song.artist.takeIf { it.isNotBlank() },
+                                        ).joinToString(" — ").ifBlank { null }
+                                        viewModel.toggleLike(song.id, label)
+                                    },
                                     isDownloaded = song.id in downloadedIds,
                                     onArtistClick = onArtistClick,
                                     onMore = { sheetSong = song },

@@ -21,21 +21,24 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.width
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,7 +52,9 @@ import com.mediaplayer.android.data.dto.ArtistDto
 import com.mediaplayer.android.ui.common.CenteredMessage
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.ErrorWithRetry
+import com.mediaplayer.android.ui.common.MHCaptionHeader
 import com.mediaplayer.android.ui.common.friendlyMessage
+import com.mediaplayer.android.ui.theme.LocalMHMono
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -148,31 +153,28 @@ fun ArtistListScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = { Text("Artisti") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
-                    }
-                },
+    val totalCount = (state as? ArtistListUiState.Success)?.totalItems?.toInt()
+    val coroutineScope = rememberCoroutineScope()
+    Scaffold(modifier = modifier.fillMaxSize()) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            MHCaptionHeader(
+                eyebrow = "LIBRERIA",
+                title = "Artisti",
+                count = totalCount,
+                onBack = onBack,
             )
-        },
-    ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = viewModel::pullRefresh,
-            modifier = Modifier.fillMaxSize().padding(padding),
-        ) {
-            when (val s = state) {
-                ArtistListUiState.Loading -> CenteredSpinner()
-                is ArtistListUiState.Error -> ErrorWithRetry(s.message, viewModel::refresh)
-                is ArtistListUiState.Success -> {
-                    if (s.artists.isEmpty()) {
-                        CenteredMessage("No artists in catalog.")
-                    } else {
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = viewModel::pullRefresh,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                when (val s = state) {
+                    ArtistListUiState.Loading -> CenteredSpinner()
+                    is ArtistListUiState.Error -> ErrorWithRetry(s.message, viewModel::refresh)
+                    is ArtistListUiState.Success -> {
+                        if (s.artists.isEmpty()) {
+                            CenteredMessage("Nessun artista nel catalogo.")
+                        } else {
                         val listState = rememberLazyListState()
                         LaunchedEffect(listState, s.artists.size, s.endReached) {
                             if (s.endReached) return@LaunchedEffect
@@ -186,33 +188,48 @@ fun ArtistListScreen(
                                 .filter { it }
                                 .collect { viewModel.loadMore() }
                         }
-                        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                            items(items = s.artists, key = { it.name }) { artist ->
-                                ArtistRow(artist = artist, onClick = { onArtistClick(artist.name) })
-                            }
-                            if (s.loadingMore) {
-                                item(key = "loading-more") {
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            strokeWidth = 2.dp,
-                                        )
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.weight(1f).fillMaxSize(),
+                            ) {
+                                items(items = s.artists, key = { it.name }) { artist ->
+                                    ArtistRow(artist = artist, onClick = { onArtistClick(artist.name) })
+                                }
+                                if (s.loadingMore) {
+                                    item(key = "loading-more") {
+                                        Box(
+                                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(24.dp),
+                                                strokeWidth = 2.dp,
+                                            )
+                                        }
                                     }
                                 }
                             }
+                            AlphabetScrubber(
+                                artists = s.artists,
+                                onLetterTap = { idx ->
+                                    if (idx >= 0) coroutineScope.launch {
+                                        listState.scrollToItem(idx)
+                                    }
+                                },
+                            )
                         }
                     }
                 }
             }
         }
     }
+    }
 }
 
 @Composable
 private fun ArtistRow(artist: ArtistDto, onClick: () -> Unit) {
+    val mono = LocalMHMono.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -245,18 +262,72 @@ private fun ArtistRow(artist: ArtistDto, onClick: () -> Unit) {
             )
             Text(
                 text = buildSubtitle(artist),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = mono.duration.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
 private fun buildSubtitle(artist: ArtistDto): String {
-    val albumPart = if (artist.albumCount == 1) "1 album" else "${artist.albumCount} albums"
-    val songPart = if (artist.songCount == 1) "1 song" else "${artist.songCount} songs"
+    val albumPart = if (artist.albumCount == 1) "1 album" else "${artist.albumCount} album"
+    val songPart = if (artist.songCount == 1) "1 brano" else "${artist.songCount} brani"
     return "$albumPart · $songPart"
+}
+
+// Italian alphabet from `mh-library.jsx:87` — drops J/K/U/W/X (rare in IT names).
+private val SCRUBBER_LETTERS = listOf(
+    'A','B','C','D','E','F','G','H','I','L',
+    'M','N','O','P','Q','R','S','T','V','Y','Z',
+)
+
+@Composable
+private fun AlphabetScrubber(
+    artists: List<ArtistDto>,
+    onLetterTap: (index: Int) -> Unit,
+) {
+    val mono = LocalMHMono.current
+    // Map letter → index of first artist whose name starts with it (case-fold).
+    val firstIndexByLetter = remember(artists) {
+        val out = mutableMapOf<Char, Int>()
+        artists.forEachIndexed { idx, artist ->
+            val first = artist.name.firstOrNull()?.uppercaseChar() ?: return@forEachIndexed
+            out.putIfAbsent(first, idx)
+        }
+        out
+    }
+    Column(
+        modifier = Modifier
+            .width(20.dp)
+            .padding(end = 4.dp, top = 12.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        SCRUBBER_LETTERS.forEach { letter ->
+            val idx = firstIndexByLetter[letter] ?: -1
+            val active = idx >= 0
+            Box(
+                modifier = Modifier
+                    .size(width = 18.dp, height = 12.dp)
+                    .clickable(enabled = active) { onLetterTap(idx) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = letter.toString(),
+                    style = mono.duration.copy(
+                        color = if (active) com.mediaplayer.android.ui.theme.MHColors.Lime
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                )
+            }
+        }
+    }
 }
 

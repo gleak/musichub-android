@@ -151,12 +151,13 @@ class SearchViewModel(
         viewModelScope.launch { searchHistoryStore.clear() }
     }
 
-    fun toggleLike(songId: Long) {
+    fun toggleLike(songId: Long, displayLabel: String? = null) {
         val isLiked = songId in _likedIds.value
         _likedIds.value = if (isLiked) _likedIds.value - songId else _likedIds.value + songId
         viewModelScope.launch {
             try {
-                if (isLiked) likedRepository.unlike(songId) else likedRepository.like(songId)
+                if (isLiked) likedRepository.unlike(songId, displayLabel = displayLabel)
+                else likedRepository.like(songId, displayLabel = displayLabel)
             } catch (_: Throwable) {
                 _likedIds.value = if (isLiked) _likedIds.value + songId else _likedIds.value - songId
             }

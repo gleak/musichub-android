@@ -3,10 +3,12 @@ package com.mediaplayer.android.ui.liked
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -15,7 +17,12 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.ui.text.style.TextAlign
+import com.mediaplayer.android.data.DownloadRepository
+import com.mediaplayer.android.ui.theme.LocalMHMono
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -81,7 +88,7 @@ fun LikedScreen(
                 title = { },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -170,16 +177,44 @@ private fun LikedBody(
             .collect { onLoadMore() }
     }
 
+    val allDownloaded = songs.isNotEmpty() && songs.all { it.id in downloadedIds }
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         item(key = "header") {
             SpotifyHero(
-                title = "Brani che mi piacciono",
-                subtitle = "Playlist • ${pluralizeSongs(totalItems)}",
+                title = "Brani che ti piacciono",
+                subtitle = buildLikedSubtitle(totalItems, songs),
                 coverModel = null,
                 fallbackGradient = MHColors.LikedGradientStart to MHColors.LikedGradientEnd,
+                eyebrow = "LIBRERIA · MI PIACE",
+                subtitleStyle = com.mediaplayer.android.ui.common.SubtitleStyle.Mono,
                 onPlay = { if (songs.isNotEmpty()) onPlayFromIndex(songs, 0) },
                 onShuffle = { if (songs.isNotEmpty()) onShufflePlay(songs) },
                 playEnabled = songs.isNotEmpty(),
+                extraActions = {
+                    if (songs.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                if (allDownloaded) {
+                                    DownloadRepository.removeAll(songs.map { it.id })
+                                } else {
+                                    val missing = songs
+                                        .filterNot { it.id in downloadedIds }
+                                        .map { it.id to it.title }
+                                    DownloadRepository.downloadAllLabeled(missing)
+                                }
+                            },
+                        ) {
+                            Icon(
+                                imageVector = if (allDownloaded) Icons.Filled.CloudDone
+                                              else Icons.Filled.CloudDownload,
+                                contentDescription = if (allDownloaded) "Rimuovi scaricati"
+                                                     else "Scarica tutti",
+                                tint = if (allDownloaded) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                },
             )
         }
 
@@ -187,18 +222,18 @@ private fun LikedBody(
             item(key = "empty") {
                 EmptyState(
                     icon = Icons.Filled.FavoriteBorder,
-                    title = "No liked songs yet",
-                    subtitle = "Heart tracks from the Search tab to find them here.",
+                    title = "Nessun brano che ti piace",
+                    subtitle = "Tocca il cuore su qualunque traccia: la troverai qui, sempre offline-ready.",
                 )
             }
         } else {
             itemsIndexed(items = songs, key = { _, song -> song.id }) { idx, song ->
-                SongRow(
+                IndexedSongRow(
+                    index = idx + 1,
                     song = song,
-                    isLiked = true,
                     isDownloaded = song.id in downloadedIds,
                     onClick = { onPlayFromIndex(songs, idx) },
-                    onToggleLike = { onUnlike(song.id) },
+                    onUnlike = { onUnlike(song.id) },
                     onMore = { onLongPress(song) },
                 )
             }
@@ -222,5 +257,63 @@ private fun LikedBody(
 private fun pluralizeSongs(count: Long): String =
     if (count == 1L) "1 brano" else "$count brani"
 
+// Mockup specs `"284 brani · 18h 42m"`. The total count is server-authoritative
+// (`totalItems`); duration sums whatever pages are loaded. When the loaded
+// subset matches the total the duration is exact; otherwise we still show it
+// as a directional read with the "/N totale" suffix on the count so the user
+// understands the duration trails the count during paging.
+private fun buildLikedSubtitle(totalItems: Long, loaded: List<SongDto>): String {
+    val countLabel = pluralizeSongs(totalItems)
+    if (loaded.isEmpty()) return countLabel
+    val totalMs = loaded.sumOf { it.durationMs }
+    val totalMinutes = (totalMs / 60_000L).toInt()
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    val durationLabel = when {
+        hours > 0 -> "${hours}h ${minutes}m"
+        minutes > 0 -> "${minutes}m"
+        else -> null
+    }
+    return if (durationLabel != null) "$countLabel · $durationLabel" else countLabel
+}
+
 private const val PREFETCH_THRESHOLD = 5
+
+/**
+ * SongRow with a leading mono numeric index column. Mockup shows
+ * 18dp right-aligned index ahead of the cover (`mh-library.jsx:137`).
+ * Wraps SongRow rather than threading a leading slot through it,
+ * since this convention is unique to Liked.
+ */
+@Composable
+private fun IndexedSongRow(
+    index: Int,
+    song: SongDto,
+    isDownloaded: Boolean,
+    onClick: () -> Unit,
+    onUnlike: () -> Unit,
+    onMore: () -> Unit,
+) {
+    val mono = LocalMHMono.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = index.toString(),
+            style = mono.duration.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
+            textAlign = TextAlign.End,
+            modifier = Modifier.padding(start = 12.dp).width(22.dp),
+        )
+        SongRow(
+            song = song,
+            isLiked = true,
+            isDownloaded = isDownloaded,
+            onClick = onClick,
+            onToggleLike = onUnlike,
+            onMore = onMore,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
 

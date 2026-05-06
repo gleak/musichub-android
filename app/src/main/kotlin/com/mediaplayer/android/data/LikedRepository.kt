@@ -27,9 +27,11 @@ class LikedRepository(
     }
 
     /** Queued — toggles dedupe per songId (heart-on then heart-off cancels). */
-    suspend fun like(songId: Long) = EventQueue.enqueueLike(songId)
+    suspend fun like(songId: Long, displayLabel: String? = null) =
+        EventQueue.enqueueLike(songId, displayLabel)
 
-    suspend fun unlike(songId: Long) = EventQueue.enqueueUnlike(songId)
+    suspend fun unlike(songId: Long, displayLabel: String? = null) =
+        EventQueue.enqueueUnlike(songId, displayLabel)
 
     suspend fun status(ids: List<Long>): Set<Long> =
         api.getLikedStatus(ids).toHashSet()

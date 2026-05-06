@@ -103,6 +103,8 @@ class LikedViewModel(
 
     fun unlike(songId: Long) {
         val current = (_state.value as? LikedUiState.Success) ?: return
+        val target = current.songs.firstOrNull { it.id == songId }
+        val label = target?.let { labelOf(it.title, it.artist) }
         // Optimistic: drop locally and decrement totalItems so the header
         // counter and the row both update before the server round-trip.
         _state.value = current.copy(
@@ -111,10 +113,21 @@ class LikedViewModel(
         )
         viewModelScope.launch {
             try {
-                repository.unlike(songId)
+                repository.unlike(songId, displayLabel = label)
             } catch (_: Throwable) {
                 refresh()
             }
+        }
+    }
+
+    private fun labelOf(title: String?, artist: String?): String? {
+        val t = title?.takeIf { it.isNotBlank() }
+        val a = artist?.takeIf { it.isNotBlank() }
+        return when {
+            t != null && a != null -> "$t — $a"
+            t != null -> t
+            a != null -> a
+            else -> null
         }
     }
 
