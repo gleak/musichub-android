@@ -8,8 +8,10 @@ import androidx.lifecycle.viewModelScope
 import com.mediaplayer.android.data.CsvPlaylistParser
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.SpotifyImportTrack
-import com.mediaplayer.android.data.dto.SpotifyImportResultDto
+import com.mediaplayer.android.data.dto.SpotifyImportJobStatusDto
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,11 +31,19 @@ sealed interface SpotifyImportUiState {
         val tracks: List<SpotifyImportTrack>,
         val uri: Uri,
     ) : SpotifyImportUiState
-    data object Importing : SpotifyImportUiState
+    data class Importing(
+        val total: Int,
+        val current: Int,
+        val matched: Int,
+        val approx: Int,
+        val failed: Int,
+        val currentTrack: String?,
+    ) : SpotifyImportUiState
     data class Done(
         val playlistId: Long,
         val playlistName: String,
         val matched: Int,
+        val approx: Int,
         val queued: Int,
         val failed: Int,
     ) : SpotifyImportUiState
@@ -46,6 +56,8 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
 
     private val _state = MutableStateFlow<SpotifyImportUiState>(SpotifyImportUiState.Idle)
     val state: StateFlow<SpotifyImportUiState> = _state.asStateFlow()
+
+    private var pollJob: Job? = null
 
     fun importFromUri(uri: Uri) {
         _state.value = SpotifyImportUiState.FetchingPlaylist
@@ -72,6 +84,8 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun reset() {
+        pollJob?.cancel()
+        pollJob = null
         _state.value = SpotifyImportUiState.Idle
     }
 
@@ -80,14 +94,24 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
         val name = playlistName.trim().ifEmpty { confirming.playlistName }
         val uri = confirming.uri
 
-        _state.value = SpotifyImportUiState.Importing
+        _state.value = SpotifyImportUiState.Importing(
+            total = confirming.tracks.size,
+            current = 0,
+            matched = 0,
+            approx = 0,
+            failed = 0,
+            currentTrack = null,
+        )
 
-        viewModelScope.launch {
-            _state.value = try {
-                val result: SpotifyImportResultDto = withContext(Dispatchers.IO) {
+        pollJob?.cancel()
+        pollJob = viewModelScope.launch {
+            try {
+                val jobId = withContext(Dispatchers.IO) {
                     val resolver = getApplication<Application>().contentResolver
-                    val tmpFile = File.createTempFile("spotify_import", ".csv",
-                        getApplication<Application>().cacheDir)
+                    val tmpFile = File.createTempFile(
+                        "spotify_import", ".csv",
+                        getApplication<Application>().cacheDir,
+                    )
                     try {
                         resolver.openInputStream(uri)?.use { input ->
                             tmpFile.outputStream().use { output -> input.copyTo(output) }
@@ -99,21 +123,56 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
                             tmpFile.asRequestBody("text/csv".toMediaType()),
                         )
                         val namePart = name.toRequestBody("text/plain".toMediaType())
-                        api.importSpotifyPlaylist(filePart, namePart)
+                        api.importSpotifyPlaylistAsync(filePart, namePart).jobId
                     } finally {
                         tmpFile.delete()
                     }
                 }
-                SpotifyImportUiState.Done(
-                    playlistId = result.playlistId,
-                    playlistName = result.playlistName,
-                    matched = result.matched,
-                    queued = result.queued,
-                    failed = result.failed,
-                )
+                pollProgress(jobId)
             } catch (t: Throwable) {
-                SpotifyImportUiState.Error(t.message ?: "Importazione non riuscita.")
+                _state.value = SpotifyImportUiState.Error(
+                    t.message ?: "Importazione non riuscita."
+                )
             }
+        }
+    }
+
+    private suspend fun pollProgress(jobId: String) {
+        var backoff = 500L
+        while (true) {
+            val status: SpotifyImportJobStatusDto = api.getSpotifyImportJobStatus(jobId)
+            when (status.phase) {
+                "DONE" -> {
+                    val r = status.result
+                    _state.value = if (r != null) SpotifyImportUiState.Done(
+                        playlistId = r.playlistId,
+                        playlistName = r.playlistName,
+                        matched = r.matched,
+                        approx = r.approx,
+                        queued = r.queued,
+                        failed = r.failed,
+                    ) else SpotifyImportUiState.Error("Nessun risultato dal server.")
+                    return
+                }
+                "ERROR" -> {
+                    _state.value = SpotifyImportUiState.Error(
+                        status.errorMessage ?: "Importazione non riuscita."
+                    )
+                    return
+                }
+                else -> {
+                    _state.value = SpotifyImportUiState.Importing(
+                        total = status.total.coerceAtLeast(1),
+                        current = status.current,
+                        matched = status.matched,
+                        approx = status.approx,
+                        failed = status.failed,
+                        currentTrack = status.currentTrack,
+                    )
+                }
+            }
+            delay(backoff)
+            backoff = (backoff * 2).coerceAtMost(2_000L)
         }
     }
 
@@ -124,5 +183,10 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
             val col = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (it.moveToFirst() && col >= 0) it.getString(col) else null
         }?.removeSuffix(".csv") ?: "Playlist importata"
+    }
+
+    override fun onCleared() {
+        pollJob?.cancel()
+        super.onCleared()
     }
 }

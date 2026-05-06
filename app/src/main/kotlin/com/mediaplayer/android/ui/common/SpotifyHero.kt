@@ -90,6 +90,8 @@ fun SpotifyHero(
     onShuffle: () -> Unit,
     playEnabled: Boolean = true,
     isPlaying: Boolean = false,
+    eyebrow: String? = null,
+    subtitleStyle: SubtitleStyle = SubtitleStyle.Default,
     extraActions: @Composable () -> Unit = {},
 ) {
     var dominant by remember(coverModel) {
@@ -136,8 +138,15 @@ fun SpotifyHero(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            if (eyebrow != null) {
+                val mono = com.mediaplayer.android.ui.theme.LocalMHMono.current
+                Text(
+                    text = "// ${eyebrow.uppercase()}",
+                    style = mono.eyebrow.copy(color = com.mediaplayer.android.ui.theme.MHColors.Lime),
+                )
+            }
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineMedium,
@@ -145,10 +154,15 @@ fun SpotifyHero(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            val subStyle = when (subtitleStyle) {
+                SubtitleStyle.Mono -> com.mediaplayer.android.ui.theme.LocalMHMono.current.caption
+                    .copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SubtitleStyle.Default -> MaterialTheme.typography.bodyMedium
+                    .copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = subStyle,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -163,7 +177,7 @@ fun SpotifyHero(
                 IconButton(onClick = onShuffle, enabled = playEnabled) {
                     Icon(
                         imageVector = Icons.Filled.Shuffle,
-                        contentDescription = "Shuffle",
+                        contentDescription = "Casuale",
                         tint = if (playEnabled) MaterialTheme.colorScheme.onSurface
                                else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -194,7 +208,7 @@ fun SpotifyHero(
                 ) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        contentDescription = if (isPlaying) "Pausa" else "Riproduci",
                         modifier = Modifier.size(32.dp),
                     )
                 }
@@ -204,6 +218,7 @@ fun SpotifyHero(
 }
 
 enum class CoverShape { Square, Circle }
+enum class SubtitleStyle { Default, Mono }
 
 @Composable
 private fun HeroCover(

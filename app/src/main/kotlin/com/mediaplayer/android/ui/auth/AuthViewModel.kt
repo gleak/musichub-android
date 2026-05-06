@@ -10,34 +10,85 @@ import com.mediaplayer.android.data.AuthRepository
 import com.mediaplayer.android.data.AuthTokenHolder
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.UserDto
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
 
+    /**
+     * Auth state model. Distinguishes the *initial probe* (silent token
+     * refresh on app launch — full-screen splash) from credential exchange
+     * (white pill spinner over LoginScreen) per `mockup/mh-auth-states.jsx`.
+     */
     sealed interface State {
-        data object Loading : State
+        /** Initial probe — show [AuthProbeScreen]. [stage] feeds the diagnostic line. */
+        data class Probe(val stage: ProbeStage) : State
+
+        /** Google credential exchange in flight — keep LoginScreen, swap CTA to spinner. */
+        data object SigningIn : State
+
         data object NotSignedIn : State
         data class SignedIn(val user: UserDto) : State
-        data class Error(val message: String) : State
+        data class Error(val message: String, val code: String) : State
     }
 
-    private val _state = MutableStateFlow<State>(State.Loading)
+    enum class ProbeStage { Token, Me, RejectedSilent }
+
+    /**
+     * Maps a raw exception from the Google credential flow or `/api/auth/me`
+     * to one of the four mockup-defined error categories. The category drives
+     * the mono code shown inside `LoginErrorPanel` (see `mockup/mh-auth.jsx`
+     * and `mockup/mh-auth-states.jsx`). Pure string matching — no HTTP /
+     * `GetCredentialException` types pulled in to keep the VM untyped.
+     */
+    private fun classifyAuthError(e: Throwable): String {
+        val msg = (e.message ?: "").lowercase()
+        return when {
+            msg.contains("timeout") ||
+                msg.contains("unable to resolve host") ||
+                msg.contains("failed to connect") ||
+                msg.contains("network") ||
+                msg.contains("unreachable") -> "auth/network-error"
+            msg.contains("401") || msg.contains("unauthorized") ||
+                msg.contains("403") || msg.contains("forbidden") -> "auth/server-rejected"
+            msg.contains("credential") || msg.contains("google") ||
+                msg.contains("no_credential") || msg.contains("nocredential") -> "auth/google-rejected"
+            else -> "auth/unknown"
+        }
+    }
+
+    private val _state = MutableStateFlow<State>(State.Probe(ProbeStage.Token))
     val state: StateFlow<State> = _state.asStateFlow()
+
+    /**
+     * One-shot signal emitted when the user dismisses the Google account
+     * picker without choosing an account. LoginScreen collects this to flash
+     * the `auth/picker-cancel` soft toast — distinct from a hard `Error`.
+     */
+    private val _pickerCancelled = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val pickerCancelled: SharedFlow<Unit> = _pickerCancelled.asSharedFlow()
 
     init {
         viewModelScope.launch {
             val token = authRepository.tryAutoSignIn()
             if (token != null) {
                 AuthTokenHolder.idToken = token
+                _state.value = State.Probe(ProbeStage.Me)
                 try {
                     _state.value = State.SignedIn(Network.api.getMe())
                 } catch (_: Exception) {
-                    // Server rejected the token — drop it and let the user pick again
-                    // (sign in or continue as guest) rather than entering a half-signed-in state.
+                    // Server rejected the token — flash the rejected-silent
+                    // probe stage briefly so the user sees what happened, then
+                    // drop back to the picker.
                     AuthTokenHolder.idToken = null
+                    _state.value = State.Probe(ProbeStage.RejectedSilent)
+                    delay(900)
                     _state.value = State.NotSignedIn
                 }
             } else {
@@ -48,7 +99,7 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
 
     fun signIn(context: Context) {
         viewModelScope.launch {
-            _state.value = State.Loading
+            _state.value = State.SigningIn
             try {
                 val token = authRepository.signIn(context)
                 AuthTokenHolder.idToken = token
@@ -56,12 +107,14 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                 _state.value = State.SignedIn(user)
             } catch (e: Exception) {
                 val msg = e.message ?: ""
-                if (msg.contains("cancel", ignoreCase = true) ||
-                    msg.contains("Cancel", ignoreCase = true)
-                ) {
+                if (msg.contains("cancel", ignoreCase = true)) {
+                    _pickerCancelled.tryEmit(Unit)
                     _state.value = State.NotSignedIn
                 } else {
-                    _state.value = State.Error(msg.ifEmpty { "Sign-in failed" })
+                    _state.value = State.Error(
+                        message = msg.ifEmpty { "Accesso non riuscito" },
+                        code = classifyAuthError(e),
+                    )
                 }
             }
         }

@@ -193,14 +193,14 @@ private fun LibraryTopBar(
         IconButton(onClick = onSearch) {
             Icon(
                 imageVector = Icons.Filled.Search,
-                contentDescription = "Find",
+                contentDescription = "Cerca",
                 tint = MaterialTheme.colorScheme.onSurface,
             )
         }
         IconButton(onClick = onAdd) {
             Icon(
                 imageVector = Icons.Filled.Add,
-                contentDescription = "Add",
+                contentDescription = "Aggiungi",
                 tint = MaterialTheme.colorScheme.onSurface,
             )
         }

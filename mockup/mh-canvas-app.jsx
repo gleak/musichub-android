@@ -6,14 +6,25 @@ const { ForYouScreen, GeneratedDetailScreen } = window.MHForYou;
 const { AAFrame, AAHome, AASearch, AALibrary, AAAlbum, AANowPlaying,
   AALyrics, AAVideo, AAArtist, AAProfile, AAQueue, AAVoice, AARecents, AAForYou } = window.MHAutoScreens;
 const { IconsScreen } = window.MHIcons;
-const { LoginScreen, OnboardingScreen: OnboardingTags, AccountSwitchDialog } = window.MHAuth;
-const { FindScreen, SpotifyImportScreen } = window.MHDiscover;
+const { LoginScreen, OnboardingScreen: OnboardingTags, OnboardingSheet, AccountSwitchDialog } = window.MHAuth;
+const { AuthProbeScreen, OnboardingErrorScreen, OnboardingSavingScreen, OnboardingNeedsMoreScreen,
+        LoginSigningInScreen, LoginPickerCancelScreen, OnboardingSheetExplainer } = window.MHAuthStates;
+  const { FindScreen, SpotifyImportScreen } = window.MHDiscover;
+  const { FindIdleEmpty, FindIdleActive, FindIdlePullRefresh, FindSearching,
+          FindCandidatesSelected, FindTerminalScreen, FindLifecycle,
+          SpotifyImportIdle, SpotifyImportFetching, SpotifyImportError,
+          SpotifyImportConfirming, SpotifyImportDone } = window.MHDiscoverStates;
 const { CrossfadeScreen, DownloadOfflineScreen, ThemeScreen, DislikedScreen } = window.MHSettings;
 const { QueueSheet, EqualizerSheet: EqualizerScreen, SleepTimerSheet, MiniPlayerSwipe,
         PlaybackErrorDialog, ReportSongDialog: ReportWrongSongSheet,
         AddToPlaylistSheet, AddSongsToPlaylistSheet: AddSongsScreen, TrackActionSheet } = window.MHPlayerSheets;
 const { AlbumListScreen, ArtistListScreen, LikedScreen, GenreDetailScreen,
         CollabPlaylistOwner, CollabPlaylistMember, PlaylistShareDialog, PlaylistShareImporter } = window.MHLibrary;
+const { LibraryLoadingScreen, LibraryPullRefreshScreen, LibraryErrorRetryScreen, LibraryLoadMoreScreen,
+        LikedEmptyScreen, AlbumsEmptyScreen, LibraryTrackKebabSheet,
+        AutoPlaylistDetailScreen, PlaylistGesturesScreen, PlaylistDetailWithTopBar,
+        LibraryLandingPlusScreen, ScaricatiEmptyScreen,
+        AppUpdateDialog, LibraryOfflineBadgeScreen } = window.MHLibraryStates;
 const { AppUpdateBannerHome, ChangelogSheet, QueuedEventsScreen } = window.MHUpdate;
 const { AAGenres, AANowPlayingTicker, AASleepDriving } = window.MHAutoExtra;
 const { TrimTrackScreen } = window.MHTrim;
@@ -31,6 +42,18 @@ function App() {
         <DCArtboard id="login" label="00a · Login" width={W} height={H}><Phone><LoginScreen/></Phone></DCArtboard>
         <DCArtboard id="tags" label="00b · Onboarding tag" width={W} height={H}><Phone><OnboardingTags/></Phone></DCArtboard>
         <DCArtboard id="acct" label="00c · Cambio account" width={W} height={H}><Phone><AccountSwitchDialog/></Phone></DCArtboard>
+      </DCSection>
+
+      <DCSection id="auth-states" title="Auth · Stati impl-only" subtitle="Stati presenti nel codice ma assenti dal mockup originale (AuthViewModel · LoginScreen · OnboardingScreen)">
+        <DCArtboard id="auth-probe-token" label="State.Loading · token refresh" width={W} height={H}><Phone><AuthProbeScreen stage="token"/></Phone></DCArtboard>
+        <DCArtboard id="auth-probe-me" label="State.Loading · refreshMe()" width={W} height={H}><Phone><AuthProbeScreen stage="me"/></Phone></DCArtboard>
+        <DCArtboard id="auth-probe-rejected" label="Token rejected · silent clear" width={W} height={H}><Phone><AuthProbeScreen stage="rejected-silent"/></Phone></DCArtboard>
+        <DCArtboard id="login-signing" label="Login · signing-in" width={W} height={H}><Phone><LoginSigningInScreen/></Phone></DCArtboard>
+        <DCArtboard id="login-cancel" label="Login · picker cancel" width={W} height={H}><Phone><LoginPickerCancelScreen/></Phone></DCArtboard>
+        <DCArtboard id="onb-needs-more" label="Onboarding · Scegli ancora N" width={W} height={H}><Phone><OnboardingNeedsMoreScreen/></Phone></DCArtboard>
+        <DCArtboard id="onb-saving" label="Onboarding · saving spinner" width={W} height={H}><Phone><OnboardingSavingScreen/></Phone></DCArtboard>
+        <DCArtboard id="onb-error" label="Onboarding · errore seedGenres" width={W} height={H}><Phone><OnboardingErrorScreen/></Phone></DCArtboard>
+        <DCArtboard id="sheet-explainer" label="OnboardingSheet · 3-feature explainer" width={W} height={H}><Phone><OnboardingSheetExplainer/></Phone></DCArtboard>
       </DCSection>
 
       <DCSection id="mobile" title="Mobile · iOS / Android" subtitle="Schermate principali del client mobile">
@@ -51,9 +74,50 @@ function App() {
         <DCArtboard id="lib-genre" label="03d · Genere · Indie" width={W} height={H}><Phone><GenreDetailScreen/></Phone></DCArtboard>
       </DCSection>
 
+      <DCSection id="library-states" title="Libreria · Stati impl-only" subtitle="Loading, empty, errore/retry, paginazione, kebab w/ dislike, auto-playlist, gesture, top-bar, profilo, Spotify row, Scaricati, overlay generici">
+        <DCArtboard id="lib-loading" label="Loading · shimmer" width={W} height={H}><Phone><LibraryLoadingScreen/></Phone></DCArtboard>
+        <DCArtboard id="lib-pull" label="Pull-to-refresh" width={W} height={H}><Phone><LibraryPullRefreshScreen/></Phone></DCArtboard>
+        <DCArtboard id="lib-error" label="Errore · retry" width={W} height={H}><Phone><LibraryErrorRetryScreen/></Phone></DCArtboard>
+        <DCArtboard id="lib-loadmore" label="Paginazione · load-more" width={W} height={H}><Phone><LibraryLoadMoreScreen/></Phone></DCArtboard>
+        <DCArtboard id="lib-empty-liked" label="Empty · Mi piace" width={W} height={H}><Phone><LikedEmptyScreen/></Phone></DCArtboard>
+        <DCArtboard id="lib-empty-albums" label="Empty · Album" width={W} height={H}><Phone><AlbumsEmptyScreen/></Phone></DCArtboard>
+        <DCArtboard id="lib-kebab" label="Kebab · dislike + flag" width={W} height={H}><Phone><LibraryTrackKebabSheet/></Phone></DCArtboard>
+        <DCArtboard id="lib-auto" label="Playlist · auto variant" width={W} height={H}><Phone><AutoPlaylistDetailScreen/></Phone></DCArtboard>
+        <DCArtboard id="lib-gestures" label="Playlist · swipe + drag" width={W} height={H}><Phone><PlaylistGesturesScreen/></Phone></DCArtboard>
+        <DCArtboard id="lib-topbar" label="Playlist · refresh + add (top-bar)" width={W} height={H}><Phone><PlaylistDetailWithTopBar/></Phone></DCArtboard>
+        <DCArtboard id="lib-landing-plus" label="Landing · profilo + Spotify row" width={W} height={H}><Phone><LibraryLandingPlusScreen/></Phone></DCArtboard>
+        <DCArtboard id="lib-scaricati" label="Scaricati · placeholder" width={W} height={H}><Phone><ScaricatiEmptyScreen/></Phone></DCArtboard>
+        <DCArtboard id="lib-update" label="Overlay · app-update dialog" width={W} height={H}><Phone><AppUpdateDialog/></Phone></DCArtboard>
+        <DCArtboard id="lib-offline" label="Overlay · offline badge" width={W} height={H}><Phone><LibraryOfflineBadgeScreen/></Phone></DCArtboard>
+      </DCSection>
+
       <DCSection id="discover" title="Scoperta · Spotify import" subtitle="Find + flow di import Spotify in 5 step">
         <DCArtboard id="find" label="11 · Find" width={W} height={H}><Phone><FindScreen/></Phone></DCArtboard>
         <DCArtboard id="sp" label="Spotify · Importazione" width={W} height={H}><Phone><SpotifyImportScreen/></Phone></DCArtboard>
+      </DCSection>
+
+      <DCSection id="discover-states" title="Find · Stati impl-only" subtitle="Background tracking, terminal status, lifecycle (FindViewModel · ActiveRequestRow · IdleBody · StatusHeader)">
+        <DCArtboard id="find-idle-empty" label="Idle · vuoto" width={W} height={H}><Phone><FindIdleEmpty/></Phone></DCArtboard>
+        <DCArtboard id="find-idle-active" label="Idle · richieste in background" width={W} height={H}><Phone><FindIdleActive/></Phone></DCArtboard>
+        <DCArtboard id="find-pull" label="Idle · pull-to-refresh" width={W} height={H}><Phone><FindIdlePullRefresh/></Phone></DCArtboard>
+        <DCArtboard id="find-searching" label="Searching · pure (no candidates)" width={W} height={H}><Phone><FindSearching/></Phone></DCArtboard>
+        <DCArtboard id="find-unlocking" label="StatusHeader · UNLOCKING + selezione" width={W} height={H}><Phone><FindCandidatesSelected phase="unlocking"/></Phone></DCArtboard>
+        <DCArtboard id="find-downloading" label="StatusHeader · DOWNLOADING + selezione" width={W} height={H}><Phone><FindCandidatesSelected phase="downloading"/></Phone></DCArtboard>
+        <DCArtboard id="find-imported" label="Terminal · IMPORTED" width={W} height={H}><Phone><FindTerminalScreen kind="IMPORTED"/></Phone></DCArtboard>
+        <DCArtboard id="find-imp-partial" label="Terminal · IMPORTED_PARTIAL" width={W} height={H}><Phone><FindTerminalScreen kind="IMPORTED_PARTIAL"/></Phone></DCArtboard>
+        <DCArtboard id="find-failed" label="Terminal · FAILED" width={W} height={H}><Phone><FindTerminalScreen kind="FAILED"/></Phone></DCArtboard>
+        <DCArtboard id="find-canceled" label="Terminal · CANCELED" width={W} height={H}><Phone><FindTerminalScreen kind="CANCELED"/></Phone></DCArtboard>
+        <DCArtboard id="find-life-pause" label="Lifecycle · onPause (jobs paused)" width={W} height={H}><Phone><FindLifecycle paused/></Phone></DCArtboard>
+        <DCArtboard id="find-life-resume" label="Lifecycle · onResume (jobs resumed)" width={W} height={H}><Phone><FindLifecycle paused={false}/></Phone></DCArtboard>
+      </DCSection>
+
+      <DCSection id="spotify-states" title="Spotify Import · Stati impl-only" subtitle="CSV parse, errore, rinomina playlist, plurali, CTA mancanti">
+        <DCArtboard id="sp-idle" label="Idle · Scegli file CSV" width={W} height={H}><Phone><SpotifyImportIdle/></Phone></DCArtboard>
+        <DCArtboard id="sp-fetch" label="FetchingPlaylist · Leggo il file…" width={W} height={H}><Phone><SpotifyImportFetching/></Phone></DCArtboard>
+        <DCArtboard id="sp-error" label="Error · header mancanti" width={W} height={H}><Phone><SpotifyImportError/></Phone></DCArtboard>
+        <DCArtboard id="sp-confirm" label="Confirming · rinomina + Annulla" width={W} height={H}><Phone><SpotifyImportConfirming/></Phone></DCArtboard>
+        <DCArtboard id="sp-done-plural" label="Done · 279 brani aggiunti" width={W} height={H}><Phone><SpotifyImportDone variant="plural"/></Phone></DCArtboard>
+        <DCArtboard id="sp-done-singular" label="Done · 1 brano aggiunto" width={W} height={H}><Phone><SpotifyImportDone variant="singular"/></Phone></DCArtboard>
       </DCSection>
 
       <DCSection id="trim" title="Modalità · Taglia traccia" subtitle="Doppia timeline · ascolto libero in alto, IN/OUT del taglio in basso">

@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>MusicHub — Mockup completo (Print)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin: 0; padding: 0; background: #2a2a2a; }
+  * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+
+  .page {
+    width: 297mm;
+    min-height: 210mm;
+    padding: 12mm 14mm;
+    background: #2a2a2a;
+    color: #fff;
+    font-family: Inter, -apple-system, system-ui, sans-serif;
+    page-break-after: always;
+    break-after: page;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    margin: 0 auto;
+  }
+  .page:last-of-type { page-break-after: auto; break-after: auto; }
+
+  .page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 8mm;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    margin-bottom: 8mm;
+  }
+  .page-eyebrow {
+    font-family: JetBrains Mono, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.6px;
+    color: #A8E04E;
+    text-transform: uppercase;
+  }
+  .page-title { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; margin-top: 4px; }
+  .page-sub { font-size: 12px; color: #9A9A9A; margin-top: 2px; }
+  .page-num {
+    font-family: JetBrains Mono, monospace;
+    font-size: 11px;
+    color: #6A6A6A;
+    letter-spacing: 1px;
+  }
+
+  .page-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16mm;
+  }
+
+  /* Mobile artboards: phone-sized, fit two per page side by side if same group */
+  .artboard-mobile {
+    width: 390px;
+    height: 844px;
+    flex-shrink: 0;
+    border-radius: 38px;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  }
+  .artboard-aa {
+    width: 1280px;
+    height: 720px;
+    transform: scale(0.55);
+    transform-origin: center center;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  }
+  .artboard-aa-wrap { width: 720px; height: 396px; display: flex; align-items: center; justify-content: center; }
+
+  .artboard-icons { width: 1320px; transform: scale(0.55); transform-origin: top center; }
+  .artboard-icons-wrap { width: 740px; min-height: 1100px; }
+
+  .artboard-card {
+    background: linear-gradient(180deg, #1F1F1F 0%, #080808 100%);
+    border-radius: 16px;
+    padding: 0;
+    position: relative;
+  }
+
+  .artboard-label {
+    font-family: JetBrains Mono, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #A8E04E;
+    letter-spacing: 1.2px;
+    text-align: center;
+    margin-top: 6mm;
+  }
+  .artboard-pair {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* Cover page */
+  .cover {
+    background: linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 100%);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 24mm;
+  }
+  .cover-mark {
+    font-family: JetBrains Mono, monospace;
+    font-size: 14px;
+    font-weight: 700;
+    color: #A8E04E;
+    letter-spacing: 2px;
+  }
+  .cover-title {
+    font-size: 96px;
+    font-weight: 900;
+    letter-spacing: -3px;
+    line-height: 0.95;
+  }
+  .cover-sub {
+    font-size: 22px;
+    color: #9A9A9A;
+    margin-top: 14px;
+    letter-spacing: -0.3px;
+    max-width: 80%;
+  }
+  .cover-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-family: JetBrains Mono, monospace;
+    font-size: 13px;
+    color: #6A6A6A;
+  }
+  .cover-foot strong { color: #fff; font-weight: 600; display: block; margin-bottom: 4px; font-family: Inter, sans-serif; font-size: 16px; }
+
+  .toc {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6mm 14mm;
+    margin-top: 4mm;
+  }
+  .toc-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 8px 0;
+    border-bottom: 1px dotted rgba(255,255,255,0.12);
+    font-size: 13px;
+  }
+  .toc-row .t { color: #fff; font-weight: 600; }
+  .toc-row .c { font-family: JetBrains Mono, monospace; color: #A8E04E; font-size: 11px; }
+
+  @page { size: A4 landscape; margin: 0; }
+  @media print {
+    html, body { background: #fff; }
+    .page { margin: 0; box-shadow: none; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- Stub design-canvas before it loads (we reuse mh-canvas-app.jsx? No - we build our own) -->
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="mh-shared.jsx"></script>
+<script type="text/babel" src="mh-generated.jsx"></script>
+<script type="text/babel" src="mh-screens.jsx"></script>
+<script type="text/babel" src="mh-extras.jsx"></script>
+<script type="text/babel" src="mh-foryou.jsx"></script>
+<script type="text/babel" src="mh-auto.jsx"></script>
+<script type="text/babel" src="mh-auto-extra.jsx"></script>
+<script type="text/babel" src="mh-icons.jsx"></script>
+<script type="text/babel" src="mh-auth.jsx"></script>
+<script type="text/babel" src="mh-settings.jsx"></script>
+<script type="text/babel" src="mh-discover.jsx"></script>
+<script type="text/babel" src="mh-player-sheets.jsx"></script>
+<script type="text/babel" src="mh-library.jsx"></script>
+<script type="text/babel" src="mh-update.jsx"></script>
+<script type="text/babel" src="mh-trim.jsx"></script>
+
+<script type="text/babel">
+const { HomeScreen, SearchScreen, LibraryScreen, AlbumScreen,
+  NowPlayingScreen, ArtistScreen, PlaylistScreen, ProfileScreen } = window.MHScreens;
+const { LyricsScreen, VideoScreen } = window.MHExtraScreens;
+const { ForYouScreen, GeneratedDetailScreen } = window.MHForYou;
+const { AAFrame, AAHome, AASearch, AALibrary, AAAlbum, AANowPlaying,
+  AALyrics, AAVideo, AAArtist, AAProfile, AAQueue, AAVoice, AARecents, AAForYou } = window.MHAutoScreens;
+const { IconsScreen } = window.MHIcons;
+const { LoginScreen, OnboardingScreen, AccountSwitchDialog } = window.MHAuth;
+const { FindScreen, SpotifyImportScreen } = window.MHDiscover;
+const { CrossfadeScreen, DownloadOfflineScreen, ThemeScreen, DislikedScreen } = window.MHSettings;
+const { QueueSheet, EqualizerSheet, SleepTimerSheet, MiniPlayerSwipe,
+        PlaybackErrorDialog, ReportSongDialog,
+        AddToPlaylistSheet, AddSongsToPlaylistSheet, TrackActionSheet } = window.MHPlayerSheets;
+const { AlbumListScreen, ArtistListScreen, LikedScreen, GenreDetailScreen,
+        CollabPlaylistOwner, CollabPlaylistMember, PlaylistShareDialog, PlaylistShareImporter } = window.MHLibrary;
+const { AppUpdateBannerHome, ChangelogSheet, QueuedEventsScreen } = window.MHUpdate;
+const { AAGenres, AANowPlayingTicker, AASleepDriving } = window.MHAutoExtra;
+const { TrimTrackScreen } = window.MHTrim;
+
+function Phone({ children }) {
+  return <IOSDevice width={390} height={844} dark={true}>{children}</IOSDevice>;
+}
+
+const SECTIONS = [
+  { eyebrow: '00 · ONBOARDING', title: 'Auth & onboarding', items: [
+    { label: '00a · Login', kind: 'mobile', el: <LoginScreen/> },
+    { label: '00b · Tag picker', kind: 'mobile', el: <OnboardingScreen/> },
+    { label: '00c · Cambio account', kind: 'mobile', el: <AccountSwitchDialog/> },
+  ]},
+  { eyebrow: '01 · MOBILE CORE', title: 'Schermate principali', items: [
+    { label: '01 · Home', kind: 'mobile', el: <HomeScreen/> },
+    { label: '02 · Cerca', kind: 'mobile', el: <SearchScreen/> },
+    { label: '03 · Libreria', kind: 'mobile', el: <LibraryScreen/> },
+    { label: '04 · Album', kind: 'mobile', el: <AlbumScreen/> },
+    { label: '05 · In riproduzione', kind: 'mobile', el: <NowPlayingScreen/> },
+    { label: '06 · Artista', kind: 'mobile', el: <ArtistScreen/> },
+    { label: '07 · Playlist', kind: 'mobile', el: <PlaylistScreen/> },
+    { label: '08 · Profilo', kind: 'mobile', el: <ProfileScreen/> },
+  ]},
+  { eyebrow: '03 · LIBRERIA', title: 'Drill-down libreria', items: [
+    { label: '03a · Album list', kind: 'mobile', el: <AlbumListScreen/> },
+    { label: '03b · Artist list', kind: 'mobile', el: <ArtistListScreen/> },
+    { label: '03c · Mi piace', kind: 'mobile', el: <LikedScreen/> },
+    { label: '03d · Genere · Indie', kind: 'mobile', el: <GenreDetailScreen/> },
+  ]},
+  { eyebrow: '11 · DISCOVER', title: 'Find & Spotify import', items: [
+    { label: '11 · Find', kind: 'mobile', el: <FindScreen/> },
+    { label: 'Spotify · Importazione', kind: 'mobile', el: <SpotifyImportScreen/> },
+  ]},
+  { eyebrow: 'PLAYER', title: 'Sheets & stati player', items: [
+    { label: 'Coda', kind: 'mobile', el: <QueueSheet/> },
+    { label: 'Equalizzatore', kind: 'mobile', el: <EqualizerSheet/> },
+    { label: 'Sleep timer', kind: 'mobile', el: <SleepTimerSheet/> },
+    { label: 'Mini-player swipe', kind: 'mobile', el: <MiniPlayerSwipe/> },
+    { label: 'Errore di playback', kind: 'mobile', el: <PlaybackErrorDialog/> },
+    { label: 'Brano sbagliato', kind: 'mobile', el: <ReportSongDialog/> },
+  ]},
+  { eyebrow: 'TRIM', title: 'Modalità taglia traccia', items: [
+    { label: 'Editing · in attesa', kind: 'mobile', el: <TrimTrackScreen state="editing"/> },
+    { label: 'Preview in riproduzione', kind: 'mobile', el: <TrimTrackScreen state="playingPreview"/> },
+    { label: 'Salvato · toast', kind: 'mobile', el: <TrimTrackScreen state="savedToast"/> },
+  ]},
+  { eyebrow: 'SHEETS', title: 'Action menu', items: [
+    { label: 'Aggiungi a playlist', kind: 'mobile', el: <AddToPlaylistSheet/> },
+    { label: 'Aggiungi brani', kind: 'mobile', el: <AddSongsToPlaylistSheet/> },
+    { label: 'Azioni traccia', kind: 'mobile', el: <TrackActionSheet/> },
+  ]},
+  { eyebrow: 'COLLAB', title: 'Playlist collaborative', items: [
+    { label: 'Owner', kind: 'mobile', el: <CollabPlaylistOwner/> },
+    { label: 'Member', kind: 'mobile', el: <CollabPlaylistMember/> },
+    { label: 'Share dialog', kind: 'mobile', el: <PlaylistShareDialog/> },
+    { label: 'Importer · prima volta', kind: 'mobile', el: <PlaylistShareImporter state="first"/> },
+    { label: 'Importer · già membro', kind: 'mobile', el: <PlaylistShareImporter state="member"/> },
+  ]},
+  { eyebrow: 'IMPOSTAZIONI', title: 'Sub-pagine impostazioni', items: [
+    { label: 'Crossfade', kind: 'mobile', el: <CrossfadeScreen/> },
+    { label: 'Download offline', kind: 'mobile', el: <DownloadOfflineScreen/> },
+    { label: 'Tema', kind: 'mobile', el: <ThemeScreen/> },
+    { label: 'Non consigliarmi', kind: 'mobile', el: <DislikedScreen/> },
+  ]},
+  { eyebrow: 'AGGIORNAMENTI', title: 'App update channel', items: [
+    { label: 'Banner · Disponibile', kind: 'mobile', el: <AppUpdateBannerHome state="available"/> },
+    { label: 'Banner · Download', kind: 'mobile', el: <AppUpdateBannerHome state="progress"/> },
+    { label: 'Banner · Fallito', kind: 'mobile', el: <AppUpdateBannerHome state="failed"/> },
+    { label: 'Changelog sheet', kind: 'mobile', el: <ChangelogSheet/> },
+    { label: 'Eventi in coda', kind: 'mobile', el: <QueuedEventsScreen/> },
+  ]},
+  { eyebrow: 'PER TE', title: 'Playlist generate', items: [
+    { label: 'Per te · Hub', kind: 'mobile', el: <ForYouScreen/> },
+    { label: 'Mix 02', kind: 'mobile', el: <GeneratedDetailScreen playlistId="mix-2"/> },
+    { label: 'Rotation', kind: 'mobile', el: <GeneratedDetailScreen playlistId="rotation"/> },
+    { label: 'Nuove uscite', kind: 'mobile', el: <GeneratedDetailScreen playlistId="releases"/> },
+    { label: 'Radar', kind: 'mobile', el: <GeneratedDetailScreen playlistId="radar"/> },
+    { label: 'Time capsule', kind: 'mobile', el: <GeneratedDetailScreen playlistId="capsule"/> },
+  ]},
+  { eyebrow: 'MEDIA', title: 'Lyrics & video', items: [
+    { label: '09 · Lyrics', kind: 'mobile', el: <LyricsScreen/> },
+    { label: '10 · Video player', kind: 'mobile', el: <VideoScreen/> },
+  ]},
+  { eyebrow: 'ANDROID AUTO', title: 'Esperienza in auto · 1280×720', items: [
+    { label: 'AA · Home', kind: 'aa', el: <AAHome/> },
+    { label: 'AA · Per te', kind: 'aa', el: <AAForYou/> },
+    { label: 'AA · Cerca', kind: 'aa', el: <AASearch/> },
+    { label: 'AA · Tutti i generi', kind: 'aa', el: <AAGenres/> },
+    { label: 'AA · Comando vocale', kind: 'aa', el: <AAVoice/> },
+    { label: 'AA · Libreria', kind: 'aa', el: <AALibrary/> },
+    { label: 'AA · Recenti', kind: 'aa', el: <AARecents/> },
+    { label: 'AA · Album', kind: 'aa', el: <AAAlbum/> },
+    { label: 'AA · Artista', kind: 'aa', el: <AAArtist/> },
+    { label: 'AA · In riproduzione', kind: 'aa', el: <AANowPlaying/> },
+    { label: 'AA · NP · Lyric ticker', kind: 'aa', el: <AANowPlayingTicker/> },
+    { label: 'AA · Coda', kind: 'aa', el: <AAQueue/> },
+    { label: 'AA · Testo', kind: 'aa', el: <AALyrics/> },
+    { label: 'AA · Video (driver-safe)', kind: 'aa', el: <AAVideo/> },
+    { label: 'AA · Sleep timer driver', kind: 'aa', el: <AASleepDriving/> },
+    { label: 'AA · Profilo', kind: 'aa', el: <AAProfile/> },
+  ]},
+  { eyebrow: 'BRAND', title: 'Launcher icons', items: [
+    { label: 'Onda sonora · review board', kind: 'icons', el: <IconsScreen/> },
+  ]},
+];
+
+function PageHeader({ eyebrow, title, sub, n, total }) {
+  return (
+    <div className="page-header">
+      <div>
+        <div className="page-eyebrow">// {eyebrow}</div>
+        <div className="page-title">{title}</div>
+        {sub && <div className="page-sub">{sub}</div>}
+      </div>
+      <div className="page-num">MUSICHUB · {String(n).padStart(2,'0')} / {String(total).padStart(2,'0')}</div>
+    </div>
+  );
+}
+
+function ArtboardBlock({ item }) {
+  if (item.kind === 'mobile') {
+    return (
+      <div className="artboard-pair">
+        <div className="artboard-mobile"><Phone>{item.el}</Phone></div>
+        <div className="artboard-label">{item.label}</div>
+      </div>
+    );
+  }
+  if (item.kind === 'aa') {
+    return (
+      <div className="artboard-pair">
+        <div className="artboard-aa-wrap">
+          <div className="artboard-aa"><AAFrame label="ANDROID AUTO">{item.el}</AAFrame></div>
+        </div>
+        <div className="artboard-label">{item.label}</div>
+      </div>
+    );
+  }
+  if (item.kind === 'icons') {
+    return (
+      <div className="artboard-pair">
+        <div className="artboard-icons-wrap">
+          <div className="artboard-icons">{item.el}</div>
+        </div>
+        <div className="artboard-label">{item.label}</div>
+      </div>
+    );
+  }
+  return null;
+}
+
+function App() {
+  // Flatten all items into pages, paginating by section.
+  // Mobile artboards: 2 per page when possible. AA: 1 per page. Icons: 1 per page.
+  const pages = [];
+  pages.push({ kind: 'cover' });
+  pages.push({ kind: 'toc' });
+
+  for (const sec of SECTIONS) {
+    const isAA = sec.items[0]?.kind === 'aa';
+    const isIcons = sec.items[0]?.kind === 'icons';
+    const perPage = (isAA || isIcons) ? 1 : 2;
+    for (let i = 0; i < sec.items.length; i += perPage) {
+      pages.push({
+        kind: 'content',
+        eyebrow: sec.eyebrow,
+        title: sec.title,
+        items: sec.items.slice(i, i + perPage),
+      });
+    }
+  }
+
+  const total = pages.length;
+
+  return (
+    <div>
+      {pages.map((p, idx) => {
+        if (p.kind === 'cover') {
+          return (
+            <div className="page cover" key={idx}>
+              <div className="cover-mark">// MUSICHUB · DESIGN MOCKUP</div>
+              <div>
+                <div className="cover-title">MusicHub.</div>
+                <div className="cover-sub">Mobile · Android Auto · Brand. Mockup completo per l'handoff a sviluppo.</div>
+              </div>
+              <div className="cover-foot">
+                <div><strong>Scope</strong>{SECTIONS.length} sezioni · {SECTIONS.reduce((s,x)=>s+x.items.length,0)} schermate</div>
+                <div><strong>Versione</strong>v0.14 · 05.05.2026</div>
+                <div><strong>Stack</strong>Android nativo · self-hosted</div>
+              </div>
+            </div>
+          );
+        }
+        if (p.kind === 'toc') {
+          return (
+            <div className="page" key={idx}>
+              <PageHeader eyebrow="INDICE" title="Indice delle sezioni" n={idx+1} total={total}/>
+              <div className="toc">
+                {SECTIONS.map((s, i) => (
+                  <div className="toc-row" key={i}>
+                    <span className="t">{s.title}</span>
+                    <span className="c">{String(s.items.length).padStart(2,'0')} schermate</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="page" key={idx}>
+            <PageHeader eyebrow={p.eyebrow} title={p.title} n={idx+1} total={total}/>
+            <div className="page-body">
+              {p.items.map((it, j) => <ArtboardBlock key={j} item={it}/>)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+
+// Auto-print after fonts + babel + layout settle
+(async () => {
+  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+  await new Promise(r => setTimeout(r, 1500));
+  window.print();
+})();
+</script>
+</body>
+</html>
