@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.16.7"
+    const val VERSION = "0.16.13"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,59 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.16.13",
+            title = "Cuore funzionante — like sincronizzati col backend",
+            highlights = listOf(
+                "Il cuore \"mi piace\" del player e del mini-player ora invia davvero il like al backend: prima l'icona si accendeva localmente ma la traccia non veniva salvata server-side (bloccata da un accesso al Player fuori dal thread principale, silenzioso). Il timer di sospensione e la modalità \"Fine traccia\" condividevano lo stesso baco e ora rispondono in modo affidabile.",
+                "Stabilizzato anche il ticker dei testi su Android Auto e la navigazione cartelle non-coda di AA: gli stessi accessi cross-thread venivano ignorati senza errore. Niente cambia in superficie, ma le carte ora si aggiornano senza salti.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.16.12",
+            title = "\"Controlla aggiornamenti\" — porta dritti al banner",
+            highlights = listOf(
+                "Profilo → \"Controlla aggiornamenti\": se c'è un nuovo aggiornamento, l'app ti riporta automaticamente in Home con il banner lime sotto gli occhi (prima compariva un toast \"Disponibile in Home\" e dovevi tornarci a mano). Il banner pulsa brevemente all'arrivo per non lasciarti dubbi su cosa guardare.",
+                "Quando invece sei già aggiornato (o c'è un errore di rete) il toast resta come prima — non c'è nulla da andare a vedere altrove.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.16.11",
+            title = "Recenti vivi e \"Già escluso\" sul kebab",
+            highlights = listOf(
+                "Carosello \"Riprodotti di recente\" in Ricerca e riga \"Brani recenti\" in Home ora condividono lo stesso elenco: appena finisci di ascoltare un brano, lo trovi davanti su entrambe le schermate senza dover ricaricare. Prima ogni schermata aveva la sua copia separata.",
+                "Sheet kebab \"Non consigliarmi questo brano/artista\": quando il brano (o l'artista) è già nei \"Non consigliati\", la voce diventa \"Brano già escluso\" / \"Artista già escluso\" con tinta lime, così non riclicchi nel vuoto. Stesso valore se ripristini un brano dalla schermata \"Non consigliati\": il prossimo kebab sullo stesso brano torna alla voce attiva.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.16.10",
+            title = "Playlist sincronizzate ovunque",
+            highlights = listOf(
+                "Crea / rinomina / elimina una playlist o aggiungi un brano dal kebab: Home, Playlist, Dettaglio e tutti gli altri schermi che mostrano la lista si aggiornano insieme. Prima ogni superficie aveva la sua copia locale: aggiungere un brano dal kebab in Ricerca lasciava la card Home con il vecchio conteggio \"3 brani\" finché non facevi pull-to-refresh.",
+                "Sheet \"Aggiungi a playlist\": ogni riga ora mostra una spunta lime quando il brano è già presente nella playlist (visibile per le playlist di cui è già stato aperto il dettaglio). Prima nessun indicatore: rischiavi di aggiungere lo stesso brano due volte.",
+                "Importazione di una playlist condivisa: la nuova playlist appare immediatamente in Home e nella tab Playlist senza dover ricaricare. Stesso comportamento per il toggle auto-sync, il rinomina e il elimina/lascia.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.16.9",
+            title = "Cuore unico ovunque — like su ogni lista",
+            highlights = listOf(
+                "Pulsante \"mi piace\" su ogni riga brano: artisti, album, playlist, generi e Home recenti ora mostrano il cuore accanto al kebab (prima era visibile solo nelle liste di Ricerca e Brani preferiti). Tap = aggiunge/rimuove dai preferiti senza dover aprire il kebab.",
+                "Nuova voce \"Aggiungi/Rimuovi dai preferiti\" anche dentro il sheet kebab di ogni brano (prima il kebab non aveva il cuore, l'unico modo era riprodurre il brano e usare il player).",
+                "Stato sincronizzato in tempo reale: se metti mi piace dal mini-player, la stessa traccia mostra subito il cuore pieno nelle liste; se la togli da una lista, il player aggiorna l'icona istantaneamente. Prima ogni superficie aveva il suo stato locale e i cuori potevano divergere fino al refresh successivo.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.16.8",
+            title = "Cover playlist, durata totale, invita amici",
+            highlights = listOf(
+                "Le card playlist in Home ora mostrano la copertina reale invece dell'icona generica: griglia auto-playlist con collage 2×2 (stesso pattern di Per te), card utente con cover del brano selezionato come copertina, righe lista e shortcut piccoli con la stessa cover. Fallback al gradient + icona quando la playlist è vuota.",
+                "Libreria: \"Brani preferiti\", le card playlist e \"Import from Spotify\" ora si allineano sullo stesso margine sinistro (16dp dal bordo schermo, in linea con top bar e chip filtro). Prima Brani/Spotify erano a 24dp e le card a 16dp — bordo a sinistra disallineato.",
+                "Dettaglio playlist: il sottotitolo mostra adesso anche la durata totale (es. \"1 h 23 min\") e il conteggio dei brani scaricati (es. \"12/25 scaricati\" o \"Tutti scaricati\" quando hai tutto offline). Prima il numero di scaricati appariva solo a metà download e la durata non c'era.",
+                "Now Playing: il menu kebab in alto a destra include adesso \"Non consigliarmi questo brano\" e \"Non consigliarmi questo artista\" (prima erano disponibili solo dal kebab delle righe brano). Stessa scrittura sul backend, stessa esclusione automatica dalle playlist generate.",
+                "Profilo → App → \"Invita un amico\": apre la share sheet di sistema con un messaggio precompilato e il link per scaricare l'APK più recente (preso dall'endpoint /api/updates/latest). Quando l'endpoint non è raggiungibile ricade sul link al backend così l'invito non rimane mai vuoto.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.16.7",
             title = "Parità mockup — schermate del player",

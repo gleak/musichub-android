@@ -4,8 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.DownloadRepository
-import com.mediaplayer.android.data.HistoryRepository
-import com.mediaplayer.android.data.LikedRepository
+import com.mediaplayer.android.data.LikedSongsCache
+import com.mediaplayer.android.data.RecentsCache
 import com.mediaplayer.android.data.SearchHistoryStore
 import com.mediaplayer.android.data.SongRepository
 import com.mediaplayer.android.data.dto.SongDto
@@ -44,8 +44,6 @@ sealed interface SearchUiState {
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class SearchViewModel(
     private val repository: SongRepository = SongRepository(),
-    private val likedRepository: LikedRepository = LikedRepository(),
-    private val historyRepository: HistoryRepository = HistoryRepository(),
     private val searchHistoryStore: SearchHistoryStore = SearchHistoryStore.instance,
 ) : ViewModel() {
 
@@ -63,13 +61,15 @@ class SearchViewModel(
      */
     private val _activeGenreTag = MutableStateFlow<String?>(null)
 
-    private val _likedIds = MutableStateFlow<Set<Long>>(emptySet())
-    val likedIds: StateFlow<Set<Long>> = _likedIds.asStateFlow()
-
     val downloadedIds: StateFlow<Set<Long>> = DownloadRepository.downloadedIds
 
-    private val _recentSongs = MutableStateFlow<List<SongDto>>(emptyList())
-    val recentSongs: StateFlow<List<SongDto>> = _recentSongs.asStateFlow()
+    /**
+     * Recently-played carousel on the idle search screen. Reads from
+     * the shared [RecentsCache] so a track played from the player
+     * appears here immediately, no per-VM fetch.
+     */
+    val recentSongs: StateFlow<List<SongDto>> = RecentsCache.recents
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
 
     val recentQueries: StateFlow<List<String>> = searchHistoryStore.recent
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
@@ -106,9 +106,8 @@ class SearchViewModel(
     fun retry() { _retryTick.value++ }
 
     init {
-        viewModelScope.launch {
-            try { _recentSongs.value = historyRepository.recent(10) } catch (_: Throwable) {}
-        }
+        // Cold-start the cache when nothing else has populated it yet.
+        viewModelScope.launch { RecentsCache.primeIfEmpty() }
     }
 
     fun onQueryChange(newQuery: String) {
@@ -151,19 +150,6 @@ class SearchViewModel(
         viewModelScope.launch { searchHistoryStore.clear() }
     }
 
-    fun toggleLike(songId: Long, displayLabel: String? = null) {
-        val isLiked = songId in _likedIds.value
-        _likedIds.value = if (isLiked) _likedIds.value - songId else _likedIds.value + songId
-        viewModelScope.launch {
-            try {
-                if (isLiked) likedRepository.unlike(songId, displayLabel = displayLabel)
-                else likedRepository.like(songId, displayLabel = displayLabel)
-            } catch (_: Throwable) {
-                _likedIds.value = if (isLiked) _likedIds.value + songId else _likedIds.value - songId
-            }
-        }
-    }
-
     fun toggleDownload(songId: Long, label: String? = null) {
         if (DownloadRepository.isDownloaded(songId)) DownloadRepository.remove(songId)
         else DownloadRepository.download(songId, label)
@@ -171,8 +157,10 @@ class SearchViewModel(
 
     private suspend fun fetch(query: String, genre: String?): SearchUiState = try {
         val page = repository.listSongs(query = query, genre = genre)
-        val ids = page.items.map { it.id }
-        _likedIds.value = if (ids.isEmpty()) emptySet() else likedRepository.status(ids)
+        // Prime the shared liked-state cache so heart icons render in the
+        // correct state on first paint (the screen's per-list LaunchedEffect
+        // also primes — this just hits one batch sooner).
+        LikedSongsCache.prime(page.items.map { it.id })
         SearchUiState.Success(page.items)
     } catch (t: Throwable) {
         SearchUiState.Error(friendlyMessage(t))

@@ -102,7 +102,7 @@ fun PlaylistDetailScreen(
     val downloadedIds by viewModel.downloadedIds.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    var sheetSong by remember { mutableStateOf<SongDto?>(null) }
+    val kebab = com.mediaplayer.android.ui.common.rememberSongKebab()
     var addSongsOpen by remember { mutableStateOf(false) }
     var shareOpen by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
@@ -181,7 +181,7 @@ fun PlaylistDetailScreen(
                             snackMessage = "Removed from playlist"
                         },
                         onReorderSongs = viewModel::reorderSongs,
-                        onLongPressSong = { sheetSong = it },
+                        onLongPressSong = { kebab.open(it) },
                         onDownload = {
                             viewModel.downloadPlaylist()
                             val cm = context.getSystemService(ConnectivityManager::class.java)
@@ -205,26 +205,11 @@ fun PlaylistDetailScreen(
         }
     }
 
-    sheetSong?.let { song ->
-        val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(song.id, song.artist)
-        val flagWrong = com.mediaplayer.android.ui.common.rememberFlagWrongAction(
-            songId = song.id,
-            onFlagged = { viewModel.refresh() },
-        )
-        AddToPlaylistSheet(
-            songTitle = song.title,
-            songId = song.id,
-            onDislikeSong = dislike.song(),
-            onDislikeArtist = dislike.artist(),
-            onFlagWrong = flagWrong,
-            onDismiss = { sheetSong = null },
-            onAdded = { playlistName ->
-                snackMessage = "Added to $playlistName"
-                viewModel.refresh()
-                sheetSong = null
-            },
-        )
-    }
+    com.mediaplayer.android.ui.common.SongKebabSheet(
+        state = kebab,
+        onFlagged = { viewModel.refresh() },
+        onAdded = { playlistName, _ -> snackMessage = "Added to $playlistName" },
+    )
 
     if (addSongsOpen && successState != null) {
         AddSongsToPlaylistSheet(
@@ -279,6 +264,9 @@ private fun PlaylistDetailBody(
     // (song.id alone collides on duplicate songs).
     var entries by remember { mutableStateOf(playlist.songs) }
     val songsForPlayback: List<SongDto> = entries.map { it.song }
+    LaunchedEffect(songsForPlayback) {
+        com.mediaplayer.android.data.LikedSongsCache.prime(songsForPlayback.map { it.id })
+    }
 
     val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
         // Subtract 1 to account for the header item at LazyColumn index 0.
@@ -310,16 +298,26 @@ private fun PlaylistDetailBody(
         item(key = "header") {
             val total = playlist.songs.size
             val allDownloaded = total > 0 && downloadedCount == total
+            val totalDurationMs = playlist.songs.sumOf { it.song.durationMs }
+            val durationLabel = formatPlaylistDuration(totalDurationMs)
             val subtitleStr = buildString {
                 if (playlist.isAuto) {
                     append(com.mediaplayer.android.ui.common.familyOf(playlist.kind).label)
                     append(" · ")
                     append(pluralizeSongsDetail(total))
+                    if (durationLabel.isNotEmpty()) append(" · $durationLabel")
                 } else {
                     append("Playlist · ")
                     append(pluralizeSongsDetail(total))
-                    if (downloadedCount > 0 && !allDownloaded) {
-                        append(" · $downloadedCount scaricati")
+                    if (durationLabel.isNotEmpty()) append(" · $durationLabel")
+                    if (total > 0) {
+                        append(
+                            when {
+                                allDownloaded -> " · Tutti scaricati"
+                                downloadedCount > 0 -> " · $downloadedCount/$total scaricati"
+                                else -> " · 0/$total scaricati"
+                            }
+                        )
                     }
                     if (!playlist.isOwner && !playlist.ownerName.isNullOrBlank()) {
                         append(" · Condivisa da ${playlist.ownerName}")
@@ -503,6 +501,18 @@ private fun PlaylistDetailBody(
 
 private fun pluralizeSongsDetail(count: Int): String =
     if (count == 1) "1 brano" else "$count brani"
+
+private fun formatPlaylistDuration(totalMs: Long): String {
+    if (totalMs <= 0L) return ""
+    val totalMinutes = (totalMs / 60_000L).toInt()
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    return when {
+        hours <= 0 -> "${minutes} min"
+        minutes == 0 -> "${hours} h"
+        else -> "${hours} h ${minutes} min"
+    }
+}
 
 @Composable
 private fun AutoSyncCard(

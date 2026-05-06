@@ -82,7 +82,10 @@ fun PlaylistShareImporter(
         try {
             val p = repository.previewShare(token)
             if (p.alreadyAccessible) {
-                val detail = repository.acceptShare(token)
+                // Route through the cache so Home + Playlists pick it up
+                // immediately. Same call shape as repository.acceptShare,
+                // just also publishes the new entry.
+                val detail = com.mediaplayer.android.data.PlaylistsCache.acceptShare(token)
                 onImported(detail.id, detail.name)
             } else {
                 preview = p
@@ -110,7 +113,7 @@ fun PlaylistShareImporter(
                 importing = true
                 scope.launch {
                     try {
-                        val detail = repository.acceptShare(token)
+                        val detail = com.mediaplayer.android.data.PlaylistsCache.acceptShare(token)
                         onImported(detail.id, detail.name)
                     } catch (t: Throwable) {
                         error = t.message ?: "Importazione non riuscita"

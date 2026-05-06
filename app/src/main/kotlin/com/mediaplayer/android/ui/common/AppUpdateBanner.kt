@@ -1,5 +1,7 @@
 package com.mediaplayer.android.ui.common
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,12 +24,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
@@ -196,10 +202,30 @@ private fun AvailableBanner(
     onDismiss: () -> Unit,
 ) {
     val mono = LocalMHMono.current
+    // Bounce on attention-tick bumps so a "Controlla aggiornamenti" tap
+    // from Profile that lands the user back on Home draws their eye to
+    // the lime banner. Skips the initial composition so a banner already
+    // present at cold-start stays still.
+    val attentionTick by AppUpdateChecker.attentionTick.collectAsStateWithLifecycle()
+    val scale = remember { Animatable(1f) }
+    var lastSeenTick by remember { mutableIntStateOf(attentionTick) }
+    LaunchedEffect(attentionTick) {
+        if (attentionTick == lastSeenTick) return@LaunchedEffect
+        lastSeenTick = attentionTick
+        scale.snapTo(1f)
+        scale.animateTo(1.08f, tween(180))
+        scale.animateTo(0.96f, tween(140))
+        scale.animateTo(1.04f, tween(140))
+        scale.animateTo(1f, tween(160))
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
+            .graphicsLayer {
+                scaleX = scale.value
+                scaleY = scale.value
+            }
             .clip(RoundedCornerShape(14.dp))
             .background(
                 Brush.linearGradient(

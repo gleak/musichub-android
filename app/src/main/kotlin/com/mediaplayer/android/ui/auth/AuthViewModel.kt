@@ -6,9 +6,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.AuthRepository
 import com.mediaplayer.android.data.AuthTokenHolder
 import com.mediaplayer.android.data.Network
+import com.mediaplayer.android.data.PlaylistAutoSyncRunner
 import com.mediaplayer.android.data.dto.UserDto
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -74,6 +76,22 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
     private val _pickerCancelled = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val pickerCancelled: SharedFlow<Unit> = _pickerCancelled.asSharedFlow()
 
+    /**
+     * One-shot guard: kick `PlaylistAutoSyncRunner` the first time we reach
+     * `SignedIn` in this process. The runner used to fire from
+     * `MediaPlayerApp.onCreate`, but the token wasn't set yet so it produced
+     * 401s on `/api/playlists`. Tying it to the auth state makes sure the
+     * Bearer header is in place before the cold-launch sync hits the wire.
+     */
+    private var autoSyncTriggered = false
+
+    @androidx.annotation.OptIn(UnstableApi::class)
+    private fun triggerAutoSyncOnce() {
+        if (autoSyncTriggered) return
+        autoSyncTriggered = true
+        PlaylistAutoSyncRunner.run()
+    }
+
     init {
         viewModelScope.launch {
             val token = authRepository.tryAutoSignIn()
@@ -82,6 +100,7 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                 _state.value = State.Probe(ProbeStage.Me)
                 try {
                     _state.value = State.SignedIn(Network.api.getMe())
+                    triggerAutoSyncOnce()
                 } catch (_: Exception) {
                     // Server rejected the token — flash the rejected-silent
                     // probe stage briefly so the user sees what happened, then
@@ -105,6 +124,7 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                 AuthTokenHolder.idToken = token
                 val user = Network.api.getMe()
                 _state.value = State.SignedIn(user)
+                triggerAutoSyncOnce()
             } catch (e: Exception) {
                 val msg = e.message ?: ""
                 if (msg.contains("cancel", ignoreCase = true)) {

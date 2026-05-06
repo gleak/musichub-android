@@ -2,14 +2,16 @@ package com.mediaplayer.android.ui.common
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import com.mediaplayer.android.data.DislikedRepository
-import kotlinx.coroutines.launch
+import com.mediaplayer.android.data.DislikedSongsCache
 
 /**
- * Handlers wired around a fresh [DislikedRepository] for one SongRow's
- * "Don't recommend" sheet entries. Both lambdas no-op when the targets
- * are blank/zero so callers can pass them unconditionally.
+ * Handlers for one SongRow's "Non consigliarmi" sheet entries. Both
+ * lambdas no-op when the targets are blank/zero so callers can pass
+ * them unconditionally.
+ *
+ * Routes through [DislikedSongsCache] so dislike-state stays consistent
+ * across every kebab + the Disliked screen with a single shared
+ * StateFlow rather than each row owning its own [DislikedRepository].
  */
 class DislikeActions internal constructor(
     private val onDislikeSong: () -> Unit,
@@ -20,17 +22,19 @@ class DislikeActions internal constructor(
 }
 
 @Composable
-fun rememberDislikeActions(songId: Long, artist: String?): DislikeActions {
-    val scope = rememberCoroutineScope()
-    val repo = remember { DislikedRepository() }
-    return remember(songId, artist) {
+fun rememberDislikeActions(
+    songId: Long,
+    artist: String?,
+    songLabel: String? = null,
+): DislikeActions {
+    return remember(songId, artist, songLabel) {
         DislikeActions(
             onDislikeSong = {
-                if (songId > 0) scope.launch { repo.dislikeSong(songId) }
+                if (songId > 0) DislikedSongsCache.dislikeSong(songId, displayLabel = songLabel)
             },
             onDislikeArtist = {
                 val a = artist?.trim().orEmpty()
-                if (a.isNotEmpty()) scope.launch { repo.dislikeArtist(a) }
+                if (a.isNotEmpty()) DislikedSongsCache.dislikeArtist(a)
             },
         )
     }

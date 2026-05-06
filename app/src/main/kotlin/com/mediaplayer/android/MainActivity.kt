@@ -349,17 +349,25 @@ private fun AppScaffold(
     }
 
     // Manual "Controlla aggiornamenti" handler — bypasses 6h rate-limit
-    // and per-version dismissal. Updated → AppUpdateChecker.state flips,
-    // banner renders on Home; we toast "Disponibile" so users in Profile
-    // know the trip up to Home is worth it.
+    // and per-version dismissal. Updated → pop back to Home (where the
+    // banner lives) and bump attentionTick so the banner bounces; the
+    // toast becomes redundant when the user lands on the banner itself.
+    // Up-to-date / error stay as toasts since there's no banner to draw.
     val updateScope = rememberCoroutineScope()
     val onCheckUpdates: () -> Unit = {
         updateScope.launch {
             when (val result = AppUpdateChecker.forceCheck(ctx)) {
-                AppUpdateChecker.ManualResult.Updated ->
-                    android.widget.Toast.makeText(
-                        ctx, "Aggiornamento disponibile in Home", android.widget.Toast.LENGTH_SHORT,
-                    ).show()
+                AppUpdateChecker.ManualResult.Updated -> {
+                    navController.navigate(Routes.HOME) {
+                        // Drop everything we navigated through to reach
+                        // the "Controlla" button so back from Home goes
+                        // to the system home rather than back into
+                        // Profile/settings.
+                        popUpTo(Routes.HOME) { inclusive = false }
+                        launchSingleTop = true
+                    }
+                    AppUpdateChecker.requestAttention()
+                }
                 AppUpdateChecker.ManualResult.UpToDate ->
                     android.widget.Toast.makeText(
                         ctx, "App già aggiornata", android.widget.Toast.LENGTH_SHORT,

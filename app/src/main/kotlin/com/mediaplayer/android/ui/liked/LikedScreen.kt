@@ -70,7 +70,7 @@ fun LikedScreen(
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val downloadedIds by viewModel.downloadedIds.collectAsStateWithLifecycle()
 
-    var sheetSong by remember { mutableStateOf<SongDto?>(null) }
+    val kebab = com.mediaplayer.android.ui.common.rememberSongKebab()
     var addedToast by remember { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
 
@@ -117,32 +117,18 @@ fun LikedScreen(
                     downloadedIds = downloadedIds,
                     onPlayFromIndex = onPlayFromIndex,
                     onShufflePlay = onShufflePlay,
-                    onUnlike = viewModel::unlike,
-                    onLongPress = { song -> sheetSong = song },
+                    onLongPress = { song -> kebab.open(song) },
                     onLoadMore = viewModel::loadMore,
                 )
             }
         }
     }
 
-    sheetSong?.let { song ->
-        val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(song.id, song.artist)
-        val flagWrong = com.mediaplayer.android.ui.common.rememberFlagWrongAction(
-            songId = song.id,
-            onFlagged = { viewModel.refresh() },
-        )
-        AddToPlaylistSheet(
-            songTitle = song.title,
-            songId = song.id,
-            onDislikeSong = dislike.song(),
-            onDislikeArtist = dislike.artist(),
-            onFlagWrong = flagWrong,
-            onDismiss = { sheetSong = null },
-            onAdded = { playlistName ->
-                addedToast = "Added to $playlistName"
-            },
-        )
-    }
+    com.mediaplayer.android.ui.common.SongKebabSheet(
+        state = kebab,
+        onFlagged = { viewModel.refresh() },
+        onAdded = { playlistName, _ -> addedToast = "Added to $playlistName" },
+    )
 }
 
 @Composable
@@ -154,50 +140,50 @@ private fun LikedBody(
     downloadedIds: Set<Long>,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
     onShufflePlay: (List<SongDto>) -> Unit,
-    onUnlike: (Long) -> Unit,
     onLongPress: (SongDto) -> Unit,
     onLoadMore: () -> Unit,
 ) {
+    // Mark every loaded song as liked in the shared cache so each row's heart
+    // renders filled instantly (no per-row server round-trip via prime()).
+    LaunchedEffect(songs) {
+        songs.forEach { com.mediaplayer.android.data.LikedSongsCache.markLiked(it.id, true) }
+    }
+    // Drop rows the user has unliked anywhere in the app — keeps the list
+    // honest with the heart toggle without waiting for the next refresh.
+    val likedIds by com.mediaplayer.android.data.LikedSongsCache.likedIds.collectAsStateWithLifecycle()
+    val visibleSongs = songs.filter { it.id in likedIds }
     val listState = rememberLazyListState()
 
-    // Trigger when the user scrolls within PREFETCH_THRESHOLD rows of the
-    // bottom. derivedStateOf keeps the recomputation cheap as the user
-    // scrolls; snapshotFlow + filter ensures we fire only when crossing
-    // the threshold, not on every visible-item delta.
-    LaunchedEffect(listState, songs.size, endReached) {
-        if (endReached) return@LaunchedEffect
-        snapshotFlow {
-            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
-                ?: return@snapshotFlow false
-            val total = listState.layoutInfo.totalItemsCount
-            total > 0 && last >= total - PREFETCH_THRESHOLD
-        }
-            .distinctUntilChanged()
-            .filter { it }
-            .collect { onLoadMore() }
-    }
+    // Prefetch the next page once the user scrolls within
+    // PREFETCH_THRESHOLD rows of the tail; goes silent at end-of-list.
+    com.mediaplayer.android.ui.common.PrefetchNearEnd(
+        listState = listState,
+        threshold = PREFETCH_THRESHOLD,
+        enabled = !endReached,
+        onLoadMore = onLoadMore,
+    )
 
-    val allDownloaded = songs.isNotEmpty() && songs.all { it.id in downloadedIds }
+    val allDownloaded = visibleSongs.isNotEmpty() && visibleSongs.all { it.id in downloadedIds }
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         item(key = "header") {
             SpotifyHero(
                 title = "Brani che ti piacciono",
-                subtitle = buildLikedSubtitle(totalItems, songs),
+                subtitle = buildLikedSubtitle(totalItems, visibleSongs),
                 coverModel = null,
                 fallbackGradient = MHColors.LikedGradientStart to MHColors.LikedGradientEnd,
                 eyebrow = "LIBRERIA · MI PIACE",
                 subtitleStyle = com.mediaplayer.android.ui.common.SubtitleStyle.Mono,
-                onPlay = { if (songs.isNotEmpty()) onPlayFromIndex(songs, 0) },
-                onShuffle = { if (songs.isNotEmpty()) onShufflePlay(songs) },
-                playEnabled = songs.isNotEmpty(),
+                onPlay = { if (visibleSongs.isNotEmpty()) onPlayFromIndex(visibleSongs, 0) },
+                onShuffle = { if (visibleSongs.isNotEmpty()) onShufflePlay(visibleSongs) },
+                playEnabled = visibleSongs.isNotEmpty(),
                 extraActions = {
-                    if (songs.isNotEmpty()) {
+                    if (visibleSongs.isNotEmpty()) {
                         IconButton(
                             onClick = {
                                 if (allDownloaded) {
-                                    DownloadRepository.removeAll(songs.map { it.id })
+                                    DownloadRepository.removeAll(visibleSongs.map { it.id })
                                 } else {
-                                    val missing = songs
+                                    val missing = visibleSongs
                                         .filterNot { it.id in downloadedIds }
                                         .map { it.id to it.title }
                                     DownloadRepository.downloadAllLabeled(missing)
@@ -218,7 +204,7 @@ private fun LikedBody(
             )
         }
 
-        if (songs.isEmpty()) {
+        if (visibleSongs.isEmpty()) {
             item(key = "empty") {
                 EmptyState(
                     icon = Icons.Filled.FavoriteBorder,
@@ -227,13 +213,12 @@ private fun LikedBody(
                 )
             }
         } else {
-            itemsIndexed(items = songs, key = { _, song -> song.id }) { idx, song ->
+            itemsIndexed(items = visibleSongs, key = { _, song -> song.id }) { idx, song ->
                 IndexedSongRow(
                     index = idx + 1,
                     song = song,
                     isDownloaded = song.id in downloadedIds,
-                    onClick = { onPlayFromIndex(songs, idx) },
-                    onUnlike = { onUnlike(song.id) },
+                    onClick = { onPlayFromIndex(visibleSongs, idx) },
                     onMore = { onLongPress(song) },
                 )
             }
@@ -291,7 +276,6 @@ private fun IndexedSongRow(
     song: SongDto,
     isDownloaded: Boolean,
     onClick: () -> Unit,
-    onUnlike: () -> Unit,
     onMore: () -> Unit,
 ) {
     val mono = LocalMHMono.current
@@ -307,10 +291,8 @@ private fun IndexedSongRow(
         )
         SongRow(
             song = song,
-            isLiked = true,
             isDownloaded = isDownloaded,
             onClick = onClick,
-            onToggleLike = onUnlike,
             onMore = onMore,
             modifier = Modifier.weight(1f),
         )

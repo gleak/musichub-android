@@ -10,11 +10,13 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.CacheBitmapLoader
 import androidx.media3.session.CommandButton
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
@@ -26,6 +28,8 @@ import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
+import java.util.concurrent.Executors
 import com.mediaplayer.android.MainActivity
 import com.mediaplayer.android.R
 import com.mediaplayer.android.data.LikedRepository
@@ -159,7 +163,12 @@ class MediaPlaybackService : MediaLibraryService() {
     // the activity is destroyed, and a timer set on the phone is reflected
     // back in AA's now-playing card. Controllers send {@link #ACTION_SLEEP_TIMER}
     // with a "minutes" int (0 = cancel); state is published via session extras.
-    private val sleepTimer = SleepTimer(serviceScope)
+    // Main-dispatched scope so the timer's expiry callback (which calls
+    // `player.pause()`) runs on the main thread — Player must be accessed
+    // on its application looper. Job parented to serviceScope so service
+    // teardown still cancels in-flight timers.
+    private val mainScope = CoroutineScope(serviceScope.coroutineContext + Dispatchers.Main)
+    private val sleepTimer = SleepTimer(mainScope)
     private val sleepTimerCommand =
         SessionCommand(ACTION_SLEEP_TIMER, Bundle.EMPTY)
     /** Default minutes used when a controller invokes the sleep command without args. */
@@ -241,7 +250,21 @@ class MediaPlaybackService : MediaLibraryService() {
             android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        // System media surfaces (notification, lockscreen, Android Auto, BT/AVRCP)
+        // resolve `MediaMetadata.artworkUri` through Media3's BitmapLoader. The
+        // default uses DefaultHttpDataSource which skips our OkHttp interceptor,
+        // so cover requests reached the backend without `X-Api-Key` and got 401
+        // — artwork never showed off-app. Route bitmap loads through the same
+        // OkHttpClient the rest of the app uses so the auth headers ride along.
+        val bitmapLoader = CacheBitmapLoader(
+            DataSourceBitmapLoader(
+                MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor()),
+                OkHttpDataSource.Factory(Network.okHttp),
+            )
+        )
+
         mediaSession = MediaLibrarySession.Builder(this, player, LibraryCallback())
+            .setBitmapLoader(bitmapLoader)
             .setSessionActivity(pendingIntent)
             .setCustomLayout(
                 buildCustomLayout(
@@ -307,7 +330,11 @@ class MediaPlaybackService : MediaLibraryService() {
         // Drive the AA now-playing card with the current synced lyric line.
         // Phone has its own LyricsSheet; AA can't show a scrolling list, so
         // we surface lyrics one line at a time via MediaMetadata.description.
-        aaLyricsTicker = AALyricsTicker(player, serviceScope).also { it.install() }
+        // Main scope: tickOnce/applyDescription read player.currentPosition
+        // and call player.replaceMediaItem — both must be on the application
+        // looper. Network I/O inside the ticker still hops to Dispatchers.IO
+        // explicitly via withContext.
+        aaLyricsTicker = AALyricsTicker(player, mainScope).also { it.install() }
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -370,6 +397,7 @@ class MediaPlaybackService : MediaLibraryService() {
             } catch (_: Exception) {
                 false
             }
+            com.mediaplayer.android.data.LikedSongsCache.markLiked(songId, currentLiked)
             updateCustomLayout()
         }
     }
@@ -608,7 +636,13 @@ class MediaPlaybackService : MediaLibraryService() {
         ): ListenableFuture<SessionResult> = serviceScope.future {
             when (customCommand.customAction) {
                 ACTION_TOGGLE_LIKE -> {
-                    val item = session.player.currentMediaItem
+                    // Player + session must be touched on the main thread —
+                    // serviceScope runs on Dispatchers.IO, so a direct read
+                    // throws IllegalStateException ("Player is accessed on
+                    // the wrong thread") and aborts the toggle silently.
+                    val item = withContext(Dispatchers.Main) {
+                        session.player.currentMediaItem
+                    }
                     val songId = songIdOf(item)
                         ?: return@future SessionResult(SessionError.ERROR_INVALID_STATE)
                     val title = item?.mediaMetadata?.title?.toString()
@@ -621,7 +655,8 @@ class MediaPlaybackService : MediaLibraryService() {
                         if (currentLiked) likedRepository.unlike(songId, displayLabel = label)
                         else likedRepository.like(songId, displayLabel = label)
                         currentLiked = !currentLiked
-                        updateCustomLayout()
+                        com.mediaplayer.android.data.LikedSongsCache.markLiked(songId, currentLiked)
+                        withContext(Dispatchers.Main) { updateCustomLayout() }
                         SessionResult(SessionResult.RESULT_SUCCESS)
                     } catch (_: Exception) {
                         SessionResult(SessionError.ERROR_UNKNOWN)
@@ -645,13 +680,20 @@ class MediaPlaybackService : MediaLibraryService() {
                     val endOfTrack = sources.any { it.getBoolean("end_of_track", false) }
                     val minutesSource = sources.firstOrNull { it.containsKey("minutes") }
                     val minutes = minutesSource?.getInt("minutes") ?: defaultSleepMinutes
-                    when {
-                        !hasMinutes && !hasEndOfTrack -> sleepTimer.cancel()
-                        endOfTrack -> sleepTimer.setEndOfTrack(session.player) {
-                            session.player.pause()
+                    // SleepTimer.{set,setEndOfTrack,cancel} touch
+                    // Player.addListener/removeListener synchronously, so the
+                    // whole branch must run on the main thread. serviceScope
+                    // is Dispatchers.IO — without this hop, Player throws
+                    // "accessed on the wrong thread".
+                    withContext(Dispatchers.Main) {
+                        when {
+                            !hasMinutes && !hasEndOfTrack -> sleepTimer.cancel()
+                            endOfTrack -> sleepTimer.setEndOfTrack(session.player) {
+                                session.player.pause()
+                            }
+                            minutes <= 0 -> sleepTimer.cancel()
+                            else -> sleepTimer.set(minutes) { session.player.pause() }
                         }
-                        minutes <= 0 -> sleepTimer.cancel()
-                        else -> sleepTimer.set(minutes) { session.player.pause() }
                     }
                     SessionResult(SessionResult.RESULT_SUCCESS)
                 }
@@ -709,7 +751,10 @@ class MediaPlaybackService : MediaLibraryService() {
                     )
                 }
 
-                val currentItem = session.player.currentMediaItem
+                // Player must be read on its application looper (main).
+                val currentItem = withContext(Dispatchers.Main) {
+                    session.player.currentMediaItem
+                }
                 val currentSongId = currentItem?.mediaId?.removePrefix("song:")?.toLongOrNull()
 
                 val items = LibraryTree.children(parentId, currentSongId, page, pageSize)

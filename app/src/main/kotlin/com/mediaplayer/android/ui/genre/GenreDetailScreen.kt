@@ -220,18 +220,14 @@ private fun GenreBody(
     onLoadMore: () -> Unit,
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(listState, state.songs.size, state.endReached) {
-        if (state.endReached) return@LaunchedEffect
-        snapshotFlow {
-            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
-                ?: return@snapshotFlow false
-            val total = listState.layoutInfo.totalItemsCount
-            total > 0 && last >= total - 5
-        }
-            .distinctUntilChanged()
-            .filter { it }
-            .collect { onLoadMore() }
+    LaunchedEffect(state.songs) {
+        com.mediaplayer.android.data.LikedSongsCache.prime(state.songs.map { it.id })
     }
+    com.mediaplayer.android.ui.common.PrefetchNearEnd(
+        listState = listState,
+        enabled = !state.endReached,
+        onLoadMore = onLoadMore,
+    )
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         item(key = "ctas") {
             Row(

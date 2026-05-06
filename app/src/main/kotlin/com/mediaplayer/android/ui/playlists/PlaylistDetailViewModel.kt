@@ -4,12 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.DownloadRepository
-import com.mediaplayer.android.data.PlaylistRepository
+import com.mediaplayer.android.data.PlaylistsCache
 import com.mediaplayer.android.data.dto.PlaylistDetailDto
 import com.mediaplayer.android.ui.common.friendlyMessage
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 sealed interface PlaylistDetailUiState {
@@ -19,37 +23,49 @@ sealed interface PlaylistDetailUiState {
 }
 
 /**
- * Owns the [PlaylistDetailDto] for one playlist. The playlist id is
- * passed in explicitly rather than via SavedStateHandle to keep this
- * VM simple to construct from Compose's `viewModel(key = ...)`.
+ * Owns the [PlaylistDetailDto] for one playlist. State is derived from
+ * [PlaylistsCache] so a song added from a kebab elsewhere or a rename
+ * triggered from another screen lands here without a refetch.
+ *
+ * The playlist id is passed in explicitly rather than via SavedStateHandle
+ * to keep this VM simple to construct from Compose's `viewModel(key = ...)`.
  */
 @UnstableApi
 class PlaylistDetailViewModel(
     private val playlistId: Long,
-    private val repository: PlaylistRepository = PlaylistRepository(),
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow<PlaylistDetailUiState>(PlaylistDetailUiState.Loading)
-    val state: StateFlow<PlaylistDetailUiState> = _state.asStateFlow()
+    private val _loadError = MutableStateFlow<Throwable?>(null)
+
+    val state: StateFlow<PlaylistDetailUiState> = combine(
+        PlaylistsCache.details.map { it[playlistId] },
+        _loadError,
+    ) { detail, error ->
+        when {
+            detail != null -> PlaylistDetailUiState.Success(detail)
+            error != null -> PlaylistDetailUiState.Error(friendlyMessage(error))
+            else -> PlaylistDetailUiState.Loading
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+        initialValue = PlaylistDetailUiState.Loading,
+    )
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     val downloadedIds: StateFlow<Set<Long>> = DownloadRepository.downloadedIds
 
-    init {
-        refresh()
-    }
+    init { refresh() }
 
     fun refresh() {
         viewModelScope.launch {
-            if (_state.value !is PlaylistDetailUiState.Success) {
-                _state.value = PlaylistDetailUiState.Loading
-            }
-            _state.value = try {
-                PlaylistDetailUiState.Success(repository.detail(playlistId))
+            try {
+                PlaylistsCache.refreshDetail(playlistId)
+                _loadError.value = null
             } catch (t: Throwable) {
-                PlaylistDetailUiState.Error(friendlyMessage(t))
+                _loadError.value = t
             }
         }
     }
@@ -57,10 +73,11 @@ class PlaylistDetailViewModel(
     fun pullRefresh() {
         viewModelScope.launch {
             _isRefreshing.value = true
-            _state.value = try {
-                PlaylistDetailUiState.Success(repository.detail(playlistId))
+            try {
+                PlaylistsCache.refreshDetail(playlistId)
+                _loadError.value = null
             } catch (t: Throwable) {
-                PlaylistDetailUiState.Error(friendlyMessage(t))
+                _loadError.value = t
             }
             _isRefreshing.value = false
         }
@@ -68,28 +85,20 @@ class PlaylistDetailViewModel(
 
     fun removeSong(songId: Long) {
         viewModelScope.launch {
-            try {
-                val updated = repository.removeSong(playlistId, songId)
-                _state.value = PlaylistDetailUiState.Success(updated)
-            } catch (_: Throwable) {
-                refresh()
-            }
+            runCatching { PlaylistsCache.removeSong(playlistId, songId) }
+                .onFailure { refresh() }
         }
     }
 
     fun reorderSongs(songIds: List<Long>) {
         viewModelScope.launch {
-            try {
-                val updated = repository.reorder(playlistId, songIds)
-                _state.value = PlaylistDetailUiState.Success(updated)
-            } catch (_: Throwable) {
-                refresh()
-            }
+            runCatching { PlaylistsCache.reorder(playlistId, songIds) }
+                .onFailure { refresh() }
         }
     }
 
     fun downloadPlaylist() {
-        val entries = (state.value as? PlaylistDetailUiState.Success)?.playlist?.songs ?: return
+        val entries = PlaylistsCache.details.value[playlistId]?.songs ?: return
         val missing = entries
             .filterNot { DownloadRepository.isDownloaded(it.song.id) }
             .map { it.song.id to it.song.title }
@@ -97,7 +106,7 @@ class PlaylistDetailViewModel(
     }
 
     fun removePlaylistDownloads() {
-        val entries = (state.value as? PlaylistDetailUiState.Success)?.playlist?.songs ?: return
+        val entries = PlaylistsCache.details.value[playlistId]?.songs ?: return
         DownloadRepository.removeAll(entries.map { it.song.id })
     }
 
@@ -107,27 +116,20 @@ class PlaylistDetailViewModel(
      * either drops the row entirely or only the membership.
      */
     fun deleteOrLeave(onDone: (success: Boolean, isMember: Boolean) -> Unit) {
-        val current = (state.value as? PlaylistDetailUiState.Success)?.playlist
+        val current = PlaylistsCache.details.value[playlistId]
         val isMember = current?.isOwner == false
         viewModelScope.launch {
-            val ok = try {
-                repository.delete(playlistId); true
-            } catch (_: Throwable) { false }
+            val ok = runCatching { PlaylistsCache.delete(playlistId) }.isSuccess
             onDone(ok, isMember)
         }
     }
 
     fun toggleAutoSync() {
-        val current = (state.value as? PlaylistDetailUiState.Success)?.playlist ?: return
+        val current = PlaylistsCache.details.value[playlistId] ?: return
         val next = !current.autoSync
-        // Optimistic flip so the icon doesn't lag the tap; on failure we
-        // refresh() and the server's value reasserts.
-        _state.value = PlaylistDetailUiState.Success(current.copy(autoSync = next))
         viewModelScope.launch {
             try {
-                repository.setAutoSync(playlistId, next)
-                // If the toggle just turned on, kick the runner so the user
-                // doesn't have to wait for the next cold launch.
+                PlaylistsCache.setAutoSync(playlistId, next)
                 if (next) {
                     val missing = current.songs
                         .filterNot { DownloadRepository.isDownloaded(it.song.id) }
@@ -135,8 +137,14 @@ class PlaylistDetailViewModel(
                     DownloadRepository.downloadAllLabeled(missing)
                 }
             } catch (_: Throwable) {
+                // Cache rolls itself back; just refresh detail to catch
+                // anything else server-side that diverged.
                 refresh()
             }
         }
+    }
+
+    private companion object {
+        const val STOP_TIMEOUT_MS = 5_000L
     }
 }

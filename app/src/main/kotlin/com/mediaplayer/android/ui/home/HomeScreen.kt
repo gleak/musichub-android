@@ -66,6 +66,8 @@ import android.widget.Toast
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.ui.common.AppUpdateBannerHost
+import com.mediaplayer.android.ui.common.CollageCover
+import com.mediaplayer.android.ui.common.badgeFor
 import com.mediaplayer.android.update.AppUpdateChecker
 import kotlinx.coroutines.launch
 import com.mediaplayer.android.data.dto.SongDto
@@ -170,6 +172,9 @@ private fun HomeContent(
     onShowChangelog: () -> Unit,
     onProfileClick: () -> Unit,
 ) {
+    androidx.compose.runtime.LaunchedEffect(recents) {
+        com.mediaplayer.android.data.LikedSongsCache.prime(recents.map { it.id })
+    }
     var filter by remember { mutableStateOf(HomeFilter.All) }
 
     val artists = remember(recents) {
@@ -644,17 +649,37 @@ private fun ShortcutIcon(item: ShortcutItem) {
                 contentDescription = "${item.song.title}, ${item.song.artist}",
             )
             is ShortcutItem.Playlist -> {
+                val pl = item.playlist
+                val firstCover = pl.coverSongId ?: pl.coverSongIds.firstOrNull()
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                        .background(
+                            if (pl.isAuto) com.mediaplayer.android.ui.common.autoPlaylistGradient(pl.kind)
+                            else Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                                )
+                            )
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (firstCover != null) {
+                        AsyncImage(
+                            model = Network.coverUrl(firstCover),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (pl.isAuto) Icons.Filled.AutoAwesome
+                            else Icons.AutoMirrored.Filled.QueueMusic,
+                            contentDescription = null,
+                            tint = if (pl.isAuto) Color.White
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
@@ -726,33 +751,43 @@ private fun PlaylistCardSquare(playlist: PlaylistDto, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(CoverShapes.SongRow)
-                .background(
-                    if (playlist.isAuto) {
-                        com.mediaplayer.android.ui.common.autoPlaylistGradient(playlist.kind)
-                    } else {
+        val coverModifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+        when {
+            playlist.isAuto -> CollageCover(
+                kind = playlist.kind,
+                badge = badgeFor(playlist.kind),
+                songIds = playlist.coverSongIds,
+                subtitle = null,
+                modifier = coverModifier,
+                cornerRadius = 6.dp,
+            )
+            playlist.coverSongId != null -> AsyncImage(
+                model = Network.coverUrl(playlist.coverSongId),
+                contentDescription = null,
+                modifier = coverModifier.clip(CoverShapes.SongRow),
+            )
+            else -> Box(
+                modifier = coverModifier
+                    .clip(CoverShapes.SongRow)
+                    .background(
                         Brush.linearGradient(
                             listOf(
                                 MaterialTheme.colorScheme.surfaceVariant,
                                 MaterialTheme.colorScheme.surfaceVariant,
                             )
                         )
-                    }
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = if (playlist.isAuto) Icons.Filled.AutoAwesome
-                else Icons.AutoMirrored.Filled.QueueMusic,
-                contentDescription = null,
-                tint = if (playlist.isAuto) Color.White
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(48.dp),
-            )
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(48.dp),
+                )
+            }
         }
         Text(
             text = playlist.name,
@@ -887,6 +922,7 @@ private fun PlaylistListRow(playlist: PlaylistDto, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val firstCover = playlist.coverSongId ?: playlist.coverSongIds.firstOrNull()
         Box(
             modifier = Modifier
                 .size(52.dp)
@@ -905,14 +941,22 @@ private fun PlaylistListRow(playlist: PlaylistDto, onClick: () -> Unit) {
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = if (playlist.isAuto) Icons.Filled.AutoAwesome
-                else Icons.AutoMirrored.Filled.QueueMusic,
-                contentDescription = null,
-                tint = if (playlist.isAuto) Color.White
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp),
-            )
+            if (firstCover != null) {
+                AsyncImage(
+                    model = Network.coverUrl(firstCover),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Icon(
+                    imageVector = if (playlist.isAuto) Icons.Filled.AutoAwesome
+                    else Icons.AutoMirrored.Filled.QueueMusic,
+                    contentDescription = null,
+                    tint = if (playlist.isAuto) Color.White
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {

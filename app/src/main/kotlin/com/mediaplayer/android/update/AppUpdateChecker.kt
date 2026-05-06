@@ -27,6 +27,21 @@ object AppUpdateChecker {
     private val _state = MutableStateFlow<AppUpdateDto?>(null)
     val state: StateFlow<AppUpdateDto?> = _state.asStateFlow()
 
+    /**
+     * Bumped every time the UI should draw the user's eye to a freshly-
+     * surfaced update banner — typically after a manual "Controlla
+     * aggiornamenti" tap that returned [ManualResult.Updated]. The banner
+     * subscribes and runs a short bounce animation each time the value
+     * changes. Counter rather than Boolean so two consecutive
+     * forceCheck-Updated calls both trigger an animation.
+     */
+    private val _attentionTick = MutableStateFlow(0)
+    val attentionTick: StateFlow<Int> = _attentionTick.asStateFlow()
+
+    fun requestAttention() {
+        _attentionTick.value = _attentionTick.value + 1
+    }
+
     sealed interface ManualResult {
         /** A new version is available; the dialog state has been refreshed. */
         data object Updated : ManualResult

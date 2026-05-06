@@ -19,13 +19,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddToPhotos
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.ThumbDown
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mediaplayer.android.data.LikedSongsCache
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,7 +56,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.mediaplayer.android.data.PlaylistRepository
+import com.mediaplayer.android.data.DislikedSongsCache
+import com.mediaplayer.android.data.PlaylistsCache
 import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.ui.common.EmptyState
 import com.mediaplayer.android.ui.common.friendlyMessage
@@ -80,7 +86,6 @@ fun AddToPlaylistSheet(
     songId: Long,
     songArtist: String = "",
     songHasCoverArt: Boolean = true,
-    repository: PlaylistRepository = remember { PlaylistRepository() },
     onPlayNext: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
     onDownload: (() -> Unit)? = null,
@@ -93,28 +98,38 @@ fun AddToPlaylistSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
 
-    var loading by remember { mutableStateOf(true) }
-    var playlists by remember { mutableStateOf<List<PlaylistDto>>(emptyList()) }
+    val cachedPlaylists by PlaylistsCache.playlists.collectAsStateWithLifecycle()
+    val cacheLoading by PlaylistsCache.initialLoading.collectAsStateWithLifecycle()
+    val cacheError by PlaylistsCache.listError.collectAsStateWithLifecycle()
+    val cachedDetails by PlaylistsCache.details.collectAsStateWithLifecycle()
+    val playlists = remember(cachedPlaylists) { cachedPlaylists.filterNot { it.isAuto } }
+    val loading = cacheLoading && playlists.isEmpty()
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(cacheError) {
+        cacheError?.takeIf { playlists.isEmpty() }?.let {
+            errorMessage = friendlyMessage(it)
+        }
+    }
     var createOpen by remember { mutableStateOf(false) }
     var flagConfirmOpen by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        loading = true
-        errorMessage = null
-        try {
-            playlists = repository.list().filterNot { it.isAuto }
-        } catch (t: Throwable) {
-            errorMessage = friendlyMessage(t)
-        } finally {
-            loading = false
-        }
+    LaunchedEffect(Unit) { PlaylistsCache.primeIfEmpty() }
+
+    // Set of playlist ids the song already belongs to. Backed by whatever
+    // detail entries have been loaded — primary source is the kebab being
+    // opened on a playlist's detail screen. We don't fan out N detail
+    // requests just to populate checkmarks; a missing checkmark is a
+    // false negative, never a false positive.
+    val membershipIds = remember(cachedDetails, songId) {
+        cachedDetails.values
+            .filter { detail -> detail.songs.any { it.song.id == songId } }
+            .mapTo(hashSetOf()) { it.id }
     }
 
     fun addTo(playlist: PlaylistDto) {
         scope.launch {
             try {
-                repository.addSong(playlist.id, songId)
+                PlaylistsCache.addSong(playlist.id, songId)
                 onAdded(playlist.name)
                 onDismiss()
             } catch (t: Throwable) {
@@ -158,13 +173,38 @@ fun AddToPlaylistSheet(
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
             )
 
-            // Auxiliary track-actions block — only when callbacks supplied.
+            // Auxiliary track-actions block. Like row is always present so
+            // every kebab surface (artist/album/playlist/queue/liked/search)
+            // can like-toggle the song without a separate plumbing per
+            // screen. The other rows still gate on caller-supplied callbacks.
+            LaunchedEffect(songId) { LikedSongsCache.prime(listOf(songId)) }
+            val likedIds by LikedSongsCache.likedIds.collectAsStateWithLifecycle()
+            val isLiked = songId in likedIds
+            Spacer(Modifier.size(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            QueueActionRow(
+                label = if (isLiked) "Rimuovi dai preferiti" else "Aggiungi ai preferiti",
+                icon = {
+                    Icon(
+                        imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = null,
+                        tint = if (isLiked) MaterialTheme.colorScheme.primary
+                               else MaterialTheme.colorScheme.onSurface,
+                    )
+                },
+                onClick = {
+                    val label = listOfNotNull(
+                        songTitle.takeIf { it.isNotBlank() },
+                        songArtist.takeIf { it.isNotBlank() },
+                    ).joinToString(" — ").ifBlank { null }
+                    LikedSongsCache.toggle(songId, label)
+                    onDismiss()
+                },
+            )
             val anyAux = onPlayNext != null || onAddToQueue != null ||
                 onDownload != null || onDislikeSong != null ||
                 onDislikeArtist != null || onFlagWrong != null
             if (anyAux) {
-                Spacer(Modifier.size(8.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 onPlayNext?.let {
                     QueueActionRow(
                         label = "Riproduci dopo",
@@ -187,17 +227,49 @@ fun AddToPlaylistSheet(
                     )
                 }
                 onDislikeSong?.let {
+                    val dislikedSongs by DislikedSongsCache.dislikedSongIds.collectAsStateWithLifecycle()
+                    LaunchedEffect(songId) { DislikedSongsCache.primeSongs(listOf(songId)) }
+                    val songAlreadyExcluded = songId in dislikedSongs
                     QueueActionRow(
-                        label = "Non consigliarmi questo brano",
-                        icon = { Icon(Icons.Filled.ThumbDown, contentDescription = null) },
-                        onClick = { it(); onDismiss() },
+                        // Switch the label + tint when the song is already
+                        // excluded so the user knows the action is a no-op
+                        // rather than letting them re-click into the void.
+                        label = if (songAlreadyExcluded) "Brano già escluso"
+                                else "Non consigliarmi questo brano",
+                        icon = {
+                            Icon(
+                                Icons.Filled.ThumbDown,
+                                contentDescription = null,
+                                tint = if (songAlreadyExcluded) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurface,
+                            )
+                        },
+                        onClick = {
+                            if (!songAlreadyExcluded) it()
+                            onDismiss()
+                        },
                     )
                 }
                 onDislikeArtist?.let {
+                    val dislikedArtists by DislikedSongsCache.dislikedArtists.collectAsStateWithLifecycle()
+                    LaunchedEffect(Unit) { DislikedSongsCache.primeArtists() }
+                    val artistAlreadyExcluded =
+                        songArtist.trim().lowercase() in dislikedArtists
                     QueueActionRow(
-                        label = "Non consigliarmi questo artista",
-                        icon = { Icon(Icons.Filled.PersonOff, contentDescription = null) },
-                        onClick = { it(); onDismiss() },
+                        label = if (artistAlreadyExcluded) "Artista già escluso"
+                                else "Non consigliarmi questo artista",
+                        icon = {
+                            Icon(
+                                Icons.Filled.PersonOff,
+                                contentDescription = null,
+                                tint = if (artistAlreadyExcluded) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurface,
+                            )
+                        },
+                        onClick = {
+                            if (!artistAlreadyExcluded) it()
+                            onDismiss()
+                        },
                     )
                 }
                 onFlagWrong?.let { _ ->
@@ -213,8 +285,8 @@ fun AddToPlaylistSheet(
                         onClick = { flagConfirmOpen = true },
                     )
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Search-by-playlist-name field.
             OutlinedTextField(
@@ -284,6 +356,7 @@ fun AddToPlaylistSheet(
                         items(items = filteredPlaylists, key = { it.id }) { p ->
                             PlaylistPickerRow(
                                 playlist = p,
+                                alreadyContainsSong = p.id in membershipIds,
                                 onClick = { addTo(p) },
                             )
                         }
@@ -353,8 +426,8 @@ fun AddToPlaylistSheet(
             onConfirm = { name ->
                 scope.launch {
                     try {
-                        val created = repository.create(name)
-                        repository.addSong(created.id, songId)
+                        val created = PlaylistsCache.create(name)
+                        PlaylistsCache.addSong(created.id, songId)
                         onAdded(created.name)
                         createOpen = false
                         onDismiss()
@@ -371,6 +444,7 @@ fun AddToPlaylistSheet(
 @Composable
 private fun PlaylistPickerRow(
     playlist: PlaylistDto,
+    alreadyContainsSong: Boolean,
     onClick: () -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
@@ -432,16 +506,35 @@ private fun PlaylistPickerRow(
             )
         }
         Spacer(Modifier.width(8.dp))
-        // Radio-style trailing dot — empty circle, fills with accent on tap-to-confirm.
-        Box(
-            modifier = Modifier
-                .size(22.dp)
-                .border(
-                    width = 1.5.dp,
-                    color = accent.copy(alpha = 0.6f),
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                ),
-        )
+        if (alreadyContainsSong) {
+            // Filled lime circle with check — the song is already in this
+            // playlist. Tapping still re-adds (backend dedupes), but the
+            // affordance tells the user nothing useful will happen.
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .background(accent, shape = androidx.compose.foundation.shape.CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = "Già in questa playlist",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        } else {
+            // Empty circle — empty radio dot to signal a tappable destination.
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .border(
+                        width = 1.5.dp,
+                        color = accent.copy(alpha = 0.6f),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                    ),
+            )
+        }
     }
 }
 

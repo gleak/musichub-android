@@ -27,7 +27,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,13 +37,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mediaplayer.android.data.DislikedRepository
+import com.mediaplayer.android.data.DislikedSongsCache
 import com.mediaplayer.android.data.dto.SongDto
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mediaplayer.android.ui.common.EmptyState
 import com.mediaplayer.android.ui.common.SongCover
 import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.theme.LocalMHMono
 import com.mediaplayer.android.ui.theme.MHColors
-import kotlinx.coroutines.launch
 
 /**
  * "Non consigliati" — mockup `mh-settings.jsx:156-207`. Pill tabs with
@@ -55,21 +55,36 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun DislikedScreen(onBack: () -> Unit) {
+    // Repository still owns the *paged* full-row reads (cache only holds
+    // ids). Mutations route through the shared [DislikedSongsCache] so
+    // an "Excludi" performed in any kebab and a "Ripristina" tapped here
+    // both flow through the same StateFlow.
     val repo = remember { DislikedRepository() }
-    val scope = rememberCoroutineScope()
     var tab by remember { mutableIntStateOf(0) }
 
-    var songs by remember { mutableStateOf<List<SongDto>>(emptyList()) }
-    var artists by remember { mutableStateOf<List<String>>(emptyList()) }
+    var loadedSongs by remember { mutableStateOf<List<SongDto>>(emptyList()) }
+    var loadedArtists by remember { mutableStateOf<List<String>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val dislikedIds by DislikedSongsCache.dislikedSongIds.collectAsStateWithLifecycle()
+    val dislikedArtistsKey by DislikedSongsCache.dislikedArtists.collectAsStateWithLifecycle()
+    // Drop rows the user has restored elsewhere — keeps the list honest
+    // with the cache without waiting for the next refresh.
+    val songs = loadedSongs.filter { it.id in dislikedIds }
+    val artists = loadedArtists.filter { it.trim().lowercase() in dislikedArtistsKey }
 
     suspend fun reload() {
         loading = true
         errorMessage = null
         try {
-            songs = repo.dislikedSongs(page = 0, size = 50).items
-            artists = repo.dislikedArtists()
+            val freshSongs = repo.dislikedSongs(page = 0, size = 50).items
+            val freshArtists = repo.dislikedArtists()
+            loadedSongs = freshSongs
+            loadedArtists = freshArtists
+            // Confirmed disliked — seed the cache so kebab affordances
+            // elsewhere reflect ground truth without a follow-up request.
+            freshSongs.forEach { DislikedSongsCache.markSongDisliked(it.id, true) }
         } catch (t: Throwable) {
             errorMessage = t.message ?: "Errore di rete"
         } finally {
@@ -102,18 +117,12 @@ fun DislikedScreen(onBack: () -> Unit) {
             0 -> DislikedSongsList(
                 loading = loading,
                 songs = songs,
-                onRestore = { song ->
-                    songs = songs.filterNot { it.id == song.id }
-                    scope.launch { repo.undislikeSong(song.id) }
-                },
+                onRestore = { song -> DislikedSongsCache.undislikeSong(song.id) },
             )
             else -> DislikedArtistsList(
                 loading = loading,
                 artists = artists,
-                onRestore = { name ->
-                    artists = artists.filterNot { it.equals(name, ignoreCase = true) }
-                    scope.launch { repo.undislikeArtist(name) }
-                },
+                onRestore = { name -> DislikedSongsCache.undislikeArtist(name) },
             )
         }
     }

@@ -12,7 +12,6 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.Network
-import com.mediaplayer.android.data.PlaylistAutoSyncRunner
 import com.mediaplayer.android.data.sync.EventQueue
 import com.mediaplayer.android.data.sync.ReadCache
 import com.mediaplayer.android.playback.PlayerConnection
@@ -44,10 +43,6 @@ class MediaPlayerApp : Application(), SingletonImageLoader.Factory {
         EventQueue.start()
         PlayerConnection.connect(this)
         DownloadRepository.init()
-        // Per-playlist auto-sync: enqueue downloads for any tracks added
-        // to a flagged playlist while the app was closed. Fire-and-forget
-        // — the runner blocks on its own IO scope and tolerates offline.
-        PlaylistAutoSyncRunner.run()
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =

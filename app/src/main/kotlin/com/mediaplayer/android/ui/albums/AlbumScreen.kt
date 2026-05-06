@@ -119,7 +119,7 @@ fun AlbumScreen(
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val downloadedIds by viewModel.downloadedIds.collectAsStateWithLifecycle()
 
-    var sheetSong by remember { mutableStateOf<SongDto?>(null) }
+    val kebab = com.mediaplayer.android.ui.common.rememberSongKebab()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -154,27 +154,16 @@ fun AlbumScreen(
                         if (songs.isNotEmpty())
                             onPlayFromIndex(songs.shuffled(), 0)
                     },
-                    onMoreSong = { song -> sheetSong = song },
+                    onMoreSong = { song -> kebab.open(song) },
                 )
             }
         }
     }
 
-    sheetSong?.let { song ->
-        val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(song.id, song.artist)
-        val flagWrong = com.mediaplayer.android.ui.common.rememberFlagWrongAction(
-            songId = song.id,
-            onFlagged = { viewModel.retry() },
-        )
-        AddToPlaylistSheet(
-            songTitle = song.title,
-            songId = song.id,
-            onDislikeSong = dislike.song(),
-            onDislikeArtist = dislike.artist(),
-            onFlagWrong = flagWrong,
-            onDismiss = { sheetSong = null },
-        )
-    }
+    com.mediaplayer.android.ui.common.SongKebabSheet(
+        state = kebab,
+        onFlagged = { viewModel.retry() },
+    )
 }
 
 @Composable
@@ -185,6 +174,9 @@ private fun AlbumBody(
     onShufflePlay: (List<SongDto>) -> Unit,
     onMoreSong: (SongDto) -> Unit,
 ) {
+    androidx.compose.runtime.LaunchedEffect(detail.songs) {
+        com.mediaplayer.android.data.LikedSongsCache.prime(detail.songs.map { it.id })
+    }
     val coverModel = detail.songs.firstOrNull { it.hasCoverArt }?.let { Network.coverUrl(it.id) }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item(key = "header") {

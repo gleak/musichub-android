@@ -176,18 +176,11 @@ fun ArtistListScreen(
                             CenteredMessage("Nessun artista nel catalogo.")
                         } else {
                         val listState = rememberLazyListState()
-                        LaunchedEffect(listState, s.artists.size, s.endReached) {
-                            if (s.endReached) return@LaunchedEffect
-                            snapshotFlow {
-                                val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
-                                    ?: return@snapshotFlow false
-                                val total = listState.layoutInfo.totalItemsCount
-                                total > 0 && last >= total - 5
-                            }
-                                .distinctUntilChanged()
-                                .filter { it }
-                                .collect { viewModel.loadMore() }
-                        }
+                        com.mediaplayer.android.ui.common.PrefetchNearEnd(
+                            listState = listState,
+                            enabled = !s.endReached,
+                            onLoadMore = { viewModel.loadMore() },
+                        )
                         Row(modifier = Modifier.fillMaxSize()) {
                             LazyColumn(
                                 state = listState,

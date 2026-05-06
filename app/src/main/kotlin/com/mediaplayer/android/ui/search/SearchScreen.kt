@@ -96,13 +96,12 @@ fun SearchScreen(
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val likedIds by viewModel.likedIds.collectAsStateWithLifecycle()
     val downloadedIds by viewModel.downloadedIds.collectAsStateWithLifecycle()
     val recentSongs by viewModel.recentSongs.collectAsStateWithLifecycle()
     val recentQueries by viewModel.recentQueries.collectAsStateWithLifecycle()
     val activeGenre by viewModel.activeGenre.collectAsStateWithLifecycle()
 
-    var sheetSong by remember { mutableStateOf<SongDto?>(null) }
+    val kebab = com.mediaplayer.android.ui.common.rememberSongKebab()
     val snackbar = remember { SnackbarHostState() }
     var lastAdded by remember { mutableStateOf<String?>(null) }
 
@@ -184,6 +183,9 @@ fun SearchScreen(
                     SongListShimmer()
                 }
                 is SearchUiState.Success -> {
+                    LaunchedEffect(s.songs) {
+                        com.mediaplayer.android.data.LikedSongsCache.prime(s.songs.map { it.id })
+                    }
                     if (s.songs.isEmpty()) {
                         Column(modifier = Modifier.fillMaxSize()) {
                             activeGenre?.let { GenreFilterPill(name = it, onClear = viewModel::clearGenre) }
@@ -208,17 +210,9 @@ fun SearchScreen(
                                 SongRow(
                                     song = song,
                                     onClick = { onSongClick(song) },
-                                    isLiked = song.id in likedIds,
-                                    onToggleLike = {
-                                        val label = listOfNotNull(
-                                            song.title.takeIf { it.isNotBlank() },
-                                            song.artist.takeIf { it.isNotBlank() },
-                                        ).joinToString(" — ").ifBlank { null }
-                                        viewModel.toggleLike(song.id, label)
-                                    },
                                     isDownloaded = song.id in downloadedIds,
                                     onArtistClick = onArtistClick,
-                                    onMore = { sheetSong = song },
+                                    onMore = { kebab.open(song) },
                                 )
                             }
                         }
@@ -237,27 +231,14 @@ fun SearchScreen(
         }
     }
 
-    sheetSong?.let { song ->
-        val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(song.id, song.artist)
-        val flagWrong = com.mediaplayer.android.ui.common.rememberFlagWrongAction(
-            songId = song.id,
-            onFlagged = { viewModel.retry() },
-        )
-        AddToPlaylistSheet(
-            songTitle = song.title,
-            songId = song.id,
-            onPlayNext = onPlayNext?.let { cb -> { cb(song); sheetSong = null } },
-            onAddToQueue = onAddToQueue?.let { cb -> { cb(song); sheetSong = null } },
-            onDownload = { viewModel.toggleDownload(song.id, song.title) },
-            onDislikeSong = dislike.song(),
-            onDislikeArtist = dislike.artist(),
-            onFlagWrong = flagWrong,
-            onDismiss = { sheetSong = null },
-            onAdded = { playlistName ->
-                lastAdded = "Added to $playlistName"
-            },
-        )
-    }
+    com.mediaplayer.android.ui.common.SongKebabSheet(
+        state = kebab,
+        onPlayNext = onPlayNext?.let { cb -> { song -> cb(song) } },
+        onAddToQueue = onAddToQueue?.let { cb -> { song -> cb(song) } },
+        onDownload = { song -> viewModel.toggleDownload(song.id, song.title) },
+        onFlagged = { viewModel.retry() },
+        onAdded = { playlistName, _ -> lastAdded = "Added to $playlistName" },
+    )
 }
 
 // ---------- Search field ----------

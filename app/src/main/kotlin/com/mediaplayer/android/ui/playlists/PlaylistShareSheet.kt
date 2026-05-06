@@ -57,9 +57,6 @@ import kotlinx.coroutines.launch
  * earlier flow that fired `Intent.createChooser` directly from the
  * `TopAppBar` icon — the user never saw the URL itself, couldn't copy it
  * without picking a clipboard target, and had no surface to revoke from.
- *
- * Revoke is mockup-only for now: backend doesn't expose a delete-token
- * endpoint yet, so the action snackbars a "coming soon" notice.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

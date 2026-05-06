@@ -25,8 +25,6 @@ import androidx.compose.ui.graphics.Brush
 import com.mediaplayer.android.ui.theme.CoverShapes
 import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -78,7 +76,6 @@ fun MiniPlayer(
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val position by viewModel.positionMs.collectAsStateWithLifecycle()
     val duration by viewModel.durationMs.collectAsStateWithLifecycle()
-    val liked by viewModel.currentLiked.collectAsStateWithLifecycle()
 
     val current = song ?: return  // mini-player hidden until a track loads
     val haptics = LocalHapticFeedback.current
@@ -188,17 +185,14 @@ fun MiniPlayer(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            IconButton(onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                viewModel.toggleCurrentLike()
-            }) {
-                Icon(
-                    imageVector = if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    contentDescription = if (liked) "Rimuovi mi piace" else "Mi piace",
-                    tint = if (liked) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            com.mediaplayer.android.ui.common.LikeButton(
+                songId = current.id,
+                variant = com.mediaplayer.android.ui.common.LikeButtonVariant.Player,
+                // Route through the playback service so AA + notification
+                // heart icons stay in sync; the service mirrors back into
+                // the cache, so other surfaces still update instantly.
+                onToggleOverride = { viewModel.toggleCurrentLike() },
+            )
             FilledIconButton(
                 onClick = {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)

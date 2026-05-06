@@ -23,7 +23,9 @@ import coil3.SingletonImageLoader
 import coil3.memory.MemoryCache
 import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.HistoryRepository
+import com.mediaplayer.android.data.LikedSongsCache
 import com.mediaplayer.android.data.Network
+import com.mediaplayer.android.data.RecentsCache
 import com.mediaplayer.android.data.PlayerSettings
 import com.mediaplayer.android.data.SongRepository
 import com.mediaplayer.android.data.dto.SongDto
@@ -434,8 +436,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     extras.getLong(MediaPlaybackService.EXTRA_SLEEP_REMAINING_MS, 0L)
                 _sleepTimerEndOfTrack.value =
                     extras.getBoolean(MediaPlaybackService.EXTRA_SLEEP_END_OF_TRACK, false)
-                _currentLiked.value =
-                    extras.getBoolean(MediaPlaybackService.EXTRA_LIKED, false)
+                val liked = extras.getBoolean(MediaPlaybackService.EXTRA_LIKED, false)
+                _currentLiked.value = liked
+                // Keep the shared cache in sync with the service-resolved
+                // truth so heart icons elsewhere (rows, kebab sheet) match
+                // the player's heart instantly.
+                _currentSong.value?.id?.let { LikedSongsCache.markLiked(it, liked) }
             }
         }
     }
@@ -983,7 +989,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
      */
     fun toggleCurrentLike() {
         val c = controller ?: return
-        _currentLiked.value = !_currentLiked.value
+        val newLiked = !_currentLiked.value
+        _currentLiked.value = newLiked
+        // Flip the shared cache too so every other surface (rows, kebab
+        // sheet, mini-player) updates instantly without waiting for the
+        // service's session-extras roundtrip.
+        _currentSong.value?.id?.let { LikedSongsCache.markLiked(it, newLiked) }
         c.sendCustomCommand(
             SessionCommand(MediaPlaybackService.ACTION_TOGGLE_LIKE, android.os.Bundle.EMPTY),
             android.os.Bundle.EMPTY,
@@ -1052,6 +1063,16 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 displayLabel = playLabel,
             )
         }
+        // Optimistically push to the shared recents cache so Home + Search
+        // carousels reflect the play immediately. Skip micro-skips: only
+        // count plays that pass the full-play threshold (matches what the
+        // backend's /recent eventually emits).
+        if (countsAsFullPlay) {
+            // _currentSong still points to the song that just played —
+            // onMediaItemTransition assigns the new SongDto only after
+            // maybeRecordPlay returns.
+            _currentSong.value?.takeIf { it.id == id }?.let(RecentsCache::markPlayed)
+        }
         // Auto-download every song the user actually starts (listened > 0,
         // already gated above). Setting toggles whether we cache at all.
         val title = trackedSongTitle
@@ -1101,6 +1122,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             wasSkipped = false,
             displayLabel = flushLabel,
         )
+        // Optimistically prepend in the shared cache (same gate as the
+        // historyRepository call above — only full plays, no skips).
+        _currentSong.value?.takeIf { it.id == id }?.let(RecentsCache::markPlayed)
         if (PlayerSettings.instance.downloadAutoNow() &&
             !DownloadRepository.isDownloaded(id)
         ) {

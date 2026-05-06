@@ -285,14 +285,16 @@ object EventQueue {
                 continue
             }
             for (row in rows) {
+                Log.w(TAG, "dispatch ${row.type} id=${row.id} payload=${row.payload}")
                 val outcome = runCatching { dispatch(api, row) }
                 if (outcome.isSuccess) {
+                    Log.w(TAG, "dispatch ${row.type} id=${row.id} OK")
                     delete(row.id)
                 } else {
                     val attempts = row.attempts + 1
                     val backoff = min(MAX_BACKOFF_MS, 1_000L * (1L shl min(attempts, 8)))
                     bumpFailure(row.id, attempts, outcome.exceptionOrNull()?.message, backoff)
-                    Log.d(TAG, "dispatch ${row.type} id=${row.id} failed: ${outcome.exceptionOrNull()?.message}")
+                    Log.w(TAG, "dispatch ${row.type} id=${row.id} FAILED: ${outcome.exceptionOrNull()?.message}")
                     // Network just proved bad — bail out, the interceptor
                     // already flipped ConnectivityObserver, outer loop
                     // re-blocks until it flips back.

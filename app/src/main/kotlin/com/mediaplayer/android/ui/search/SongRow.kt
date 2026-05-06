@@ -4,7 +4,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,12 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FileDownloadDone
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,12 +21,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.ui.common.LikeButton
+import com.mediaplayer.android.ui.common.LikeButtonVariant
 import com.mediaplayer.android.ui.common.LocalNowPlaying
 import com.mediaplayer.android.ui.common.MHPlayingBars
 import com.mediaplayer.android.ui.common.SongCover
@@ -43,11 +38,15 @@ import com.mediaplayer.android.ui.theme.MHColors
 fun SongRow(
     song: SongDto,
     onClick: () -> Unit = {},
-    isLiked: Boolean = false,
-    onToggleLike: (() -> Unit)? = null,
     isDownloaded: Boolean = false,
     onArtistClick: ((String) -> Unit)? = null,
     onMore: (() -> Unit)? = null,
+    /**
+     * Hide the heart on rows where it would be redundant or confusing
+     * (e.g. queue rows that already show a remove-from-queue button).
+     * The heart is on by default — every list row should expose like.
+     */
+    showLike: Boolean = true,
     modifier: Modifier = Modifier,
     rowGestureModifier: Modifier = Modifier,
     /**
@@ -106,25 +105,16 @@ fun SongRow(
 
         Spacer(Modifier.width(6.dp))
 
-        if (onToggleLike != null) {
-            val haptics = LocalHapticFeedback.current
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onToggleLike()
-                    }
-                    .padding(4.dp),
-            ) {
-                Icon(
-                    imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = if (isLiked) "Rimuovi mi piace" else "Mi piace",
-                    tint = if (isLiked) MaterialTheme.colorScheme.primary
-                           else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
+        if (showLike) {
+            val label = listOfNotNull(
+                song.title.takeIf { it.isNotBlank() },
+                song.artist.takeIf { it.isNotBlank() },
+            ).joinToString(" — ").ifBlank { null }
+            LikeButton(
+                songId = song.id,
+                variant = LikeButtonVariant.Row,
+                displayLabel = label,
+            )
         }
 
         if (onMore != null) {

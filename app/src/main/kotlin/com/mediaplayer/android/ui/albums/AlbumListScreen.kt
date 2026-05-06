@@ -203,22 +203,15 @@ fun AlbumListScreen(
                             }
                         }
                         val gridState = rememberLazyGridState()
-                        LaunchedEffect(gridState, s.albums.size, s.endReached) {
-                            // Pause server-paged load-more while the user is
-                            // searching: the in-memory filter would otherwise
-                            // request more pages even when the visible result
-                            // set is tiny.
-                            if (s.endReached || query.isNotBlank()) return@LaunchedEffect
-                            snapshotFlow {
-                                val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
-                                    ?: return@snapshotFlow false
-                                val total = gridState.layoutInfo.totalItemsCount
-                                total > 0 && last >= total - 6
-                            }
-                                .distinctUntilChanged()
-                                .filter { it }
-                                .collect { viewModel.loadMore() }
-                        }
+                        // Pause server-paged load-more while the user is
+                        // searching: the in-memory filter would otherwise
+                        // request more pages even when the visible result
+                        // set is tiny.
+                        com.mediaplayer.android.ui.common.PrefetchNearEnd(
+                            gridState = gridState,
+                            enabled = !s.endReached && query.isBlank(),
+                            onLoadMore = { viewModel.loadMore() },
+                        )
                         LazyVerticalGrid(
                             state = gridState,
                             columns = GridCells.Fixed(2),

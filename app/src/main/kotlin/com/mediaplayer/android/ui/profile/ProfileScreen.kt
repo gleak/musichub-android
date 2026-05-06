@@ -38,6 +38,10 @@ import kotlinx.coroutines.launch
 import com.mediaplayer.android.data.PlaylistRepository
 import com.mediaplayer.android.data.dto.UserDto
 import com.mediaplayer.android.data.sync.EventQueue
+import com.mediaplayer.android.data.Network
+import com.mediaplayer.android.update.AppUpdateRepository
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -89,6 +93,10 @@ fun ProfileScreen(
     val scope = rememberCoroutineScope()
     var dailyMixDetail by remember { mutableStateOf("Aggiorna ora") }
     var dailyMixBusy by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val appUpdateRepo = remember { AppUpdateRepository() }
+    var inviteBusy by remember { mutableStateOf(false) }
 
     // Confirmation gate for sign-out — both Disconnetti and Cambia
     // account funnel through here so an accidental tap doesn't drop
@@ -168,7 +176,6 @@ fun ProfileScreen(
         item { Spacer(Modifier.height(16.dp)) }
 
         item {
-            // Stats — placeholder counts, wire to ViewModel later
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -254,6 +261,34 @@ fun ProfileScreen(
                     label = "Eventi in coda",
                     detail = if (pending == 0) "Tutto sincronizzato" else "$pending in attesa",
                     onClick = { onOpenSetting("profile/queued-events") },
+                )
+                SettingsRow(
+                    label = "Invita un amico",
+                    detail = if (inviteBusy) "Preparazione link…" else "Condividi l'app",
+                    onClick = if (inviteBusy) null else {
+                        {
+                            inviteBusy = true
+                            scope.launch {
+                                val manifest = runCatching { appUpdateRepo.latest() }.getOrNull()
+                                val downloadUrl = manifest?.url ?: Network.baseUrl
+                                val text = buildString {
+                                    append("Prova MusicHub — il media player che uso.\n")
+                                    append("Scarica l'APK: ")
+                                    append(downloadUrl)
+                                }
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, "MusicHub — invito")
+                                    putExtra(Intent.EXTRA_TEXT, text)
+                                }
+                                val chooser = Intent.createChooser(send, "Invita un amico").apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                runCatching { context.startActivity(chooser) }
+                                inviteBusy = false
+                            }
+                        }
+                    },
                 )
                 SettingsRow(label = "Versione", detail = "v${AppVersion.VERSION}")
             }

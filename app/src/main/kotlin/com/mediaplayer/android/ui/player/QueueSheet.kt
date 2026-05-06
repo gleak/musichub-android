@@ -61,7 +61,7 @@ fun QueueSheet(
     val queue by viewModel.queue.collectAsStateWithLifecycle()
     val shuffleEnabled by viewModel.shuffleEnabled.collectAsStateWithLifecycle()
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
-    var sheetSong by remember { mutableStateOf<SongDto?>(null) }
+    val kebab = com.mediaplayer.android.ui.common.rememberSongKebab()
 
     // Spotify-style split: hide everything before the current item,
     // surface the user queue first, then the rest of the source.
@@ -145,7 +145,7 @@ fun QueueSheet(
                                 QueueRow(
                                     entry = current,
                                     onClick = { viewModel.skipToQueueItem(current.index) },
-                                    onMore = { sheetSong = current.song },
+                                    onMore = { kebab.open(current.song) },
                                     onRemove = null,
                                     highlight = true,
                                 )
@@ -164,7 +164,7 @@ fun QueueSheet(
                                 QueueRow(
                                     entry = entry,
                                     onClick = { viewModel.skipToQueueItem(entry.index) },
-                                    onMore = { sheetSong = entry.song },
+                                    onMore = { kebab.open(entry.song) },
                                     onRemove = { viewModel.removeFromQueue(entry.index) },
                                     highlight = false,
                                 )
@@ -183,7 +183,7 @@ fun QueueSheet(
                                 QueueRow(
                                     entry = entry,
                                     onClick = { viewModel.skipToQueueItem(entry.index) },
-                                    onMore = { sheetSong = entry.song },
+                                    onMore = { kebab.open(entry.song) },
                                     onRemove = { viewModel.removeFromQueue(entry.index) },
                                     highlight = false,
                                 )
@@ -221,19 +221,13 @@ fun QueueSheet(
         }
     }
 
-    sheetSong?.let { song ->
-        val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(song.id, song.artist)
-        AddToPlaylistSheet(
-            songTitle = song.title,
-            songId = song.id,
-            songArtist = song.artist,
-            songHasCoverArt = song.hasCoverArt,
-            onDislikeSong = dislike.song(),
-            onDislikeArtist = dislike.artist(),
-            onFlagWrong = { viewModel.flagWrong(song.id) },
-            onDismiss = { sheetSong = null },
-        )
-    }
+    com.mediaplayer.android.ui.common.SongKebabSheet(
+        state = kebab,
+        // Queue's flag-wrong both reports the song AND prunes flagged
+        // entries from the active timeline — bypass the standard
+        // SongRepository-only flow.
+        flagWrongOverride = { song -> viewModel.flagWrong(song.id) },
+    )
 }
 
 @Composable
@@ -313,6 +307,9 @@ private fun QueueRow(
             song = entry.song,
             onClick = onClick,
             onMore = onMore,
+            // Queue rows already crowd the trailing area with a remove-from-queue
+            // affordance — drop the heart here and route like via the kebab.
+            showLike = false,
             modifier = Modifier.weight(1f),
         )
         if (onRemove != null) {

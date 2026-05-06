@@ -23,8 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Equalizer
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
@@ -155,7 +153,6 @@ private fun NowPlayingContent(
     val shuffleEnabled by viewModel.shuffleEnabled.collectAsStateWithLifecycle()
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
     val sleepActive by viewModel.sleepTimerActive.collectAsStateWithLifecycle()
-    val liked by viewModel.currentLiked.collectAsStateWithLifecycle()
     val haptics = LocalHapticFeedback.current
     val redownloading by viewModel.redownloading.collectAsStateWithLifecycle()
     val redownloadError by viewModel.redownloadError.collectAsStateWithLifecycle()
@@ -173,6 +170,8 @@ private fun NowPlayingContent(
         LaunchedEffect(Unit) { onDismiss() }
         return
     }
+
+    val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(current.id, current.artist)
 
     var scrubValue by remember { mutableStateOf<Float?>(null) }
     var showQueue by remember { mutableStateOf(false) }
@@ -354,16 +353,13 @@ private fun NowPlayingContent(
                         } else Modifier,
                     )
                 }
-                IconButton(onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    viewModel.toggleCurrentLike()
-                }) {
-                    Icon(
-                        imageVector = if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                        contentDescription = if (liked) "Rimuovi mi piace" else "Mi piace",
-                        tint = if (liked) MaterialTheme.colorScheme.primary else MHColors.OnHero,
-                    )
-                }
+                com.mediaplayer.android.ui.common.LikeButton(
+                    songId = current.id,
+                    variant = com.mediaplayer.android.ui.common.LikeButtonVariant.Hero,
+                    // Route through the service so AA + notification heart
+                    // stay in sync. The service mirrors back into the cache.
+                    onToggleOverride = { viewModel.toggleCurrentLike() },
+                )
             }
 
             Spacer(Modifier.height(MediaPlayerSpacing.M))
@@ -605,6 +601,22 @@ private fun NowPlayingContent(
                                 onClick = {
                                     overflowOpen = false
                                     onTrim()
+                                },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Non consigliarmi questo brano") },
+                            onClick = {
+                                overflowOpen = false
+                                dislike.song().invoke()
+                            },
+                        )
+                        if (current.artist.isNotBlank()) {
+                            DropdownMenuItem(
+                                text = { Text("Non consigliarmi questo artista") },
+                                onClick = {
+                                    overflowOpen = false
+                                    dislike.artist().invoke()
                                 },
                             )
                         }
