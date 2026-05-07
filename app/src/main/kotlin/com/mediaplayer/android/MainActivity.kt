@@ -162,6 +162,17 @@ private fun AuthGate(
             com.mediaplayer.android.ui.auth.AuthProbeScreen(stage = s.stage)
         }
         is AuthViewModel.State.SignedIn -> {
+            // Telemetry: report installed versionName as soon as we have a
+            // session — before the onboarding gate, otherwise first-install
+            // registrants don't show up in /api/auth/version until they finish
+            // (or skip) onboarding. Fire-and-forget; keyed on user id so it
+            // re-fires on account switch.
+            LaunchedEffect(s.user.id) {
+                runCatching {
+                    Network.api.reportAppVersion(AppVersionRequest(AppVersion.VERSION))
+                }
+            }
+
             // M14e: route fresh sign-ins through the tag picker before AppScaffold
             // so the recommender's cold-start path has GENRE seeds. The local
             // "dismissed" flag lets a user opt out without re-prompting on
@@ -341,12 +352,6 @@ private fun AppScaffold(
     // launch (rate-limited to once per 6h via SharedPreferences).
     val pendingUpdate by AppUpdateChecker.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { AppUpdateChecker.check(ctx) }
-
-    // Telemetry: report installed versionName once per cold launch.
-    // Fire-and-forget — failure here shouldn't block the UI.
-    LaunchedEffect(Unit) {
-        runCatching { Network.api.reportAppVersion(AppVersionRequest(AppVersion.VERSION)) }
-    }
 
     // Manual "Controlla aggiornamenti" handler — bypasses 6h rate-limit
     // and per-version dismissal. Updated → pop back to Home (where the
