@@ -29,6 +29,9 @@ import com.mediaplayer.android.data.RecentsCache
 import com.mediaplayer.android.data.PlayerSettings
 import com.mediaplayer.android.data.SongRepository
 import com.mediaplayer.android.data.dto.SongDto
+import com.mediaplayer.android.data.local.LocalLikedStore
+import com.mediaplayer.android.data.local.LocalMediaResolver
+import com.mediaplayer.android.data.local.LocalTrack
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -436,12 +439,23 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     extras.getLong(MediaPlaybackService.EXTRA_SLEEP_REMAINING_MS, 0L)
                 _sleepTimerEndOfTrack.value =
                     extras.getBoolean(MediaPlaybackService.EXTRA_SLEEP_END_OF_TRACK, false)
-                val liked = extras.getBoolean(MediaPlaybackService.EXTRA_LIKED, false)
+                val current = _currentSong.value
+                val liked = if (current != null && LocalMediaResolver.isLocal(current.id)) {
+                    // Service has no record of local likes — read from the
+                    // dedicated DataStore instead. Mirror into _currentLiked
+                    // so the heart icon flips when the track changes.
+                    LocalLikedStore.instance(getApplication())
+                        .isLiked(-current.id)
+                } else {
+                    extras.getBoolean(MediaPlaybackService.EXTRA_LIKED, false)
+                }
                 _currentLiked.value = liked
                 // Keep the shared cache in sync with the service-resolved
                 // truth so heart icons elsewhere (rows, kebab sheet) match
                 // the player's heart instantly.
-                _currentSong.value?.id?.let { LikedSongsCache.markLiked(it, liked) }
+                if (current != null && !LocalMediaResolver.isLocal(current.id)) {
+                    LikedSongsCache.markLiked(current.id, liked)
+                }
             }
         }
     }
@@ -453,6 +467,68 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         c.setMediaItem(song.toMediaItem())
         c.prepare()
         c.playWhenReady = true
+    }
+
+    /** Start one local track. Mirrors [play] but takes a [LocalTrack]. */
+    fun playLocal(track: LocalTrack) {
+        val c = controller ?: return
+        LocalMediaResolver.register(track)
+        originalSourceOrder = listOf(-track.id)
+        c.shuffleModeEnabled = false
+        c.setMediaItem(track.toMediaItem())
+        c.prepare()
+        c.playWhenReady = true
+    }
+
+    /** Play a list of local tracks starting at [startIndex]. */
+    fun playLocalAll(tracks: List<LocalTrack>, startIndex: Int = 0) {
+        if (tracks.isEmpty()) return
+        val c = controller ?: return
+        LocalMediaResolver.registerAll(tracks)
+        originalSourceOrder = tracks.map { -it.id }
+        val ordered = if (_shuffleEnabled.value) tracks.shuffled() else tracks
+        val items = ordered.map { it.toMediaItem() }
+        val clamped = startIndex.coerceIn(0, tracks.lastIndex)
+        val startId = tracks[clamped].id
+        val playIndex = ordered.indexOfFirst { it.id == startId }.coerceAtLeast(0)
+        c.shuffleModeEnabled = false
+        c.setMediaItems(items, playIndex, 0L)
+        c.prepare()
+        c.playWhenReady = true
+    }
+
+    /** Shuffle and play a list of local tracks. */
+    fun playLocalShuffled(tracks: List<LocalTrack>) {
+        if (tracks.isEmpty()) return
+        val c = controller ?: return
+        LocalMediaResolver.registerAll(tracks)
+        originalSourceOrder = tracks.map { -it.id }
+        if (!_shuffleEnabled.value) {
+            _shuffleEnabled.value = true
+            persistShuffle(true)
+        }
+        val items = tracks.shuffled().map { it.toMediaItem() }
+        c.shuffleModeEnabled = false
+        c.setMediaItems(items, 0, 0L)
+        c.prepare()
+        c.playWhenReady = true
+    }
+
+    /** Insert a local track right after the currently playing item. */
+    fun playNextLocal(track: LocalTrack) {
+        val c = controller ?: return
+        LocalMediaResolver.register(track)
+        val insertIndex = (c.currentMediaItemIndex + 1).coerceAtMost(c.mediaItemCount)
+        c.addMediaItem(insertIndex, track.toMediaItem(userQueued = true))
+    }
+
+    /** Append a local track to the tail of the user queue. */
+    fun addLocalToQueue(track: LocalTrack) {
+        val c = controller ?: return
+        LocalMediaResolver.register(track)
+        var i = c.currentMediaItemIndex + 1
+        while (i < c.mediaItemCount && c.getMediaItemAt(i).isUserQueued()) i++
+        c.addMediaItem(i.coerceAtMost(c.mediaItemCount), track.toMediaItem(userQueued = true))
     }
 
     fun playPlaylist(songs: List<SongDto>, startIndex: Int = 0) {
@@ -653,6 +729,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     @Suppress("TooGenericExceptionCaught")
     fun redownloadCurrent() {
         val current = _currentSong.value ?: return
+        if (LocalMediaResolver.isLocal(current.id)) {
+            _redownloadError.value = "Non disponibile per i brani locali"
+            return
+        }
         if (_redownloading.value) return
         _redownloading.value = true
         _redownloadError.value = null
@@ -718,6 +798,8 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
      */
     @Suppress("TooGenericExceptionCaught")
     fun flagWrong(songId: Long) {
+        // Backend-only operation; positive ids only. Local items (negative)
+        // and the sentinel zero are no-ops.
         if (songId <= 0L) return
         viewModelScope.launch {
             runCatching { songRepository.flagWrong(songId) }
@@ -768,6 +850,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     @Suppress("TooGenericExceptionCaught")
     fun downloadVideoForCurrent() {
         val current = _currentSong.value ?: return
+        if (LocalMediaResolver.isLocal(current.id)) {
+            _videoDownloadError.value = "Non disponibile per i brani locali"
+            return
+        }
         if (_videoDownloading.value) return
         _videoDownloading.value = true
         _videoDownloadError.value = null
@@ -808,6 +894,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     @Suppress("TooGenericExceptionCaught")
     fun reinitializeVideoForCurrent() {
         val current = _currentSong.value ?: return
+        if (LocalMediaResolver.isLocal(current.id)) {
+            _videoReinitializeError.value = "Non disponibile per i brani locali"
+            return
+        }
         if (_videoReinitializing.value) return
         _videoReinitializing.value = true
         _videoReinitializeError.value = null
@@ -857,6 +947,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     @Suppress("TooGenericExceptionCaught")
     fun saveCurrentAsAlarmSound() {
         val current = _currentSong.value ?: return
+        if (LocalMediaResolver.isLocal(current.id)) {
+            _alarmExportState.value =
+                AlarmExportState.Failure("Non disponibile per i brani locali")
+            return
+        }
         if (_alarmExportState.value is AlarmExportState.Exporting) return
         _alarmExportState.value = AlarmExportState.Exporting
         viewModelScope.launch {
@@ -883,6 +978,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
      */
     fun refreshLocalDownload() {
         val current = _currentSong.value ?: return
+        if (LocalMediaResolver.isLocal(current.id)) return
         val ctx = getApplication<Application>()
         val streamUrl = Network.streamUrl(current.id)
         val coverUrl = Network.coverUrl(current.id)
@@ -989,12 +1085,19 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
      */
     fun toggleCurrentLike() {
         val c = controller ?: return
+        val current = _currentSong.value
         val newLiked = !_currentLiked.value
         _currentLiked.value = newLiked
-        // Flip the shared cache too so every other surface (rows, kebab
-        // sheet, mini-player) updates instantly without waiting for the
-        // service's session-extras roundtrip.
-        _currentSong.value?.id?.let { LikedSongsCache.markLiked(it, newLiked) }
+        if (current != null && LocalMediaResolver.isLocal(current.id)) {
+            // Local heart writes to a separate DataStore — backend likes are
+            // keyed by positive song ids, this side has no equivalent row.
+            val ctx = getApplication<Application>()
+            viewModelScope.launch {
+                LocalLikedStore.instance(ctx).setLiked(-current.id, newLiked)
+            }
+            return
+        }
+        current?.id?.let { LikedSongsCache.markLiked(it, newLiked) }
         c.sendCustomCommand(
             SessionCommand(MediaPlaybackService.ACTION_TOGGLE_LIKE, android.os.Bundle.EMPTY),
             android.os.Bundle.EMPTY,
@@ -1033,6 +1136,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     private fun maybeRecordPlay() {
         val id = trackedSongId ?: return
+        // Local files (negative id) never reach the backend's history /
+        // recommender / auto-download pipelines — every one of those endpoints
+        // keys on positive song ids and would 404 or worse pollute taste.
+        if (LocalMediaResolver.isLocal(id)) return
         val listened = listenedMs
         val duration = trackedDurationMs
         // Drop pure no-ops AND micro-skips. Sub-second listens are noise:
@@ -1213,6 +1320,14 @@ private const val KEY_USER_QUEUED = "user_queued"
 
 @UnstableApi
 private fun SongDto.toMediaItem(userQueued: Boolean = false): MediaItem {
+    // Local tracks: id is the negation of a MediaStore _ID. Resolve the
+    // content:// URI from the in-memory bridge so the player streams from
+    // disk instead of hitting the backend.
+    if (LocalMediaResolver.isLocal(id)) {
+        val track = LocalMediaResolver.get(id)
+            ?: error("Local track $id is not registered with LocalMediaResolver")
+        return track.toMediaItem(userQueued = userQueued)
+    }
     val extras = if (userQueued) {
         android.os.Bundle().apply { putBoolean(KEY_USER_QUEUED, true) }
     } else null
@@ -1228,6 +1343,37 @@ private fun SongDto.toMediaItem(userQueued: Boolean = false): MediaItem {
     return MediaItem.Builder()
         .setMediaId(id.toString())
         .setUri(Network.streamUrl(id))
+        .setMediaMetadata(metadata)
+        .build()
+}
+
+@UnstableApi
+internal fun LocalTrack.toSongDto(): SongDto = SongDto(
+    id = -id,
+    title = title.ifBlank { "(senza titolo)" },
+    artist = artist.ifBlank { "Sconosciuto" },
+    album = album,
+    durationMs = durationMs,
+    hasCoverArt = albumArtUri != null,
+    hasVideo = false,
+    playable = true,
+)
+
+@UnstableApi
+private fun LocalTrack.toMediaItem(userQueued: Boolean = false): MediaItem {
+    val extras = if (userQueued) {
+        android.os.Bundle().apply { putBoolean(KEY_USER_QUEUED, true) }
+    } else null
+    val metadata = MediaMetadata.Builder()
+        .setTitle(title.ifBlank { "(senza titolo)" })
+        .setArtist(artist.ifBlank { "Sconosciuto" })
+        .setAlbumTitle(album)
+        .setArtworkUri(albumArtUri)
+        .apply { if (extras != null) setExtras(extras) }
+        .build()
+    return MediaItem.Builder()
+        .setMediaId((-id).toString())
+        .setUri(uri)
         .setMediaMetadata(metadata)
         .build()
 }

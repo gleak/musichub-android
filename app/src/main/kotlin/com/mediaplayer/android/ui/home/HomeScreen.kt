@@ -95,6 +95,7 @@ fun HomeScreen(
     onShowChangelog: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     onResumeFlush: suspend () -> Unit = {},
+    onLocalLibraryClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = viewModel(),
 ) {
@@ -146,6 +147,7 @@ fun HomeScreen(
                 onSignOut = onSignOut,
                 onShowChangelog = onShowChangelog,
                 onProfileClick = onProfileClick,
+                onLocalLibraryClick = onLocalLibraryClick,
             )
         }
     }
@@ -171,6 +173,7 @@ private fun HomeContent(
     onSignOut: () -> Unit,
     onShowChangelog: () -> Unit,
     onProfileClick: () -> Unit,
+    onLocalLibraryClick: () -> Unit,
 ) {
     androidx.compose.runtime.LaunchedEffect(recents) {
         com.mediaplayer.android.data.LikedSongsCache.prime(recents.map { it.id })
@@ -242,6 +245,12 @@ private fun HomeContent(
                         )
                     }
                 }
+                // Always visible — the local library does not depend on backend
+                // state. Even cold-start users with an empty cloud catalog can
+                // play music sitting on the phone.
+                item(key = "local_library_tile") {
+                    LocalLibraryShortcut(onClick = onLocalLibraryClick)
+                }
 
                 if (recents.isNotEmpty()) {
                     item(key = "recent_title") {
@@ -282,6 +291,9 @@ private fun HomeContent(
                         iconTint = Color.White,
                         onClick = onLikedClick,
                     )
+                }
+                item(key = "local_library_tile_music") {
+                    LocalLibraryShortcut(onClick = onLocalLibraryClick)
                 }
                 if (recents.isEmpty()) {
                     item(key = "music_empty") {
@@ -458,6 +470,56 @@ private fun ColdStartTile(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/**
+ * Home shortcut card to "Sul tuo dispositivo" — the local-media library.
+ * Mirrors the visual weight of [SingleColumnTile] but uses a graphite-on-
+ * lime icon block to set it apart from cloud / playlist tiles.
+ */
+@Composable
+private fun LocalLibraryShortcut(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(CoverShapes.Tile)
+            .background(MHColors.Card)
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CoverShapes.Tile)
+                .background(MHColors.Lime),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.MusicNote,
+                contentDescription = null,
+                tint = Color(0xFF0A0A0A),
+                modifier = Modifier.size(24.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Sul tuo dispositivo",
+                style = MaterialTheme.typography.titleSmall,
+                color = MHColors.TextHi,
+                maxLines = 1,
+            )
+            Text(
+                text = "Sfoglia la musica salvata sul telefono",
+                style = MaterialTheme.typography.bodySmall,
+                color = MHColors.TextLo,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 

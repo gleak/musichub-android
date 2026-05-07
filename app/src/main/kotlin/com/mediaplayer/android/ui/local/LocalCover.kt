@@ -1,5 +1,6 @@
-package com.mediaplayer.android.ui.common
+package com.mediaplayer.android.ui.local
 
+import android.media.MediaMetadataRetriever
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +10,8 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,48 +24,27 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.size.Size
-import com.mediaplayer.android.data.Network
-import com.mediaplayer.android.data.dto.SongDto
-import com.mediaplayer.android.data.local.LocalMediaResolver
+import com.mediaplayer.android.data.local.LocalTrack
 import com.mediaplayer.android.ui.theme.CoverShapes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Shared song-cover composable. Replaces the per-screen `CoverArt` /
- * `Cover` / inline `Box(...) { AsyncImage(...) }` / `Icon(MusicNote)`
- * patterns that drifted across SongRow, MiniPlayer, HomeScreen,
- * SearchScreen and AddSongsToPlaylistSheet.
+ * Local-track cover with an embedded-ID3 fallback. The standard
+ * `albumart` provider URI returns null on plenty of devices (notably Xiaomi
+ * MIUI, anything where the user dropped audio in via SAF without rebuilding
+ * the album thumbnail cache). This composable falls back to the bytes
+ * embedded inside the audio container itself, decoded via
+ * MediaMetadataRetriever on the IO dispatcher.
  *
- * Behaviour:
- *  - When [songId] resolves to a song with cover art, fetches via Coil
- *    against [Network.coverUrl].
- *  - Otherwise paints the surfaceVariant box with a `MusicNote` glyph.
- *  - [contentDescription] is null by default — pass a string only for
- *    cover-as-identity surfaces (carousel tiles where the title text
- *    can ellipsis); leave null for row-with-text covers since the
- *    surrounding title/artist Text is what TalkBack reads.
+ * Results are memoised in a process-wide cache so scrolling a long list
+ * doesn't reopen every file. A null cache entry means "tried, no embedded
+ * art" — those rows render the MusicNote glyph without retrying.
  */
 @Composable
-fun SongCover(
-    song: SongDto,
-    size: Dp,
-    modifier: Modifier = Modifier,
-    shape: Shape = CoverShapes.SongRow,
-    contentDescription: String? = null,
-) {
-    SongCover(
-        songId = song.id,
-        hasCoverArt = song.hasCoverArt,
-        size = size,
-        modifier = modifier,
-        shape = shape,
-        contentDescription = contentDescription,
-    )
-}
-
-@Composable
-fun SongCover(
-    songId: Long,
-    hasCoverArt: Boolean,
+fun LocalCover(
+    track: LocalTrack,
     size: Dp,
     modifier: Modifier = Modifier,
     shape: Shape = CoverShapes.SongRow,
@@ -70,20 +52,37 @@ fun SongCover(
 ) {
     val context = LocalContext.current
     val sizePx = with(LocalDensity.current) { size.roundToPx() }
-    // Local tracks (negative id) carry their cover as a content:// URI in
-    // the resolver bridge — feed Coil that directly. Backend tracks pull
-    // from the server-side cover endpoint as before.
-    val coverData = remember(songId) {
-        if (LocalMediaResolver.isLocal(songId)) LocalMediaResolver.artworkUri(songId)
-        else Network.coverUrl(songId)
+
+    val embedded by produceState<ByteArray?>(initialValue = embeddedCache[track.id], track.id) {
+        if (track.albumArtUri != null) return@produceState
+        if (embeddedCache.containsKey(track.id)) {
+            value = embeddedCache[track.id]
+            return@produceState
+        }
+        val bytes = withContext(Dispatchers.IO) {
+            val mmr = MediaMetadataRetriever()
+            try {
+                mmr.setDataSource(context, track.uri)
+                mmr.embeddedPicture
+            } catch (_: Throwable) {
+                null
+            } finally {
+                runCatching { mmr.release() }
+            }
+        }
+        embeddedCache[track.id] = bytes
+        value = bytes
     }
-    val request = remember(coverData, sizePx) {
+
+    val data = track.albumArtUri ?: embedded
+    val request = remember(data, sizePx) {
         ImageRequest.Builder(context)
-            .data(coverData)
+            .data(data)
             .size(Size(sizePx, sizePx))
             .crossfade(true)
             .build()
     }
+
     Box(
         modifier = modifier
             .size(size)
@@ -91,7 +90,7 @@ fun SongCover(
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
-        if (hasCoverArt) {
+        if (data != null) {
             AsyncImage(
                 model = request,
                 contentDescription = contentDescription,
@@ -106,3 +105,5 @@ fun SongCover(
         }
     }
 }
+
+private val embeddedCache: ConcurrentHashMap<Long, ByteArray?> = ConcurrentHashMap()

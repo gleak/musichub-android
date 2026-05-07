@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.17.1"
+    const val VERSION = "0.18.1"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,25 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.18.1",
+            title = "Sul tuo dispositivo — apertura istantanea con cache",
+            highlights = listOf(
+                "La libreria locale apre subito: l'ultimo risultato della scansione viene salvato su disco e ricomparso all'istante alla riapertura, mentre una nuova scansione gira in background per agganciare aggiunte o rimozioni. Niente più attesa dello spinner ogni volta, soprattutto su dispositivi con molti file o cartelle SAF custom.",
+                "Banner permesso libreria locale risolto su Xiaomi/MIUI: alcuni telefoni segnalavano il permesso negato anche dopo che l'utente lo aveva concesso (race tra il dialog MIUI e il callback di sistema). Ora rivalutiamo lo stato del permesso a ogni ritorno sulla schermata, quindi appena MIUI propaga la concessione il banner sparisce da solo.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.18.0",
+            title = "Sul tuo dispositivo — riproduci la musica salvata sul telefono",
+            highlights = listOf(
+                "Nuova sezione \"Sul tuo dispositivo\" raggiungibile da Home: l'app scansiona via MediaStore tutti i brani audio già indicizzati dal sistema (filtrando suonerie, notifiche e file <30s) e li mostra in tre schede — Brani, Cartelle, Album — con copertina, artista, durata e ricerca per titolo/artista/album/data/durata. Tap su un brano avvia la riproduzione, kebab per Riproduci dopo / Aggiungi alla coda. Pulsante \"Riproduzione casuale\" sempre in vista.",
+                "Cuore locale dedicato: i brani sul dispositivo non finiscono nei \"Mi piace\" del backend (che ha id diversi), ma in un elenco locale separato accessibile dalla scheda Brani. Il cuore della Now Playing e del mini-player riconosce i brani locali e li salva nello store giusto. Schermata \"Brani che ti piacciono\" locale con riproduzione casuale e gestione del cuore.",
+                "Cartelle personalizzate via SAF: dalla scheda Cartelle puoi aggiungere una cartella che il sistema non indicizza (SD card, Download, qualunque sotto-cartella che hai messo via app esterne) — l'app chiede il permesso persistente, naviga la cartella ricorsivamente con DocumentsContract e mostra i brani trovati assieme a quelli del catalogo principale. Il permesso resta valido tra i riavvii.",
+                "Copertina con fallback ID3: se l'album-art di MediaStore manca (capita su Xiaomi e su file passati via SAF), tiriamo direttamente l'immagine incorporata nel file MP3/M4A con MediaMetadataRetriever su thread IO. Risultato in cache di processo, niente decode ripetuto durante lo scroll.",
+                "Coda mista: locale + backend nella stessa lista di riproduzione. \"Riproduci dopo\" e \"Aggiungi alla coda\" funzionano fra le due fonti, e ogni brano locale viene riconosciuto come tale nei controlli — niente chiamate al server per cronologia, riscarica, video o suoneria sui file del dispositivo.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.17.1",
             title = "Android Auto su Xiaomi — comandi al volante riparati",

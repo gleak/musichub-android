@@ -31,6 +31,14 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- Local media library — scans on-device audio via MediaStore. Android
+         13+ uses the granular READ_MEDIA_AUDIO; older versions fall back to
+         READ_EXTERNAL_STORAGE. Both are runtime permissions. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <!-- Android 11+ package visibility: SpeechRecognizer needs to resolve
          the system voice intent before launching. Without this the search
          screen's mic button silently no-ops on API 30+. -->

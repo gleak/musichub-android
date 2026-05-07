@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -84,6 +85,7 @@ fun PlaylistsScreen(
     onSpotifyImport: () -> Unit = {},
     onFindClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
+    onLocalLibraryClick: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
@@ -117,6 +119,7 @@ fun PlaylistsScreen(
                         onLikedSongsClick = onLikedSongsClick,
                         onSpotifyImport = onSpotifyImport,
                         onDelete = viewModel::delete,
+                        onLocalLibraryClick = onLocalLibraryClick,
                     )
                 }
             }
@@ -254,6 +257,7 @@ private fun LibraryList(
     onLikedSongsClick: () -> Unit,
     onSpotifyImport: () -> Unit,
     onDelete: (Long) -> Unit,
+    onLocalLibraryClick: () -> Unit,
 ) {
     // 2-col grid for playlists (Spotify-tile style); Liked + Spotify-import
     // anchors span the full width via maxLineSpan. Mixing list-shaped rows
@@ -271,6 +275,9 @@ private fun LibraryList(
                 val userPlaylists = playlists.filterNot { it.isAuto }
                 item(key = "liked", span = { GridItemSpan(maxLineSpan) }) {
                     LikedSongsRow(onClick = onLikedSongsClick)
+                }
+                item(key = "local_library", span = { GridItemSpan(maxLineSpan) }) {
+                    LocalLibraryRow(onClick = onLocalLibraryClick)
                 }
                 if (userPlaylists.isEmpty()) {
                     item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
@@ -366,6 +373,45 @@ private fun LikedSongsRow(onClick: () -> Unit) {
             )
             Text(
                 text = "Playlist",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LocalLibraryRow(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(CoverShapes.SongRow)
+                .background(MHColors.Lime),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.MusicNote,
+                contentDescription = null,
+                tint = Color(0xFF0A0A0A),
+                modifier = Modifier.size(28.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(
+                text = "Sul tuo dispositivo",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "Brani salvati sul telefono",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
