@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.16.13"
+    const val VERSION = "0.17.1"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,23 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.17.1",
+            title = "Android Auto su Xiaomi — comandi al volante riparati",
+            highlights = listOf(
+                "Comandi al volante e tasti Bluetooth dell'auto ora rispondono anche su telefoni Xiaomi/Redmi/Poco. Prima la sessione media accettava solo controller di pacchetti noti (Android Auto, Assistant, Bluetooth di Google), e su MIUI alcune teste auto passano per pacchetti diversi: il tap del volante veniva rifiutato in silenzio. Adesso accettiamo qualunque controller per i comandi standard (play / pausa / avanti / indietro), mantenendo l'allowlist solo per i comandi custom (cuore, sleep timer).",
+                "Banner ambra in Home solo per dispositivi Xiaomi: \"Comandi al volante non rispondono — tocca per sistemare i permessi MIUI\". Apre un foglio con due passaggi numerati e scorciatoie dirette: 01 → Avvio automatico (apre direttamente la lista MIUI Sicurezza), 02 → Risparmio batteria (porta alla schermata batteria dell'app, dove serve scegliere \"Nessuna restrizione\"). C'è un pulsante \"Non mostrare più\" per nasconderlo per sempre.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.17.0",
+            title = "Generi al completo — 18 stili in tutta l'app",
+            highlights = listOf(
+                "Sfoglia per genere ora copre 18 stili invece di 8: metal, punk, R&B, folk, country, blues, reggae, latina, lo-fi e cantautorato si aggiungono a indie/elettronica/hip-hop/jazz/classica/ambient/rock/pop. La stessa griglia compare in Ricerca, su Android Auto e nell'onboarding del primo avvio.",
+                "Tap su una tile ora pesca davvero tutti i brani del genere: prima \"Hip-hop\" mostrava solo i brani con tag testuale \"hip-hop\" e si perdeva rap/trap/drill/boom bap. Stessa correzione per R&B (recupera soul/funk/motown), elettronica (house, techno, trance, dubstep…), indie (shoegaze, bedroom pop…) e classica (baroque, opera, orchestral…).",
+                "Daily Mix: ambient, lo-fi e cantautorato hanno ora un mix dedicato invece di confondersi con elettronica, indie e folk. Aggiunto il riconoscimento di nuove etichette comuni (new wave, gothic rock, darkwave, city pop, hyperpop, phonk, amapiano, hardstyle, j-rock, breakcore) così quei generi entrano nei mix giusti.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.16.13",
             title = "Cuore funzionante — like sincronizzati col backend",

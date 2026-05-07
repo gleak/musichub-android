@@ -93,9 +93,11 @@ internal object LibraryTree {
 
     /**
      * Genre catalogue exposed in the AA browse tree. Display name + backend
-     * tag must stay in sync with `SearchScreen.GENRES` so phone and car
-     * surface the same 8 buckets. The tag is what `listSongs(genre=…)`
-     * filters on server-side (`song_tags`).
+     * tag must stay in sync with `SearchScreen.GENRES` and
+     * `OnboardingScreen.GENRES` so phone, car, and onboarding surface the
+     * same 18 buckets. The tag is the canonical bucket key — backend
+     * expands it via `GenreBuckets.aliasesOf` so e.g. "metal" matches every
+     * metal subgenre tag in `song_tags` (death/black/thrash/…).
      */
     private val GENRES: List<Pair<String, String>> = listOf(
         "Indie" to "indie",
@@ -106,6 +108,16 @@ internal object LibraryTree {
         "Ambient" to "ambient",
         "Rock" to "rock",
         "Pop" to "pop",
+        "Metal" to "metal",
+        "Punk" to "punk",
+        "R&B" to "r&b",
+        "Folk" to "folk",
+        "Country" to "country",
+        "Blues" to "blues",
+        "Reggae" to "reggae",
+        "Latina" to "latin",
+        "Lo-fi" to "lo-fi",
+        "Cantautorato" to "singer-songwriter",
     )
 
     /**
@@ -125,6 +137,16 @@ internal object LibraryTree {
         "ambient" to R.drawable.genre_ambient,
         "rock" to R.drawable.genre_rock,
         "pop" to R.drawable.genre_pop,
+        "metal" to R.drawable.genre_metal,
+        "punk" to R.drawable.genre_punk,
+        "r&b" to R.drawable.genre_rnb,
+        "folk" to R.drawable.genre_folk,
+        "country" to R.drawable.genre_country,
+        "blues" to R.drawable.genre_blues,
+        "reggae" to R.drawable.genre_reggae,
+        "latin" to R.drawable.genre_latin,
+        "lo-fi" to R.drawable.genre_lofi,
+        "singer-songwriter" to R.drawable.genre_singer_songwriter,
     )
 
     /** App package id — hardcoded so [LibraryTree] stays a context-free

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AA browse-tile cover for Lo-fi. Dusty-pink-to-lavender — chill bedroom palette. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:startColor="#E6A0B5"
+        android:endColor="#7B5C9C"
+        android:angle="225"
+        android:type="linear"/>
+</shape>

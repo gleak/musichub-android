@@ -333,9 +333,11 @@ private fun ContinuePill(
 private const val MIN_PICKS = 3
 
 /**
- * 12 italian-cased genres per `mockup/mh-auth-states.jsx`. Slugs stay
- * english to keep the backend `user_taste(GENRE)` keys stable across
- * locales — only the user-visible label changed.
+ * 18 italian-cased genres mirroring `SearchScreen.GENRES` and
+ * `LibraryTree.GENRES` so phone Search, Android Auto browse, and onboarding
+ * surface the same canonical set. Slugs stay english — they're the bucket
+ * keys backend `GenreBuckets.bucketOf` expects, and `user_taste(GENRE)`
+ * rows must be locale-stable.
  */
 private val GENRES = listOf(
     "Indie" to "indie",
@@ -346,8 +348,14 @@ private val GENRES = listOf(
     "Ambient" to "ambient",
     "Rock" to "rock",
     "Pop" to "pop",
-    "R&B" to "r&b",
-    "Lo-fi" to "lo-fi",
+    "Metal" to "metal",
     "Punk" to "punk",
+    "R&B" to "r&b",
+    "Folk" to "folk",
+    "Country" to "country",
+    "Blues" to "blues",
+    "Reggae" to "reggae",
+    "Latina" to "latin",
+    "Lo-fi" to "lo-fi",
     "Cantautorato" to "singer-songwriter",
 )

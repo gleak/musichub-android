@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AA browse-tile cover for Country. Tan-to-teal — desert dusk. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:startColor="#C28B5A"
+        android:endColor="#1F5C5C"
+        android:angle="315"
+        android:type="linear"/>
+</shape>

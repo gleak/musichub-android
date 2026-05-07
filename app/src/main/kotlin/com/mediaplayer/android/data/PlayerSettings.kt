@@ -44,6 +44,20 @@ class PlayerSettings private constructor(private val context: Context) {
         context.playerSettingsDataStore.edit { it[THEME] = value }
     }
 
+    /**
+     * One-shot dismissal of the Xiaomi/MIUI restrictions banner. When the
+     * user taps the X on the warning, this flag flips to true and the
+     * banner never appears again — even if the underlying restrictions
+     * are still in place. The action buttons inside the banner do NOT
+     * flip this flag, only the explicit dismiss does.
+     */
+    val miuiWarningDismissed: Flow<Boolean> = context.playerSettingsDataStore.data
+        .map { it[MIUI_WARNING_DISMISSED] ?: false }
+
+    suspend fun setMiuiWarningDismissed(value: Boolean) {
+        context.playerSettingsDataStore.edit { it[MIUI_WARNING_DISMISSED] = value }
+    }
+
     suspend fun setCrossfadeSeconds(seconds: Int) {
         context.playerSettingsDataStore.edit { it[CROSSFADE_SECONDS] = seconds.coerceIn(0, 12) }
     }
@@ -66,6 +80,7 @@ class PlayerSettings private constructor(private val context: Context) {
         private val DOWNLOAD_WIFI_ONLY = booleanPreferencesKey("download_wifi_only")
         private val DOWNLOAD_AUTO = booleanPreferencesKey("download_auto")
         private val THEME = stringPreferencesKey("theme")
+        private val MIUI_WARNING_DISMISSED = booleanPreferencesKey("miui_warning_dismissed")
 
         val instance: PlayerSettings by lazy {
             PlayerSettings(MediaPlayerApp.instance)

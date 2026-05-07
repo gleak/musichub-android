@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AA browse-tile cover for R&B. Deep violet-to-gold — soulful and warm. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:startColor="#3A0E5C"
+        android:endColor="#D4A857"
+        android:angle="315"
+        android:type="linear"/>
+</shape>

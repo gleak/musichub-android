@@ -578,21 +578,25 @@ class MediaPlaybackService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo
         ): MediaSession.ConnectionResult {
-            // Gate by package: only ourselves and known media controllers (Android
-            // Auto, Assistant, system media controls, BT) get the session.
-            // Reject everything else so other apps can't subscribe and abuse
-            // our custom session commands.
+            // Accept ALL controllers so standard transport commands (play /
+            // pause / skipNext / skipPrev) reach the player regardless of which
+            // package routes them. Steering-wheel keys on some OEMs (Xiaomi /
+            // MIUI in particular) arrive via a non-Google Bluetooth stack
+            // package not on our allowlist — rejecting those silently dropped
+            // every wheel press. Custom session commands (toggle like, sleep
+            // timer) remain gated below to known media surfaces only.
             val pkg = controller.packageName
-            val ours = pkg == applicationContext.packageName
-            if (!ours && pkg !in ALLOWED_CONTROLLER_PACKAGES) {
-                return MediaSession.ConnectionResult.reject()
-            }
+            val trusted = pkg == applicationContext.packageName ||
+                pkg in ALLOWED_CONTROLLER_PACKAGES
             val connectionResult = super.onConnect(session, controller)
-            val availableSessionCommands = connectionResult.availableSessionCommands
-                .buildUpon()
-                .add(toggleLikeCommand)
-                .add(sleepTimerCommand)
-                .build()
+            val availableSessionCommands = if (trusted) {
+                connectionResult.availableSessionCommands.buildUpon()
+                    .add(toggleLikeCommand)
+                    .add(sleepTimerCommand)
+                    .build()
+            } else {
+                connectionResult.availableSessionCommands
+            }
             // Explicitly grant shuffle + repeat to all connected controllers.
             // Media3's defaults usually include them, but Android Auto only shows
             // its shuffle/repeat overlay buttons when the controller advertises

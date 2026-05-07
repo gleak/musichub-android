@@ -211,6 +211,10 @@ private fun HomeContent(
             AppUpdateBannerHost()
         }
 
+        item(key = "miui_warning_banner") {
+            com.mediaplayer.android.ui.common.MiuiRestrictionsBannerHost()
+        }
+
         val autoPlaylists = playlists.filter { it.isAuto }
         val userPlaylists = playlists.filter { !it.isAuto }
 
