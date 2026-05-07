@@ -5,16 +5,20 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mediaplayer.android.data.local.LocalLibraryRepository
 import com.mediaplayer.android.data.local.LocalMediaResolver
+import com.mediaplayer.android.data.local.LocalPlaylist
+import com.mediaplayer.android.data.local.LocalPlaylistStore
 import com.mediaplayer.android.data.local.LocalTrack
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class LocalLibraryViewModel(application: Application) : AndroidViewModel(application) {
 
-    enum class Tab { Tracks, Folders, Albums }
+    enum class Tab { Tracks, Folders, Albums, Playlists }
 
     enum class SortBy { Title, Artist, Album, DateAdded, Duration }
 
@@ -32,6 +36,10 @@ class LocalLibraryViewModel(application: Application) : AndroidViewModel(applica
 
     private val _sort = MutableStateFlow(SortBy.Title)
     val sort: StateFlow<SortBy> = _sort.asStateFlow()
+
+    private val playlistStore = LocalPlaylistStore.instance(application)
+    val playlists: StateFlow<List<LocalPlaylist>> = playlistStore.playlists
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private var observerJob: Job? = null
 
@@ -104,5 +112,37 @@ class LocalLibraryViewModel(application: Application) : AndroidViewModel(applica
             .groupBy { it.album!! }
             .toSortedMap(String.CASE_INSENSITIVE_ORDER)
             .map { (album, items) -> album to items }
+    }
+
+    /** Resolve a list of MediaStore ids to the in-memory [LocalTrack] objects. */
+    fun resolveTracks(trackIds: List<Long>): List<LocalTrack> {
+        if (trackIds.isEmpty()) return emptyList()
+        val ready = _state.value as? State.Ready ?: return emptyList()
+        val byId = ready.tracks.associateBy { it.id }
+        return trackIds.mapNotNull { byId[it] }
+    }
+
+    fun createPlaylist(name: String, trackIds: List<Long> = emptyList()) {
+        viewModelScope.launch { playlistStore.create(name, trackIds) }
+    }
+
+    fun renamePlaylist(id: String, name: String) {
+        viewModelScope.launch { playlistStore.rename(id, name) }
+    }
+
+    fun deletePlaylist(id: String) {
+        viewModelScope.launch { playlistStore.delete(id) }
+    }
+
+    fun addTracksToPlaylist(id: String, trackIds: List<Long>) {
+        viewModelScope.launch { playlistStore.addTracks(id, trackIds) }
+    }
+
+    fun removeTrackFromPlaylist(id: String, trackId: Long) {
+        viewModelScope.launch { playlistStore.removeTrack(id, trackId) }
+    }
+
+    fun reorderPlaylist(id: String, trackIds: List<Long>) {
+        viewModelScope.launch { playlistStore.reorder(id, trackIds) }
     }
 }

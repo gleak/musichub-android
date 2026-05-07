@@ -16,14 +16,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +59,7 @@ fun LocalFolderOrAlbumScreen(
     onShuffle: (List<LocalTrack>) -> Unit,
     onPlayNext: (LocalTrack) -> Unit,
     onAddToQueue: (LocalTrack) -> Unit,
+    onCreatePlaylist: ((name: String, tracks: List<LocalTrack>) -> Unit)? = null,
     viewModel: LocalLibraryViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -63,6 +69,7 @@ fun LocalFolderOrAlbumScreen(
             ?.filter(matcher)
             .orEmpty()
     }
+    var createPlaylistOpen by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -112,7 +119,18 @@ fun LocalFolderOrAlbumScreen(
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(Modifier.width(MediaPlayerSpacing.Xs))
-                Text("Riproduzione casuale")
+                Text("Casuale")
+            }
+            if (onCreatePlaylist != null) {
+                OutlinedButton(onClick = { createPlaylistOpen = true }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.PlaylistAdd,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(MediaPlayerSpacing.Xs))
+                    Text("Salva come playlist")
+                }
             }
             Spacer(Modifier.weight(1f))
             Text(
@@ -166,5 +184,43 @@ fun LocalFolderOrAlbumScreen(
                 }
             }
         }
+    }
+
+    if (createPlaylistOpen && onCreatePlaylist != null) {
+        var name by remember { mutableStateOf(title) }
+        AlertDialog(
+            onDismissRequest = { createPlaylistOpen = false },
+            title = { Text("Salva come playlist") },
+            text = {
+                Column {
+                    Text(
+                        text = "Crea una playlist locale con questi ${tracks.size} brani.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MHColors.TextLo,
+                    )
+                    Spacer(Modifier.height(MediaPlayerSpacing.S))
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        singleLine = true,
+                        label = { Text("Nome") },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (name.isNotBlank()) {
+                            onCreatePlaylist(name, tracks)
+                            createPlaylistOpen = false
+                        }
+                    },
+                    enabled = name.isNotBlank(),
+                ) { Text("Crea") }
+            },
+            dismissButton = {
+                TextButton(onClick = { createPlaylistOpen = false }) { Text("Annulla") }
+            },
+        )
     }
 }

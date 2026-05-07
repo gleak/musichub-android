@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,9 +23,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.DropdownMenu
@@ -51,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mediaplayer.android.data.local.LocalLibraryRepository
 import com.mediaplayer.android.data.local.LocalLikedStore
+import com.mediaplayer.android.data.local.LocalPlaylist
 import com.mediaplayer.android.data.local.LocalTrack
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.EmptyState
@@ -60,9 +66,9 @@ import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
 import kotlinx.coroutines.launch
 
 /**
- * Top-level "Sul tuo dispositivo" screen. Three tabs (Brani / Cartelle /
- * Album) sit under the header; permission gate and empty state are handled
- * inline. Backed by [LocalLibraryViewModel].
+ * Top-level "Sul tuo dispositivo" screen. Four tabs (Brani / Cartelle /
+ * Album / Playlist) sit under the header; permission gate and empty
+ * state are handled inline. Backed by [LocalLibraryViewModel].
  */
 @Composable
 fun LocalLibraryScreen(
@@ -74,16 +80,23 @@ fun LocalLibraryScreen(
     onOpenFolder: (String) -> Unit,
     onOpenAlbum: (String) -> Unit,
     onOpenLiked: () -> Unit = {},
+    onOpenPlaylist: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: LocalLibraryViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val tab by viewModel.tab.collectAsStateWithLifecycle()
     val sort by viewModel.sort.collectAsStateWithLifecycle()
+    val playlists by viewModel.playlists.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val likedStore = remember { LocalLikedStore.instance(context) }
     val likedIds by likedStore.liked.collectAsStateWithLifecycle(initialValue = emptySet())
     val coroutineScope = rememberCoroutineScope()
+
+    // Sheet state — when non-null, shows AddToLocalPlaylistSheet seeded with
+    // these track ids. Used both by the track-row kebab (single track) and
+    // the folder-tile kebab "Crea playlist da cartella" (whole folder).
+    var addToPlaylist by remember { mutableStateOf<AddToPlaylistRequest?>(null) }
 
     val safLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
@@ -162,6 +175,12 @@ fun LocalLibraryScreen(
                         onShuffle = onShufflePlay,
                         onPlayNext = onPlayNext,
                         onAddToQueue = onAddToQueue,
+                        onAddToPlaylist = { t ->
+                            addToPlaylist = AddToPlaylistRequest(
+                                trackIds = listOf(t.id),
+                                suggestedName = null,
+                            )
+                        },
                         onToggleLike = { t ->
                             coroutineScope.launch {
                                 likedStore.setLiked(t.id, t.id !in likedIds)
@@ -174,14 +193,33 @@ fun LocalLibraryScreen(
                         groups = viewModel.foldersGrouped(),
                         onOpenFolder = onOpenFolder,
                         onAddSafFolder = { safLauncher.launch(null) },
+                        onCreatePlaylistFromFolder = { path, items ->
+                            val name = path.substringAfterLast('/')
+                                .ifBlank { path }.ifBlank { "Cartella" }
+                            viewModel.createPlaylist(name, items.map { it.id })
+                        },
                     )
                     LocalLibraryViewModel.Tab.Albums -> AlbumsTab(
                         groups = viewModel.albumsGrouped(),
                         onOpenAlbum = onOpenAlbum,
                     )
+                    LocalLibraryViewModel.Tab.Playlists -> PlaylistsTab(
+                        playlists = playlists,
+                        onOpen = onOpenPlaylist,
+                        onCreate = { name -> viewModel.createPlaylist(name) },
+                    )
                 }
             }
         }
+    }
+
+    addToPlaylist?.let { req ->
+        AddToLocalPlaylistSheet(
+            trackIds = req.trackIds,
+            suggestedName = req.suggestedName,
+            onDismiss = { addToPlaylist = null },
+            viewModel = viewModel,
+        )
     }
 }
 
@@ -216,6 +254,7 @@ private fun TabBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .padding(horizontal = MediaPlayerSpacing.M),
         horizontalArrangement = Arrangement.spacedBy(MediaPlayerSpacing.S),
     ) {
@@ -234,6 +273,11 @@ private fun TabBar(
             selected = tab == LocalLibraryViewModel.Tab.Albums,
             onClick = { onTab(LocalLibraryViewModel.Tab.Albums) },
         )
+        PillChip(
+            label = "Playlist",
+            selected = tab == LocalLibraryViewModel.Tab.Playlists,
+            onClick = { onTab(LocalLibraryViewModel.Tab.Playlists) },
+        )
     }
 }
 
@@ -247,6 +291,7 @@ private fun TracksTab(
     onShuffle: (List<LocalTrack>) -> Unit,
     onPlayNext: (LocalTrack) -> Unit,
     onAddToQueue: (LocalTrack) -> Unit,
+    onAddToPlaylist: (LocalTrack) -> Unit,
     onToggleLike: (LocalTrack) -> Unit,
     onOpenLiked: () -> Unit,
     likedCount: Int,
@@ -304,6 +349,16 @@ private fun TracksTab(
                                 onClick = {
                                     menuFor = null
                                     onAddToQueue(t)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Aggiungi a playlist locale") },
+                                onClick = {
+                                    menuFor = null
+                                    onAddToPlaylist(t)
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null)
                                 },
                             )
                             DropdownMenuItem(
@@ -441,6 +496,7 @@ private fun FoldersTab(
     groups: List<Pair<String, List<LocalTrack>>>,
     onOpenFolder: (String) -> Unit,
     onAddSafFolder: () -> Unit,
+    onCreatePlaylistFromFolder: (path: String, items: List<LocalTrack>) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -496,21 +552,28 @@ private fun FoldersTab(
                 path = path,
                 count = items.size,
                 onClick = { onOpenFolder(path) },
+                onCreatePlaylist = { onCreatePlaylistFromFolder(path, items) },
             )
         }
     }
 }
 
 @Composable
-private fun FolderTile(path: String, count: Int, onClick: () -> Unit) {
+private fun FolderTile(
+    path: String,
+    count: Int,
+    onClick: () -> Unit,
+    onCreatePlaylist: () -> Unit,
+) {
     val name = path.substringAfterLast('/').ifBlank { path }.ifBlank { "(radice)" }
+    var menuOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MHColors.Card)
             .clickable(onClick = onClick)
-            .padding(MediaPlayerSpacing.M),
+            .padding(start = MediaPlayerSpacing.M, top = MediaPlayerSpacing.M, bottom = MediaPlayerSpacing.M),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -549,6 +612,27 @@ private fun FolderTile(path: String, count: Int, onClick: () -> Unit) {
             style = MaterialTheme.typography.bodySmall,
             color = MHColors.TextLo,
         )
+        Box {
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(
+                    imageVector = Icons.Filled.MoreVert,
+                    contentDescription = "Altre opzioni",
+                    tint = MHColors.TextLo,
+                )
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("Crea playlist da cartella") },
+                    onClick = {
+                        menuOpen = false
+                        onCreatePlaylist()
+                    },
+                    leadingIcon = {
+                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null)
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -572,6 +656,162 @@ private fun AlbumsTab(
                 count = items.size,
                 cover = items.firstOrNull(),
                 onClick = { onOpenAlbum(album) },
+            )
+        }
+    }
+}
+
+private data class AddToPlaylistRequest(
+    val trackIds: List<Long>,
+    val suggestedName: String?,
+)
+
+@Composable
+private fun PlaylistsTab(
+    playlists: List<LocalPlaylist>,
+    onOpen: (String) -> Unit,
+    onCreate: (String) -> Unit,
+) {
+    var createOpen by remember { mutableStateOf(false) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            horizontal = MediaPlayerSpacing.M,
+            vertical = MediaPlayerSpacing.S,
+        ),
+        verticalArrangement = Arrangement.spacedBy(MediaPlayerSpacing.S),
+    ) {
+        item(key = "create_playlist") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MHColors.CardHigh)
+                    .clickable(onClick = { createOpen = true })
+                    .padding(MediaPlayerSpacing.M),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MHColors.Lime),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        tint = Color(0xFF0A0A0A),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(Modifier.width(MediaPlayerSpacing.M))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Crea nuova playlist",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MHColors.TextHi,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "Solo brani salvati sul dispositivo, niente backend.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MHColors.TextLo,
+                        maxLines = 2,
+                    )
+                }
+            }
+        }
+        if (playlists.isEmpty()) {
+            item(key = "empty") {
+                Spacer(Modifier.height(MediaPlayerSpacing.M))
+                Text(
+                    text = "Nessuna playlist locale. Crea una playlist o tocca i tre puntini su una cartella per importarla.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MHColors.TextLo,
+                    modifier = Modifier.padding(horizontal = MediaPlayerSpacing.S),
+                )
+            }
+        }
+        items(playlists, key = { it.id }) { p ->
+            LocalPlaylistTile(
+                playlist = p,
+                onClick = { onOpen(p.id) },
+            )
+        }
+    }
+
+    if (createOpen) {
+        var name by remember { mutableStateOf("") }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { createOpen = false },
+            title = { Text("Nuova playlist") },
+            text = {
+                androidx.compose.material3.OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    label = { Text("Nome") },
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        if (name.isNotBlank()) {
+                            onCreate(name)
+                            createOpen = false
+                        }
+                    },
+                    enabled = name.isNotBlank(),
+                ) { Text("Crea") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { createOpen = false }) {
+                    Text("Annulla")
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun LocalPlaylistTile(playlist: LocalPlaylist, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MHColors.Card)
+            .clickable(onClick = onClick)
+            .padding(MediaPlayerSpacing.M),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MHColors.CardHigh),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                contentDescription = null,
+                tint = MHColors.Lime,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Spacer(Modifier.width(MediaPlayerSpacing.M))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = playlist.name,
+                style = MaterialTheme.typography.titleSmall,
+                color = MHColors.TextHi,
+                maxLines = 1,
+            )
+            Text(
+                text = "${playlist.trackIds.size} brani · solo locale",
+                style = MaterialTheme.typography.bodySmall,
+                color = MHColors.TextLo,
+                maxLines = 1,
             )
         }
     }

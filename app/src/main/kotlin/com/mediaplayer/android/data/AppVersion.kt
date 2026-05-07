@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.19.0"
+    const val VERSION = "0.20.0"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,15 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.20.0",
+            title = "Playlist locali e shuffle che si rigenera ad ogni giro",
+            highlights = listOf(
+                "Nuova scheda \"Playlist\" dentro \"Sul tuo dispositivo\": crei playlist con i soli brani salvati sul telefono, senza alcun salvataggio sul backend. Puoi rinominarle, eliminarle, riordinare i brani con il drag e rimuovere un brano con lo swipe. Dal menu di un brano locale tocca \"Aggiungi a playlist locale\" per inserirlo in una playlist esistente o crearne una al volo.",
+                "Importa una cartella intera come playlist con un tap: dai tre puntini di una cartella (scheda Cartelle) o dal pulsante \"Salva come playlist\" dentro la cartella stessa. La playlist è un'istantanea — i nuovi file aggiunti alla cartella in seguito non vengono inclusi automaticamente, così puoi modificarla senza che si rigeneri da sola.",
+                "Shuffle che mescola di nuovo a ogni ciclo: con shuffle e ripeti tutto attivi, quando arrivi alla fine della coda l'app rimescola le canzoni invece di rimandarle nello stesso ordine. La canzone in riproduzione resta dov'è — viene riordinato solo quello che segue.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.19.0",
             title = "Widget in home — controlli e lancio rapido senza aprire l'app",

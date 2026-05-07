@@ -274,6 +274,7 @@ internal object Routes {
     const val LOCAL_FOLDER = "local/folder/{path}"
     const val LOCAL_ALBUM = "local/album/{name}"
     const val LOCAL_LIKED = "local/liked"
+    const val LOCAL_PLAYLIST = "local/playlist/{id}"
 
     fun playlistDetail(id: Long) = "playlists/$id"
     fun albumDetail(name: String, artist: String) =
@@ -285,6 +286,7 @@ internal object Routes {
         "playlists/$id/members?owner=$owner"
     fun localFolder(path: String) = "local/folder/${Uri.encode(path)}"
     fun localAlbum(name: String) = "local/album/${Uri.encode(name)}"
+    fun localPlaylist(id: String) = "local/playlist/${Uri.encode(id)}"
 
     /**
      * Routes that conceptually live under the "Library" tab. Any sub-route
@@ -771,6 +773,9 @@ private fun NavHostBody(
                         navController.navigate(Routes.localAlbum(name))
                     },
                     onOpenLiked = { navController.navigate(Routes.LOCAL_LIKED) },
+                    onOpenPlaylist = { id ->
+                        navController.navigate(Routes.localPlaylist(id))
+                    },
                 )
             }
             composable(
@@ -779,6 +784,7 @@ private fun NavHostBody(
             ) { backStackEntry ->
                 val path = backStackEntry.arguments?.getString("path") ?: return@composable
                 val name = path.substringAfterLast('/').ifBlank { path }
+                val localVm: com.mediaplayer.android.ui.local.LocalLibraryViewModel = viewModel()
                 com.mediaplayer.android.ui.local.LocalFolderOrAlbumScreen(
                     titlePrefix = "// CARTELLA",
                     title = name,
@@ -791,6 +797,10 @@ private fun NavHostBody(
                     onShuffle = playbackVm::playLocalShuffled,
                     onPlayNext = playbackVm::playNextLocal,
                     onAddToQueue = playbackVm::addLocalToQueue,
+                    onCreatePlaylist = { playlistName, tracks ->
+                        localVm.createPlaylist(playlistName, tracks.map { it.id })
+                    },
+                    viewModel = localVm,
                 )
             }
             composable(
@@ -814,6 +824,23 @@ private fun NavHostBody(
             }
             composable(Routes.LOCAL_LIKED) {
                 com.mediaplayer.android.ui.local.LocalLikedScreen(
+                    onBack = { navController.popBackStack() },
+                    onPlay = { track, all ->
+                        val idx = all.indexOf(track).coerceAtLeast(0)
+                        playbackVm.playLocalAll(all, idx)
+                    },
+                    onShuffle = playbackVm::playLocalShuffled,
+                    onPlayNext = playbackVm::playNextLocal,
+                    onAddToQueue = playbackVm::addLocalToQueue,
+                )
+            }
+            composable(
+                route = Routes.LOCAL_PLAYLIST,
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val id = backStackEntry.arguments?.getString("id") ?: return@composable
+                com.mediaplayer.android.ui.local.LocalPlaylistDetailScreen(
+                    playlistId = id,
                     onBack = { navController.popBackStack() },
                     onPlay = { track, all ->
                         val idx = all.indexOf(track).coerceAtLeast(0)

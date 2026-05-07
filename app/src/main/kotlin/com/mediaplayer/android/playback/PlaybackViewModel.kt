@@ -251,8 +251,18 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             if (oldIdx == newIdx) return
             val c = controller ?: return
             if (oldIdx < 0 || oldIdx >= c.mediaItemCount) return
+            val wasLast = oldIdx == c.mediaItemCount - 1
             if (c.getMediaItemAt(oldIdx).isUserQueued()) {
                 c.removeMediaItem(oldIdx)
+            }
+            // Wrap-around under repeat-all + shuffle: reshuffle the timeline
+            // so the next loop is a fresh order, not a re-run of the same
+            // sequence. Current track keeps playing — the reshuffle only
+            // touches everything after index 0.
+            if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION &&
+                wasLast && newIdx == 0
+            ) {
+                maybeReshuffleOnWrap()
             }
         }
 
@@ -612,6 +622,27 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 playbackPrefs.edit { it[PREF_SHUFFLE_KEY] = value }
             }
         }
+    }
+
+    /**
+     * Triggered when shuffle+repeat-all wraps from the last item back to
+     * index 0. Reshuffles every item *after* the current one so the user
+     * gets a fresh ordering on the next loop instead of replaying the same
+     * sequence. The currently playing track stays untouched at index 0.
+     *
+     * No-op if the timeline has fewer than 2 items, or if shuffle is off
+     * (defensive — the caller already checked, but the controller may
+     * race-toggle between the discontinuity and this call).
+     */
+    private fun maybeReshuffleOnWrap() {
+        val c = controller ?: return
+        if (!_shuffleEnabled.value) return
+        if (c.repeatMode != Player.REPEAT_MODE_ALL) return
+        val total = c.mediaItemCount
+        if (total < 2) return
+        val rest = (1 until total).map { c.getMediaItemAt(it) }.shuffled()
+        c.removeMediaItems(1, total)
+        c.addMediaItems(1, rest)
     }
 
     /**
