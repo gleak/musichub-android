@@ -143,5 +143,43 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Now-Playing home-screen widget. Glance-based; transport buttons
+             route through ActionCallback subclasses that bind a transient
+             MediaController to MediaPlaybackService. -->
+        <receiver
+            android:name=".widget.NowPlayingWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_now_playing_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/now_playing_widget_info" />
+        </receiver>
+
+        <!-- Quick-launch widget — 4 configurable tiles for auto-playlists.
+             The configure activity runs once when the user drops the widget
+             on the home screen and persists tile selection per appWidgetId. -->
+        <receiver
+            android:name=".widget.QuickLaunchWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_quick_launch_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/quick_launch_widget_info" />
+        </receiver>
+        <activity
+            android:name=".widget.QuickLaunchConfigActivity"
+            android:exported="true"
+            android:theme="@style/Theme.MediaPlayer">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

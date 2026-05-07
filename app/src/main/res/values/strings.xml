@@ -126,4 +126,10 @@
     <string name="download_in_progress_count">Scarico %1$d brani…</string>
     <string name="download_in_progress_one">Scarico: %1$s</string>
     <string name="download_in_progress_with_more">Scarico: %1$s · +%2$d in coda</string>
+
+    <!-- Home-screen widgets -->
+    <string name="widget_now_playing_label">MusicHub — In riproduzione</string>
+    <string name="widget_now_playing_description">Controlli rapidi del brano in riproduzione: cover, titolo, play/pausa, avanti, indietro.</string>
+    <string name="widget_quick_launch_label">MusicHub — Lancio rapido</string>
+    <string name="widget_quick_launch_description">Quattro riquadri per avviare al volo le tue playlist preferite (Discover Daily, In rotazione, Mi piace, Nuove uscite e altre).</string>
 </resources>

@@ -34,6 +34,8 @@ import com.mediaplayer.android.MainActivity
 import com.mediaplayer.android.R
 import com.mediaplayer.android.data.LikedRepository
 import com.mediaplayer.android.data.Network
+import com.mediaplayer.android.widget.NowPlayingSnapshot
+import com.mediaplayer.android.widget.WidgetState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -344,6 +346,89 @@ class MediaPlaybackService : MediaLibraryService() {
                 }
             }
         })
+
+        // Mirror player state into [WidgetState] so the Now-Playing home-screen
+        // widget can repaint without holding its own MediaController. Updates
+        // fire on track change, play state change, and timeline change so the
+        // widget's hasNext/hasPrevious gating stays accurate.
+        player.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                pushWidgetState()
+            }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                pushWidgetState()
+            }
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                pushWidgetState()
+            }
+            override fun onPlaybackStateChanged(state: Int) {
+                pushWidgetState()
+            }
+        })
+        // Seed the widget once at service start so a freshly bound widget
+        // doesn't render an empty placeholder until the first transition.
+        pushWidgetState()
+    }
+
+    /**
+     * Snapshot the current player state into [WidgetState] (synchronously)
+     * and kick off an async cover decode via Coil that re-pushes once the
+     * bitmap is ready. Called on every relevant Player.Listener event.
+     *
+     * Loading the cover off-thread keeps the listener callback non-blocking;
+     * the widget repaints twice per track change (text first, then cover)
+     * which is identical to how the system notification fills its art.
+     */
+    private fun pushWidgetState() {
+        val player = mediaSession?.player ?: return
+        val item = player.currentMediaItem
+        val md = item?.mediaMetadata
+        val songId = item?.mediaId?.toLongOrNull()
+        val artUri = md?.artworkUri?.toString()
+        val previous = WidgetState.now.value
+        val keepCover = previous.songId == songId && previous.coverUri == artUri
+        val snapshot = NowPlayingSnapshot(
+            songId = songId,
+            title = md?.title?.toString().orEmpty(),
+            artist = md?.artist?.toString().orEmpty(),
+            isPlaying = player.isPlaying,
+            hasNext = player.hasNextMediaItem(),
+            hasPrevious = player.hasPreviousMediaItem(),
+            coverUri = artUri,
+            cover = if (keepCover) previous.cover else null,
+        )
+        WidgetState.update(snapshot)
+        if (!keepCover && artUri != null) loadCoverForWidget(artUri, songId)
+    }
+
+    private var coverLoadJob: Job? = null
+    /**
+     * Fetches the cover bytes via the shared OkHttp client (so backend
+     * `X-Api-Key` auth headers ride along) and decodes to a software
+     * Bitmap with [android.graphics.BitmapFactory]. Software config is
+     * mandatory for AppWidgets — the RemoteViews IPC channel rejects
+     * hardware bitmaps and the widget would silently render blank.
+     */
+    private fun loadCoverForWidget(uri: String, expectedSongId: Long?) {
+        coverLoadJob?.cancel()
+        coverLoadJob = serviceScope.launch {
+            val bitmap = runCatching {
+                val response = Network.okHttp.newCall(
+                    okhttp3.Request.Builder().url(uri).build()
+                ).execute()
+                response.use { r ->
+                    if (!r.isSuccessful) return@runCatching null
+                    val bytes = r.body?.bytes() ?: return@runCatching null
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }
+            }.getOrNull()
+            withContext(Dispatchers.Main) {
+                val cur = WidgetState.now.value
+                if (cur.songId == expectedSongId && cur.coverUri == uri) {
+                    WidgetState.update(cur.copy(cover = bitmap))
+                }
+            }
+        }
     }
 
     /**

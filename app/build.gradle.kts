@@ -83,8 +83,8 @@ android {
         applicationId = "com.mediaplayer.android"
         minSdk = 24
         targetSdk = 35
-        versionCode = 99
-        versionName = "0.18.1"
+        versionCode = 100
+        versionName = "0.19.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -222,6 +222,11 @@ dependencies {
 
     // Palette — extracts dominant color from cover art for gradient backdrops.
     implementation(libs.androidx.palette)
+
+    // Glance — Jetpack Compose-style API for AppWidgets. Backs the
+    // Now Playing + Quick Launch home-screen widgets.
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
 }
 
 /**

@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.18.1"
+    const val VERSION = "0.19.0"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,15 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.19.0",
+            title = "Widget in home — controlli e lancio rapido senza aprire l'app",
+            highlights = listOf(
+                "Nuovo widget \"In riproduzione\" da aggiungere alla home screen: copertina, titolo, artista e i tre pulsanti precedente / play-pausa / successivo. Si aggiorna da solo a ogni cambio brano e ogni volta che metti in pausa, anche con l'app chiusa — i pulsanti parlano direttamente al servizio di riproduzione tramite una connessione MediaController che si apre solo al tap e si chiude subito dopo, quindi il widget non consuma batteria mentre è fermo. Il tap sulla copertina apre l'app dove l'avevi lasciata.",
+                "Nuovo widget \"Lancio rapido\" con quattro riquadri configurabili: Discover Daily, In rotazione, Mi piace, Nuove uscite di default, ma puoi sceglierne altri (Daily Mix 1/2/3, Time capsule) quando lo aggiungi. Tap su un riquadro fa partire la playlist al volo senza dover aprire l'app, navigare e cercare. Più widget sulla stessa home possono avere combinazioni diverse — la scelta è salvata per ogni istanza.",
+                "Aggiungi il widget dalla galleria widget di Android (long-press sulla home → Widget → MusicHub) e ridimensionalo a piacere; entrambi i widget supportano resize orizzontale e verticale.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.18.1",
             title = "Sul tuo dispositivo — apertura istantanea con cache",

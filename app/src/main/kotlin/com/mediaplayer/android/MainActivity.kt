@@ -97,6 +97,9 @@ import com.mediaplayer.android.ui.playlists.SpotifyImportScreen
 import com.mediaplayer.android.ui.search.SearchScreen
 import com.mediaplayer.android.ui.theme.MediaPlayerTheme
 import com.mediaplayer.android.update.AppUpdateChecker
+import com.mediaplayer.android.widget.QuickLaunchActions
+import com.mediaplayer.android.widget.QuickLaunchKind
+import com.mediaplayer.android.widget.WidgetTargetLauncher
 import kotlinx.coroutines.launch
 
 @UnstableApi
@@ -111,17 +114,24 @@ class MainActivity : ComponentActivity() {
     // alive routes through onNewIntent — both entry points feed this
     // same state.
     private val pendingShareToken = mutableStateOf<String?>(null)
+    // Set by [QuickLaunchActions] when the user taps a quick-launch widget
+    // tile. Consumed by AppScaffold (after auth + onboarding gates pass) so
+    // the playback view-model can resolve the kind to a concrete play call.
+    private val pendingWidgetKind = mutableStateOf<QuickLaunchKind?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         consumeShareIntent(intent)
+        consumeWidgetIntent(intent)
         setContent {
             MediaPlayerTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     AuthGate(
                         pendingShareToken = pendingShareToken.value,
                         onShareConsumed = { pendingShareToken.value = null },
+                        pendingWidgetKind = pendingWidgetKind.value,
+                        onWidgetConsumed = { pendingWidgetKind.value = null },
                     )
                 }
             }
@@ -131,6 +141,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         consumeShareIntent(intent)
+        consumeWidgetIntent(intent)
     }
 
     private fun consumeShareIntent(intent: Intent?) {
@@ -146,6 +157,13 @@ class MainActivity : ComponentActivity() {
         val token = data.lastPathSegment?.takeIf { it.isNotBlank() } ?: return
         pendingShareToken.value = token
     }
+
+    private fun consumeWidgetIntent(intent: Intent?) {
+        if (intent?.action != QuickLaunchActions.WIDGET_LAUNCH_ACTION) return
+        val name = intent.getStringExtra(QuickLaunchActions.WIDGET_LAUNCH_KIND_EXTRA) ?: return
+        val kind = runCatching { QuickLaunchKind.valueOf(name) }.getOrNull() ?: return
+        pendingWidgetKind.value = kind
+    }
 }
 
 @UnstableApi
@@ -153,6 +171,8 @@ class MainActivity : ComponentActivity() {
 private fun AuthGate(
     pendingShareToken: String?,
     onShareConsumed: () -> Unit,
+    pendingWidgetKind: QuickLaunchKind? = null,
+    onWidgetConsumed: () -> Unit = {},
 ) {
     val authVm: AuthViewModel = viewModel(factory = AuthViewModel.Factory)
     val authState by authVm.state.collectAsStateWithLifecycle()
@@ -211,6 +231,8 @@ private fun AuthGate(
                             onSignOut = authVm::signOut,
                             pendingShareToken = pendingShareToken,
                             onShareConsumed = onShareConsumed,
+                            pendingWidgetKind = pendingWidgetKind,
+                            onWidgetConsumed = onWidgetConsumed,
                         )
                     }
                 }
@@ -311,6 +333,8 @@ private fun AppScaffold(
     onSignOut: () -> Unit,
     pendingShareToken: String? = null,
     onShareConsumed: () -> Unit = {},
+    pendingWidgetKind: QuickLaunchKind? = null,
+    onWidgetConsumed: () -> Unit = {},
 ) {
     val playbackVm: PlaybackViewModel = viewModel()
     val currentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
@@ -359,6 +383,16 @@ private fun AppScaffold(
     // launch (rate-limited to once per 6h via SharedPreferences).
     val pendingUpdate by AppUpdateChecker.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { AppUpdateChecker.check(ctx) }
+
+    // Quick-launch widget tap → resolve to playback. Runs once per kind so
+    // re-entering AppScaffold doesn't re-trigger; clears via [onWidgetConsumed]
+    // immediately after dispatch. WidgetTargetLauncher swallows errors so a
+    // network blip doesn't leak past this side-effect.
+    LaunchedEffect(pendingWidgetKind) {
+        val kind = pendingWidgetKind ?: return@LaunchedEffect
+        WidgetTargetLauncher.launch(kind, playbackVm)
+        onWidgetConsumed()
+    }
 
     // Manual "Controlla aggiornamenti" handler — bypasses 6h rate-limit
     // and per-version dismissal. Updated → pop back to Home (where the
