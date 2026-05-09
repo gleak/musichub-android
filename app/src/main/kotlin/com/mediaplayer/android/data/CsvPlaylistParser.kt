@@ -37,9 +37,10 @@ object CsvPlaylistParser {
     private val TRACK_HEADER_ALIASES = listOf(
         // English
         "track name", "track title", "title",
-        // Italian — Exportify locale + common manual exports
-        "titolo", "titolo brano", "titolo del brano",
-        "nome traccia", "nome del brano", "nome brano", "brano",
+        // Italian — Exportify locale + Spotify "Account download" Italian export
+        "titolo", "titolo brano", "titolo del brano", "titolo della traccia",
+        "nome traccia", "nome della traccia",
+        "nome del brano", "nome brano", "brano",
     )
 
     /**
@@ -58,41 +59,58 @@ object CsvPlaylistParser {
         "nome dell'artista", "nome degli artisti",
     )
 
+    /**
+     * CSV entrypoint. Splits each line into cells then defers to [parseRows].
+     * Kept for callers (and tests) that still hand us a list of raw text
+     * lines — the XLSX path bypasses this and feeds [parseRows] directly.
+     */
     fun parse(lines: List<String>): List<SpotifyImportTrack> {
         if (lines.isEmpty()) {
             throw CsvPlaylistParseException("Il file è vuoto.")
         }
-        if (lines.size < 2) {
+        return parseRows(lines.map { parseCsvLine(it) })
+    }
+
+    /**
+     * Generic entrypoint operating on already-tokenised rows (header at
+     * index 0, data rows after). Same validation as [parse]: empty file,
+     * missing headers, no data rows, all titles blank — each surfaces as
+     * a typed [CsvPlaylistParseException] with a user-readable message.
+     */
+    fun parseRows(rows: List<List<String>>): List<SpotifyImportTrack> {
+        if (rows.isEmpty()) {
+            throw CsvPlaylistParseException("Il file è vuoto.")
+        }
+        if (rows.size < 2) {
             throw CsvPlaylistParseException(
                 "Il file contiene solo l'intestazione, nessun brano da importare."
             )
         }
 
-        val header = parseCsvLine(lines[0])
+        val header = rows[0]
         val trackCol = findHeaderColumn(header, TRACK_HEADER_ALIASES)
         val artistCol = findHeaderColumn(header, ARTIST_HEADER_ALIASES)
 
         if (trackCol < 0 || artistCol < 0) {
             val preview = header.take(6).joinToString(", ") { it.trim().ifBlank { "·" } }
             val missing = buildList {
-                if (trackCol < 0) add("titolo del brano (es. \"Track Name\" / \"Titolo\" / \"Nome traccia\")")
-                if (artistCol < 0) add("nome dell'artista (es. \"Artist Name(s)\" / \"Artista\" / \"Nome artista\")")
+                if (trackCol < 0) add("titolo del brano (es. \"Track Name\" / \"Titolo\" / \"Nome della traccia\")")
+                if (artistCol < 0) add("nome dell'artista (es. \"Artist Name(s)\" / \"Artista\" / \"Nome dell'artista\")")
             }.joinToString(" e ")
             throw CsvPlaylistParseException(
-                "Intestazione del CSV non riconosciuta: manca la colonna $missing. " +
-                    "Trovate: $preview… — assicurati di esportare la playlist da Exportify (https://exportify.net)."
+                "Intestazione non riconosciuta: manca la colonna $missing. " +
+                    "Trovate: $preview… — assicurati che il file sia un export di Spotify (Exportify CSV o XLSX)."
             )
         }
 
-        val rows = lines.drop(1).filter { it.isNotBlank() }
-        if (rows.isEmpty()) {
+        val dataRows = rows.drop(1).filter { row -> row.any { it.isNotBlank() } }
+        if (dataRows.isEmpty()) {
             throw CsvPlaylistParseException(
-                "Il CSV non contiene righe di brani sotto l'intestazione."
+                "Il file non contiene righe di brani sotto l'intestazione."
             )
         }
 
-        val tracks = rows.mapNotNull { line ->
-            val cols = parseCsvLine(line)
+        val tracks = dataRows.mapNotNull { cols ->
             val title = cols.getOrNull(trackCol)?.trim().orEmpty()
             val artist = cols.getOrNull(artistCol)?.trim().orEmpty()
             if (title.isEmpty()) null
@@ -101,7 +119,7 @@ object CsvPlaylistParser {
 
         if (tracks.isEmpty()) {
             throw CsvPlaylistParseException(
-                "Nessun titolo valido nelle ${rows.size} righe del CSV: " +
+                "Nessun titolo valido nelle ${dataRows.size} righe del file: " +
                     "la colonna del titolo (${header[trackCol].trim()}) è vuota in tutte le righe."
             )
         }

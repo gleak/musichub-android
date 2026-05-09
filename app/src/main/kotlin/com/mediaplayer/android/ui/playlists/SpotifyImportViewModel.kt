@@ -9,7 +9,9 @@ import com.mediaplayer.android.data.CsvPlaylistParseException
 import com.mediaplayer.android.data.CsvPlaylistParser
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.SpotifyImportTrack
+import com.mediaplayer.android.data.XlsxRowReader
 import com.mediaplayer.android.data.dto.SpotifyImportJobStatusDto
+import java.io.ByteArrayInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -66,10 +68,19 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
             _state.value = try {
                 val (name, tracks) = withContext(Dispatchers.IO) {
                     val resolver = getApplication<Application>().contentResolver
-                    val lines = resolver.openInputStream(uri)
-                        ?.bufferedReader()?.readLines()
+                    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
                         ?: throw Exception("Impossibile aprire il file selezionato (il provider non ha restituito uno stream).")
-                    val tracks = CsvPlaylistParser.parse(lines)
+                    val tracks = if (looksLikeXlsx(bytes)) {
+                        // Spotify's Italian "Account info" download and several
+                        // browser-side exporters now ship .xlsx instead of .csv;
+                        // route those through the lightweight in-process parser
+                        // so the user doesn't have to convert by hand.
+                        val rows = XlsxRowReader.read(ByteArrayInputStream(bytes))
+                        CsvPlaylistParser.parseRows(rows)
+                    } else {
+                        val text = bytes.toString(Charsets.UTF_8)
+                        CsvPlaylistParser.parse(text.split('\n').map { it.trimEnd('\r') })
+                    }
                     val name = resolveFilename(uri)
                     name to tracks
                 }
@@ -80,6 +91,18 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
         }
     }
 
+    /**
+     * Detects an XLSX file by its ZIP magic bytes (`PK\x03\x04`). Cheap byte
+     * sniff — no need to trust the URI's MIME type or extension, since the
+     * Android file picker will hand back `application/octet-stream` for
+     * `.xlsx` on plenty of devices and the user could rename a `.csv` to
+     * something else anyway.
+     */
+    private fun looksLikeXlsx(bytes: ByteArray): Boolean =
+        bytes.size >= 4 &&
+            bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte() &&
+            bytes[2] == 0x03.toByte() && bytes[3] == 0x04.toByte()
+
     fun reset() {
         pollJob?.cancel()
         pollJob = null
@@ -89,10 +112,10 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
     fun startImport(playlistName: String) {
         val confirming = _state.value as? SpotifyImportUiState.Confirming ?: return
         val name = playlistName.trim().ifEmpty { confirming.playlistName }
-        val uri = confirming.uri
+        val tracks = confirming.tracks
 
         _state.value = SpotifyImportUiState.Importing(
-            total = confirming.tracks.size,
+            total = tracks.size,
             current = 0,
             matched = 0,
             approx = 0,
@@ -104,15 +127,17 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
         pollJob = viewModelScope.launch {
             try {
                 val jobId = withContext(Dispatchers.IO) {
-                    val resolver = getApplication<Application>().contentResolver
                     val tmpFile = File.createTempFile(
                         "spotify_import", ".csv",
                         getApplication<Application>().cacheDir,
                     )
                     try {
-                        resolver.openInputStream(uri)?.use { input ->
-                            tmpFile.outputStream().use { output -> input.copyTo(output) }
-                        } ?: throw Exception("Impossibile aprire il file selezionato (il provider non ha restituito uno stream).")
+                        // Always upload a normalized CSV with English headers
+                        // synthesized from the rows we parsed locally — keeps
+                        // the backend importer (which only knows the canonical
+                        // Exportify schema) untouched while letting us accept
+                        // Italian CSVs and XLSX workbooks on the client side.
+                        writeNormalizedCsv(tmpFile, tracks)
 
                         val filePart = MultipartBody.Part.createFormData(
                             "file",
@@ -132,6 +157,31 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
                 )
             }
         }
+    }
+
+    /**
+     * Writes a minimal Exportify-compatible CSV into [target] containing only
+     * the two columns the backend matcher actually needs: `Track Name` and
+     * `Artist Name(s)`. Values with commas / quotes / newlines are wrapped in
+     * double-quotes with internal `"` doubled (RFC 4180).
+     */
+    private fun writeNormalizedCsv(target: File, tracks: List<SpotifyImportTrack>) {
+        target.bufferedWriter(Charsets.UTF_8).use { w ->
+            w.write("Track Name,Artist Name(s)")
+            w.write("\r\n")
+            for (t in tracks) {
+                w.write(csvEscape(t.title))
+                w.write(",")
+                w.write(csvEscape(t.artist))
+                w.write("\r\n")
+            }
+        }
+    }
+
+    private fun csvEscape(value: String): String {
+        val needsQuote = value.any { it == '"' || it == ',' || it == '\n' || it == '\r' }
+        val escaped = value.replace("\"", "\"\"")
+        return if (needsQuote) "\"$escaped\"" else escaped
     }
 
     private suspend fun pollProgress(jobId: String) {
@@ -198,6 +248,7 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
     private fun describeError(t: Throwable, fallback: String): String {
         return when (t) {
             is CsvPlaylistParseException -> t.message ?: fallback
+            is XlsxRowReader.XlsxReadException -> t.message ?: fallback
             is retrofit2.HttpException -> {
                 val code = t.code()
                 val body = try {
@@ -240,10 +291,15 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
     private fun resolveFilename(uri: Uri): String {
         val cursor = getApplication<Application>().contentResolver
             .query(uri, null, null, null, null)
-        return cursor?.use {
+        val raw = cursor?.use {
             val col = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (it.moveToFirst() && col >= 0) it.getString(col) else null
-        }?.removeSuffix(".csv") ?: "Playlist importata"
+        } ?: return "Playlist importata"
+        return raw
+            .removeSuffix(".csv")
+            .removeSuffix(".CSV")
+            .removeSuffix(".xlsx")
+            .removeSuffix(".XLSX")
     }
 
     override fun onCleared() {

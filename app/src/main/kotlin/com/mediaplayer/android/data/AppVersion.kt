@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.20.1"
+    const val VERSION = "0.20.2"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,15 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.20.2",
+            title = "Importazione playlist anche da XLSX e Spotify in italiano",
+            highlights = listOf(
+                "Ora puoi importare la playlist anche partendo da un file .xlsx (formato Excel) — non serve più convertirlo in CSV a mano. L'app riconosce il foglio principale, legge le righe direttamente in memoria con un parser leggero (nessuna libreria pesante aggiunta) e prosegue con lo stesso flusso di conferma e abbinamento dei CSV.",
+                "Aggiunto il supporto alle intestazioni in italiano del download \"Informazioni account\" di Spotify (\"Nome della traccia\", \"Nome dell'artista\" e simili), oltre alle varianti già supportate. Se il file ha colonne con nomi diversi, l'errore mostra ora un'anteprima delle colonne trovate e i nomi attesi nelle due lingue.",
+                "Migliorata la robustezza dell'invio al server: il file caricato viene rigenerato sempre come CSV minimale e ben formattato (con \"Track Name\" e \"Artist Name(s)\"), così il backend riceve sempre lo stesso schema indipendentemente dal formato di partenza, e i caratteri speciali (virgole, virgolette, accapo) sono correttamente protetti.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.20.1",
             title = "Android Auto più pulito + cronologia ricerca snella",
