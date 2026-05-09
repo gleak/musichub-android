@@ -244,15 +244,21 @@ class MediaPlaybackService : MediaLibraryService() {
         )
 
         // System media surfaces (notification, lockscreen, Android Auto, BT/AVRCP)
-        // resolve `MediaMetadata.artworkUri` through Media3's BitmapLoader. The
-        // default uses DefaultHttpDataSource which skips our OkHttp interceptor,
-        // so cover requests reached the backend without `X-Api-Key` and got 401
-        // — artwork never showed off-app. Route bitmap loads through the same
-        // OkHttpClient the rest of the app uses so the auth headers ride along.
+        // resolve `MediaMetadata.artworkUri` through Media3's BitmapLoader.
+        // Wrap an OkHttp-backed factory in DefaultDataSource so the loader
+        // can resolve BOTH schemes the app emits:
+        //  - `content://com.mediaplayer.android.covers/{id}` for AA browse
+        //    tiles (handled in-process by [CoverContentProvider] via
+        //    ContentDataSource — auth headers are injected when the
+        //    provider's openFile() hits the backend),
+        //  - `https://backend/api/songs/{id}/cover` for now-playing /
+        //    resumption snapshots / phone-side controllers (falls through
+        //    to OkHttpDataSource — auth interceptor on Network.okHttp
+        //    rides along).
         val bitmapLoader = CacheBitmapLoader(
             DataSourceBitmapLoader(
                 MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor()),
-                OkHttpDataSource.Factory(Network.okHttp),
+                DefaultDataSource.Factory(this, OkHttpDataSource.Factory(Network.okHttp)),
             )
         )
 
@@ -394,24 +400,35 @@ class MediaPlaybackService : MediaLibraryService() {
 
     private var coverLoadJob: Job? = null
     /**
-     * Fetches the cover bytes via the shared OkHttp client (so backend
-     * `X-Api-Key` auth headers ride along) and decodes to a software
-     * Bitmap with [android.graphics.BitmapFactory]. Software config is
-     * mandatory for AppWidgets — the RemoteViews IPC channel rejects
-     * hardware bitmaps and the widget would silently render blank.
+     * Fetches the cover bytes for the home-screen widget and decodes to a
+     * software Bitmap with [android.graphics.BitmapFactory]. Software
+     * config is mandatory for AppWidgets — the RemoteViews IPC channel
+     * rejects hardware bitmaps and the widget would silently render blank.
+     *
+     * Handles both schemes the player emits as `MediaMetadata.artworkUri`:
+     *  - `content://` (AA browse-tile origin) → ContentResolver, which
+     *    routes back to [CoverContentProvider] in-process,
+     *  - `https://` (phone-side / resumption origin) → shared OkHttp
+     *    client so the auth interceptor injects backend headers.
      */
     private fun loadCoverForWidget(uri: String, expectedSongId: Long?) {
         coverLoadJob?.cancel()
         coverLoadJob = serviceScope.launch {
             val bitmap = runCatching {
-                val response = Network.okHttp.newCall(
-                    okhttp3.Request.Builder().url(uri).build()
-                ).execute()
-                response.use { r ->
-                    if (!r.isSuccessful) return@runCatching null
-                    val bytes = r.body?.bytes() ?: return@runCatching null
-                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                val parsed = android.net.Uri.parse(uri)
+                val bytes: ByteArray? = when (parsed.scheme) {
+                    "content", "android.resource", "file" ->
+                        contentResolver.openInputStream(parsed)?.use { it.readBytes() }
+                    else -> {
+                        val response = Network.okHttp.newCall(
+                            okhttp3.Request.Builder().url(uri).build()
+                        ).execute()
+                        response.use { r ->
+                            if (!r.isSuccessful) null else r.body?.bytes()
+                        }
+                    }
                 }
+                bytes?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
             }.getOrNull()
             withContext(Dispatchers.Main) {
                 val cur = WidgetState.now.value

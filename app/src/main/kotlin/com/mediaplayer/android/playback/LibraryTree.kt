@@ -816,17 +816,16 @@ internal object LibraryTree {
             .build()
 
     /**
-     * Always emit the cover URI. The previous gate on
-     * `ConnectivityObserver.networkAvailable` got stuck false: cover bytes
-     * are loaded by Media3's BitmapLoader through a separate
-     * `OkHttpDataSource.Factory` that bypasses our OkHttp interceptor (the
-     * thing that flips `_backendReachable` back to true), so a single early
-     * failure baked `artworkUri = null` into every browse leaf for the rest
-     * of the session and AA cached the empty slots. CacheBitmapLoader on
-     * the session already falls back to AA's generic placeholder when a
-     * fetch fails, so emitting the URI unconditionally is the right tradeoff.
+     * Cover URI handed to AA browse leaves. Returns a `content://` URI
+     * served by [CoverContentProvider] rather than the raw HTTPS endpoint,
+     * because AA's gearhead process fetches browse-tile artwork from its
+     * own process and cannot carry our backend's `X-Api-Key` + `Bearer`
+     * headers — the previous HTTPS URI got 401-ed and tiles stayed blank.
+     * The provider proxies the fetch through our OkHttp client where the
+     * auth interceptor injects headers, then caches bytes on disk so AA's
+     * grid scrolls don't re-hit the backend.
      */
-    private fun aaArtworkUri(songId: Long): Uri? = Uri.parse(Network.coverUrl(songId))
+    private fun aaArtworkUri(songId: Long): Uri? = CoverContentProvider.uriFor(songId)
 
     // --- encoding helpers ----------------------------------------------------
 

@@ -144,6 +144,19 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Cover-art proxy for Android Auto. AA's gearhead process fetches
+             browse-tile artwork URIs from its own process and so cannot
+             carry our backend's X-Api-Key / Bearer auth headers. Routing
+             cover URIs through this provider lets AA resolve them locally
+             while the actual HTTP fetch happens in-process where OkHttp's
+             interceptor injects auth. exported=true so AA (a different
+             package) can read; covers are not sensitive content. -->
+        <provider
+            android:name=".playback.CoverContentProvider"
+            android:authorities="${applicationId}.covers"
+            android:exported="true"
+            android:grantUriPermissions="true" />
+
         <!-- Now-Playing home-screen widget. Glance-based; transport buttons
              route through ActionCallback subclasses that bind a transient
              MediaController to MediaPlaybackService. -->

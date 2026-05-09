@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.20.2"
+    const val VERSION = "0.20.3"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,13 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.20.3",
+            title = "Android Auto: copertine finalmente visibili nella libreria",
+            highlights = listOf(
+                "Android Auto: le copertine dei brani, delle playlist, degli album e degli artisti tornano a comparire nella libreria di sfoglio. La precedente correzione spostava il caricamento delle copertine sull'OkHttp dell'app, ma le tile della libreria di Android Auto vengono in realtà scaricate dal processo di Gearhead, che non ha accesso alle nostre intestazioni di autenticazione (`X-Api-Key` + `Bearer`) — il backend rispondeva 401 e la cella restava vuota. Ora le copertine viaggiano attraverso un nuovo `content://`-provider interno: Android Auto legge l'URI in locale, l'app fa la richiesta autenticata al backend nel proprio processo e mette in cache i byte su disco, così la griglia di Android Auto si popola subito e gli scroll ripetuti non ricolpiscono il server.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.20.2",
             title = "Importazione playlist anche da XLSX e Spotify in italiano",
