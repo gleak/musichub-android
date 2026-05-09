@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.20.0"
+    const val VERSION = "0.20.1"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,19 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.20.1",
+            title = "Android Auto più pulito + cronologia ricerca snella",
+            highlights = listOf(
+                "Android Auto: la libreria si carica anche se il telefono non era stato aperto prima. In precedenza, avviando MusicHub direttamente da Android Auto a processo freddo, l'autenticazione Google non era ancora pronta e il backend rispondeva 401 a ogni chiamata — risultato: schermata vuota. Ora il login silenzioso parte all'avvio del processo, prima di qualsiasi richiesta di sfoglio, così playlist, album, artisti e generi si popolano correttamente anche senza aprire prima l'app sul telefono.",
+                "Android Auto: il pannello del brano in riproduzione torna pulito. I 4 pulsanti del timer di sospensione (15m / 30m / 60m / fine traccia) sono stati rimossi dalla card di guida — ingombravano lo spazio e rubavano il posto al cuore. Il timer resta disponibile dalla schermata Now Playing del telefono.",
+                "Android Auto: quando colleghi il telefono al sistema dell'auto la riproduzione riparte da sola. Se la coda è ancora caricata l'app preme play; se l'app era stata chiusa, viene ripristinata l'ultima coda salvata e si avvia subito — niente più tap manuale dopo aver attaccato il cavo.",
+                "Android Auto: copertine dei brani caricate in modo più affidabile durante la navigazione. Un controllo di rete troppo aggressivo poteva azzerare le copertine per l'intera sessione dopo un singolo errore di rete iniziale; ora le richieste arrivano sempre al server e Android Auto gestisce il fallback con il proprio placeholder se il backend non è raggiungibile.",
+                "La cronologia delle ricerche recenti ora mostra solo le ultime 5 query invece di 8: lista più corta, scroll meno necessario, accesso più rapido a ciò che hai cercato di recente. Le query più vecchie cadono fuori automaticamente man mano che ne digiti di nuove.",
+                "Importazione playlist da Exportify: messaggi di errore finalmente parlanti. Prima un fallimento mostrava una pagina rossa generica senza alcun dettaglio; ora la schermata di errore riporta esattamente cosa è andato storto — file vuoto, intestazioni del CSV non riconosciute (con anteprima delle colonne trovate), nessuna riga sotto l'intestazione, errori HTTP del server con codice e messaggio, problemi di rete (timeout, host non raggiungibile, connessione rifiutata) o risposta JSON malformata.",
+                "Importazione playlist da Exportify: il parser ora riconosce anche le intestazioni in italiano (\"Titolo\", \"Nome traccia\", \"Artista\", \"Nome artista\" e varianti), oltre a quelle inglesi originali (\"Track Name\", \"Artist Name(s)\"). Chi esporta da una sessione Spotify italiana può importare direttamente senza ribattezzare le colonne a mano.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.20.0",
             title = "Playlist locali e shuffle che si rigenera ad ogni giro",

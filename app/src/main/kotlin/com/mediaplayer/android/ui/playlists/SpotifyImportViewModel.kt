@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.mediaplayer.android.data.CsvPlaylistParseException
 import com.mediaplayer.android.data.CsvPlaylistParser
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.SpotifyImportTrack
@@ -67,18 +68,14 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
                     val resolver = getApplication<Application>().contentResolver
                     val lines = resolver.openInputStream(uri)
                         ?.bufferedReader()?.readLines()
-                        ?: throw Exception("Impossibile leggere il file.")
+                        ?: throw Exception("Impossibile aprire il file selezionato (il provider non ha restituito uno stream).")
                     val tracks = CsvPlaylistParser.parse(lines)
                     val name = resolveFilename(uri)
                     name to tracks
                 }
-                if (tracks.isEmpty()) {
-                    SpotifyImportUiState.Error("Nessun brano trovato. Assicurati che sia un file CSV di Exportify.")
-                } else {
-                    SpotifyImportUiState.Confirming(playlistName = name, tracks = tracks, uri = uri)
-                }
+                SpotifyImportUiState.Confirming(playlistName = name, tracks = tracks, uri = uri)
             } catch (t: Throwable) {
-                SpotifyImportUiState.Error(t.message ?: "Lettura del file non riuscita.")
+                SpotifyImportUiState.Error(describeError(t, fallback = "Lettura del file non riuscita."))
             }
         }
     }
@@ -115,7 +112,7 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
                     try {
                         resolver.openInputStream(uri)?.use { input ->
                             tmpFile.outputStream().use { output -> input.copyTo(output) }
-                        } ?: throw Exception("Impossibile leggere il file.")
+                        } ?: throw Exception("Impossibile aprire il file selezionato (il provider non ha restituito uno stream).")
 
                         val filePart = MultipartBody.Part.createFormData(
                             "file",
@@ -131,7 +128,7 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
                 pollProgress(jobId)
             } catch (t: Throwable) {
                 _state.value = SpotifyImportUiState.Error(
-                    t.message ?: "Importazione non riuscita."
+                    describeError(t, fallback = "Importazione non riuscita.")
                 )
             }
         }
@@ -151,12 +148,16 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
                         approx = r.approx,
                         queued = r.queued,
                         failed = r.failed,
-                    ) else SpotifyImportUiState.Error("Nessun risultato dal server.")
+                    ) else SpotifyImportUiState.Error(
+                        "Il server ha segnato il job come completato ma non ha restituito alcun risultato (job $jobId)."
+                    )
                     return
                 }
                 "ERROR" -> {
+                    val serverMsg = status.errorMessage?.takeIf { it.isNotBlank() }
                     _state.value = SpotifyImportUiState.Error(
-                        status.errorMessage ?: "Importazione non riuscita."
+                        if (serverMsg != null) "Errore dal server: $serverMsg"
+                        else "Il server ha interrotto l'importazione senza fornire una causa (job $jobId)."
                     )
                     return
                 }
@@ -173,6 +174,66 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
             }
             delay(backoff)
             backoff = (backoff * 2).coerceAtMost(2_000L)
+        }
+    }
+
+    /**
+     * Renders a [Throwable] into a user-readable Italian sentence that
+     * actually says *what* went wrong, instead of falling back to a generic
+     * "Importazione non riuscita.". The previous code surfaced [Throwable.message]
+     * directly — for [retrofit2.HttpException] that's just `"HTTP 500 Internal
+     * Server Error"`, for [java.net.UnknownHostException] often null, leaving
+     * the user staring at the fallback string with no hint.
+     *
+     * Priority order:
+     *  - [CsvPlaylistParseException] — already user-readable, surface as-is.
+     *  - HTTP errors — include status code + a body excerpt (truncated to
+     *    280 chars) so backend-reported reasons reach the screen.
+     *  - Network-level exceptions — explicit translation per type so the
+     *    user knows whether to retry or check connectivity.
+     *  - Anything else — class simple name + message, never just the message
+     *    alone, so cryptic SDK strings ("Source closed") still come with a
+     *    type marker for triage.
+     */
+    private fun describeError(t: Throwable, fallback: String): String {
+        return when (t) {
+            is CsvPlaylistParseException -> t.message ?: fallback
+            is retrofit2.HttpException -> {
+                val code = t.code()
+                val body = try {
+                    t.response()?.errorBody()?.string()?.trim()
+                } catch (_: Throwable) {
+                    null
+                }
+                val excerpt = body?.takeIf { it.isNotBlank() }?.let {
+                    if (it.length > 280) it.substring(0, 277) + "…" else it
+                }
+                buildString {
+                    append("Il server ha risposto con un errore HTTP ").append(code)
+                    if (!excerpt.isNullOrBlank()) {
+                        append(": ").append(excerpt)
+                    } else {
+                        append(" senza dettagli aggiuntivi.")
+                    }
+                }
+            }
+            is java.net.SocketTimeoutException ->
+                "Il server non ha risposto in tempo (timeout). Verifica la rete e riprova."
+            is java.net.UnknownHostException ->
+                "Impossibile raggiungere il server (host non risolto): controlla la connessione."
+            is java.net.ConnectException ->
+                "Connessione al server rifiutata: ${t.message ?: "il backend potrebbe essere offline"}."
+            is javax.net.ssl.SSLException ->
+                "Errore di canale sicuro (SSL): ${t.message ?: "handshake non riuscito"}."
+            is java.io.IOException ->
+                "Errore di rete: ${t.message ?: t.javaClass.simpleName}"
+            is kotlinx.serialization.SerializationException ->
+                "Risposta non valida dal server: ${t.message ?: "JSON malformato"}."
+            else -> {
+                val msg = t.message?.takeIf { it.isNotBlank() }
+                if (msg != null) "${t.javaClass.simpleName}: $msg"
+                else "${t.javaClass.simpleName} ($fallback)"
+            }
         }
     }
 

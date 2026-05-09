@@ -5,7 +5,6 @@ import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import com.mediaplayer.android.R
-import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.AlbumDto
 import com.mediaplayer.android.data.dto.ArtistDto
@@ -817,15 +816,17 @@ internal object LibraryTree {
             .build()
 
     /**
-     * Cover URLs are LAN-only (`http://192.168…/api/songs/{id}/cover`). On a
-     * real Android Auto session over a head unit that's not on the LAN, the
-     * fetch silently fails and the slot flashes empty. Skip artworkUri while
-     * the network signal says the backend is unreachable so AA falls back to
-     * its own generic placeholder instead. The check is best-effort —
-     * `networkAvailable` flips true on the next successful HTTP call.
+     * Always emit the cover URI. The previous gate on
+     * `ConnectivityObserver.networkAvailable` got stuck false: cover bytes
+     * are loaded by Media3's BitmapLoader through a separate
+     * `OkHttpDataSource.Factory` that bypasses our OkHttp interceptor (the
+     * thing that flips `_backendReachable` back to true), so a single early
+     * failure baked `artworkUri = null` into every browse leaf for the rest
+     * of the session and AA cached the empty slots. CacheBitmapLoader on
+     * the session already falls back to AA's generic placeholder when a
+     * fetch fails, so emitting the URI unconditionally is the right tradeoff.
      */
-    private fun aaArtworkUri(songId: Long): Uri? =
-        if (ConnectivityObserver.networkAvailable.value) Uri.parse(Network.coverUrl(songId)) else null
+    private fun aaArtworkUri(songId: Long): Uri? = Uri.parse(Network.coverUrl(songId))
 
     // --- encoding helpers ----------------------------------------------------
 

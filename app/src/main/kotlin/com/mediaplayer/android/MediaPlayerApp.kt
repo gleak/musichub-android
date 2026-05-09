@@ -9,6 +9,7 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import com.mediaplayer.android.data.AuthBootstrap
 import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.data.DownloadRepository
 import com.mediaplayer.android.data.Network
@@ -35,6 +36,11 @@ class MediaPlayerApp : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         instance = this
         ConnectivityObserver.init()
+        // Kick silent Google sign-in early so Android Auto cold-start has a
+        // Bearer token by the time its first browse call hits the backend —
+        // without this gate the AA library is empty on a fresh process where
+        // MainActivity (and therefore AuthViewModel) never runs.
+        AuthBootstrap.start()
         // Offline write-queue: open the SQLite file synchronously (cheap —
         // no schema change, no read), then start the drainer coroutine
         // which blocks on ConnectivityObserver until the network is up.

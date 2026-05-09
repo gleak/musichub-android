@@ -32,6 +32,7 @@ import com.google.common.util.concurrent.MoreExecutors
 import java.util.concurrent.Executors
 import com.mediaplayer.android.MainActivity
 import com.mediaplayer.android.R
+import com.mediaplayer.android.data.AuthBootstrap
 import com.mediaplayer.android.data.LikedRepository
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.widget.NowPlayingSnapshot
@@ -175,16 +176,6 @@ class MediaPlaybackService : MediaLibraryService() {
         SessionCommand(ACTION_SLEEP_TIMER, Bundle.EMPTY)
     /** Default minutes used when a controller invokes the sleep command without args. */
     private val defaultSleepMinutes = 30
-
-    /**
-     * Quick-set sleep durations exposed as preset chips in the AA custom
-     * layout while no timer is active. Mirrors the driver-safe panel from
-     * `mockup/mh-auto-extra.jsx` (subset that fits AA's button budget — the
-     * full 5/10/15/30/45/60 set would exceed what most heads render). When
-     * a timer is armed the chips collapse to a single live-countdown
-     * `Annulla` button.
-     */
-    private val sleepPresetMinutes = listOf(15, 30, 60)
 
     override fun onCreate() {
         super.onCreate()
@@ -514,33 +505,21 @@ class MediaPlaybackService : MediaLibraryService() {
     }
 
     /**
-     * AA / lockscreen custom layout. While no timer is armed, surface one
-     * preset chip per [sleepPresetMinutes] entry plus a `Fine traccia`
-     * end-of-track chip so the driver picks a duration without leaving the
-     * now-playing card (mockup §9.3 driver-safe panel — closest
-     * representation in AA's chip strip primitive). While a timer is
-     * armed the strip collapses to Like + a single `Annulla · …` cancel
-     * button that ticks down via [SleepTimer.remainingMs] (or reads
-     * `Annulla · fine traccia` for the end-of-track mode).
+     * AA / lockscreen custom layout. Sleep-timer chips were removed from this
+     * surface — driver-distraction concern: 4 chips on the AA card consumed
+     * the entire button budget and pushed the like button off the visible
+     * row on small heads. Sleep timer is still reachable from the phone
+     * NowPlayingSheet; the [ACTION_SLEEP_TIMER] command stays registered so
+     * the phone VM's existing send path keeps working unchanged.
      */
+    @Suppress("UNUSED_PARAMETER")
     private fun buildCustomLayout(
         liked: Boolean,
         sleepActive: Boolean,
         sleepRemainingMs: Long,
         sleepEndOfTrack: Boolean,
-    ): ImmutableList<CommandButton> {
-        val buttons = ImmutableList.builder<CommandButton>()
-        buttons.add(buildLikeButton(liked))
-        if (sleepActive) {
-            buttons.add(buildSleepCancelButton(sleepRemainingMs, sleepEndOfTrack))
-        } else {
-            sleepPresetMinutes.forEach { minutes ->
-                buttons.add(buildSleepPresetButton(minutes))
-            }
-            buttons.add(buildSleepEndOfTrackButton())
-        }
-        return buttons.build()
-    }
+    ): ImmutableList<CommandButton> =
+        ImmutableList.of(buildLikeButton(liked))
 
     private fun buildLikeButton(liked: Boolean): CommandButton =
         CommandButton.Builder()
@@ -552,62 +531,35 @@ class MediaPlaybackService : MediaLibraryService() {
             .build()
 
     /**
-     * Quick-set chip for a fixed sleep duration. The minute count is baked
-     * into the [SessionCommand]'s `customExtras` so a tap routes to
-     * [ACTION_SLEEP_TIMER] with the right value — no per-button action name.
+     * Auto-resume playback when the first car controller (Android Auto /
+     * Automotive) attaches. Three states matter:
+     *  - already playing → no-op (some heads connect mid-session).
+     *  - queue loaded but paused → just `prepare()` (if idle) + `play()`.
+     *  - cold start, queue empty → seed from the saved [PlaybackResumption]
+     *    snapshot (same data the resume chip uses), prepare, play.
+     *
+     * Hops via [mainScope] so we can `await` [AuthBootstrap.ready] before
+     * touching the player — otherwise a cold-process AA connect can fire
+     * the stream request before the silent sign-in coroutine has set the
+     * Bearer token, and the backend rejects the audio fetch with 401.
+     * Player methods must run on the application looper, hence
+     * [Dispatchers.Main] inside [mainScope].
      */
-    private fun buildSleepPresetButton(minutes: Int): CommandButton {
-        val cmd = SessionCommand(
-            ACTION_SLEEP_TIMER,
-            Bundle().apply { putInt("minutes", minutes) },
-        )
-        return CommandButton.Builder()
-            .setSessionCommand(cmd)
-            .setDisplayName("Sospendi tra ${minutes}m")
-            .setIconResId(R.drawable.ic_bedtime_off)
-            .build()
-    }
-
-    /**
-     * Live-countdown cancel chip. In minute mode the label reads
-     * `Annulla · N min` (ceils [remainingMs] so it reads naturally); in
-     * end-of-track mode the label reads `Annulla · fine traccia`. Tap with
-     * no args cancels the armed timer (state-aware branch in
-     * `onCustomCommand`). Closes audit `08-auto-extra.md` D18 — the chip
-     * doubles as countdown display + explicit cancel intent.
-     */
-    private fun buildSleepCancelButton(
-        remainingMs: Long,
-        endOfTrack: Boolean,
-    ): CommandButton {
-        val label = if (endOfTrack) {
-            "Annulla · fine traccia"
-        } else {
-            val mins = ((remainingMs + 59_999L) / 60_000L).toInt().coerceAtLeast(1)
-            "Annulla · $mins min"
+    private fun autoResumeForCar(session: MediaSession) {
+        mainScope.launch {
+            AuthBootstrap.ready.await()
+            val p = session.player
+            if (p.isPlaying) return@launch
+            if (p.mediaItemCount > 0) {
+                if (p.playbackState == Player.STATE_IDLE) p.prepare()
+                p.play()
+                return@launch
+            }
+            val snapshot = resumption?.load() ?: return@launch
+            p.setMediaItems(snapshot.items, snapshot.startIndex, snapshot.startPositionMs)
+            p.prepare()
+            p.play()
         }
-        return CommandButton.Builder()
-            .setSessionCommand(sleepTimerCommand)
-            .setDisplayName(label)
-            .setIconResId(R.drawable.ic_bedtime)
-            .build()
-    }
-
-    /**
-     * `Fine traccia` end-of-track preset chip. Carries `end_of_track=true`
-     * in the session command's `customExtras` so the service routes it to
-     * [SleepTimer.setEndOfTrack] instead of the minute-mode path.
-     */
-    private fun buildSleepEndOfTrackButton(): CommandButton {
-        val cmd = SessionCommand(
-            ACTION_SLEEP_TIMER,
-            Bundle().apply { putBoolean("end_of_track", true) },
-        )
-        return CommandButton.Builder()
-            .setSessionCommand(cmd)
-            .setDisplayName("Fine traccia")
-            .setIconResId(R.drawable.ic_bedtime_off)
-            .build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
@@ -703,6 +655,7 @@ class MediaPlaybackService : MediaLibraryService() {
                 carControllerCount++
                 if (carControllerCount == 1) {
                     aaLyricsTicker?.setAaConnected(true)
+                    autoResumeForCar(session)
                 }
             }
         }
@@ -811,6 +764,7 @@ class MediaPlaybackService : MediaLibraryService() {
             mediaId: String,
         ): ListenableFuture<LibraryResult<MediaItem>> =
             serviceScope.future {
+                AuthBootstrap.ready.await()
                 LibraryTree.item(mediaId)?.let { LibraryResult.ofItem(it, /* params = */ null) }
                     ?: LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
             }
@@ -824,6 +778,13 @@ class MediaPlaybackService : MediaLibraryService() {
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
             serviceScope.future {
+                // Wait for silent auth before hitting the backend. On AA
+                // cold-start MainActivity never runs, so AuthBootstrap (kicked
+                // from MediaPlayerApp.onCreate) is what actually populates
+                // AuthTokenHolder. Without this gate the very first browse
+                // call hits the wire token-less and the backend returns 401,
+                // leaving the AA library blank for the whole session.
+                AuthBootstrap.ready.await()
                 // Custom queue folder: snapshot the player's timeline on the
                 // application main thread (Player is single-thread-confined)
                 // and render via LibraryTree. Done here instead of inside
@@ -861,6 +822,7 @@ class MediaPlaybackService : MediaLibraryService() {
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<Void>> =
             serviceScope.future {
+                AuthBootstrap.ready.await()
                 // Probe the first page to get an item count for AA's UI.
                 // The actual paged hits are fetched lazily in onGetSearchResult.
                 val firstPage = LibraryTree.search(query, page = 0, pageSize = 50)
@@ -877,6 +839,7 @@ class MediaPlaybackService : MediaLibraryService() {
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
             serviceScope.future {
+                AuthBootstrap.ready.await()
                 val hits = LibraryTree.search(query, page, pageSize)
                 LibraryResult.ofItemList(ImmutableList.copyOf(hits), params)
             }
@@ -926,6 +889,7 @@ class MediaPlaybackService : MediaLibraryService() {
             startPositionMs: Long,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> =
             serviceScope.future {
+                AuthBootstrap.ready.await()
                 // Voice-search path: AA / Google Assistant deliver
                 // "Hey Google, play X on MediaPlayer" as a single MediaItem
                 // whose only payload is RequestMetadata.searchQuery. Resolve
