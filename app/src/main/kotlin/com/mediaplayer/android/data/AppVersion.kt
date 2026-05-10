@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.20.3"
+    const val VERSION = "0.20.6"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,32 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.20.6",
+            title = "Rigenerazione manuale: ora aggiorna tutte le playlist Per te in un colpo solo",
+            highlights = listOf(
+                "L'azione \"Rigenera playlist Per te\" (in Profilo → RIPRODUZIONE e in Profilo → Download offline) ora ricalcola tutte le playlist automatiche in un'unica chiamata: Discover Daily, On Repeat, i sei Daily Mix, i sei Mood, Release Radar, Time Capsule, Up Next e Radar. Prima la stessa azione toccava soltanto i sei Daily Mix, lasciando le altre famiglie da sincronizzare separatamente. Il sottotitolo del bottone elenca esplicitamente cosa verrà aggiornato e il risultato mostra il numero totale di brani rigenerati.",
+                "Lato server: nuovo endpoint `POST /api/playlists/auto/refresh-all` che orchestra il rinfresco sequenziale di tutte le famiglie con `force=true` (bypassa la finestra di idempotenza di 18h). Le singole famiglie continuano ad avere i loro endpoint dedicati (`/daily-mix/refresh`, `/mood/refresh`, ecc.) per usi mirati o test. Un fallimento isolato di una famiglia non blocca le altre — viene loggato e il rinfresco prosegue.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.20.5",
+            title = "Widget con Casuale/Ripeti, copertina già visibile, e orario di rigenerazione delle playlist Per te",
+            highlights = listOf(
+                "Widget \"In riproduzione\" della home: aggiunti i pulsanti Casuale e Ripeti accanto a precedente, play/pausa e successivo. \"Casuale\" è un toggle on/off; \"Ripeti\" cicla tra spento → ripeti tutto → ripeti questo brano → spento. L'icona si colora di verde quando l'opzione è attiva, così si capisce a colpo d'occhio lo stato senza aprire l'app. Le 5 icone restano leggibili anche nel widget compatto perché sono state ridotte leggermente (da 34 a 30 dp con icone interne da 16 dp). Telefono, widget, Android Auto e auto-resume condividono lo stesso stato — toccando Casuale dal widget l'icona cambia anche nel player a tutto schermo e nella schermata di Android Auto.",
+                "La copertina del brano in riproduzione era già supportata nel widget — viene decodificata in anticipo dal servizio di riproduzione e ridipinta a ogni cambio brano. Con la patch sulle copertine `content://` di pochi minuti fa anche le copertine dei brani caricati dalla coda del telefono vengono risolte correttamente, quindi adesso vedi la copertina nel widget anche se la riproduzione è partita da un brano singolo, da una playlist o da un album. In assenza di copertina (brano senza artwork o backend irraggiungibile la prima volta) viene mostrata una placeholder a forma di disco.",
+                "\"Per te\": sotto il titolo è ora visibile l'orario reale dell'ultima rigenerazione delle playlist (es. \"ultima rigenerazione oggi alle 04:03\" o \"ieri alle 04:05\"), letto direttamente dal campo `lastRefreshedAt` restituito dal backend invece di un orario teorico. La carta IN ROTAZIONE mostra la stessa informazione per il singolo brano, mentre la pagina di dettaglio di ogni playlist automatica ha la sua riga \"AGGIORNATA\" già letta dallo stesso campo. La carta \"Come funziona\" spiega che tutte le playlist giornaliere (Discover Daily, On Repeat, i sei Daily Mix, i sei Mood, Release Radar e Time Capsule) vengono rigenerate ogni notte alle 04:00 (Europe/Rome), mentre Radar (artisti emergenti) resta settimanale.",
+                "Lato server: gli orari dei job di rigenerazione delle playlist automatiche sono stati allineati alle 04:00 Europe/Rome per On Repeat, Daily Mix, Mood, Release Radar e Time Capsule (Discover Daily era già lì). Prima erano sparpagliati tra le 02:30 e le 05:00 della notte, con la conseguenza che il sottotitolo \"aggiornate oggi\" nel client era vero ma non quantificabile. Ora il rinfresco serale è una sola finestra unica e si può promettere all'utente \"alle 04:00\".",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.20.4",
+            title = "Android Auto: copertine brano uniformi e tasti Casuale/Ripeti nel player",
+            highlights = listOf(
+                "Android Auto: anche le copertine dei singoli brani — quelle che compaiono nel player a tutto schermo, nella lista della coda e nella resume chip al collegamento dell'auto — viaggiano ora attraverso lo stesso `content://`-provider già usato per le tile di playlist, album e artisti. Prima questi MediaItem venivano costruiti dal codice del telefono con l'URL HTTPS diretto del backend, e il processo di Gearhead di Android Auto non riusciva a recuperarli (mancavano le intestazioni `X-Api-Key` + `Bearer`), mostrando una placeholder grigia. Adesso tutte le copertine — playlist, album, artista e brano — si comportano allo stesso modo: Android Auto risolve l'URI in locale, l'app fa la richiesta autenticata nel proprio processo e mantiene la cache su disco.",
+                "Android Auto: aggiunti i pulsanti \"Casuale\" e \"Ripeti\" nella card del brano in riproduzione. Su alcune versioni di Gearhead i controlli standard di shuffle e repeat non venivano mostrati nella schermata di guida nonostante il player li dichiarasse; ora due tasti dedicati nella custom layout li rendono sempre raggiungibili. \"Casuale\" è un toggle on/off; \"Ripeti\" cicla tra spento → ripeti tutto → ripeti questo brano → spento, esattamente come sul telefono. L'icona riflette lo stato corrente (verde quando attivo, bianca quando disattivato).",
+            ),
+        ),
         ChangelogEntry(
             version = "0.20.3",
             title = "Android Auto: copertine finalmente visibili nella libreria",

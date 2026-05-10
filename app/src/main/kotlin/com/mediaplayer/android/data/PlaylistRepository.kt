@@ -97,4 +97,11 @@ class PlaylistRepository(
 
     /** Triggers a manual Daily Mix recompute. Returns the number of refreshed entries. */
     suspend fun refreshDailyMix(): Int = api.refreshDailyMix().refreshed
+
+    /**
+     * Recompute every auto-playlist family for the current user (Discover Daily,
+     * On Repeat, Daily Mix, Mood, Release Radar, Time Capsule, Up Next, Radar).
+     * Returns the total refreshed entries across all families.
+     */
+    suspend fun refreshAllAutoPlaylists(): Int = api.refreshAllAutoPlaylists().refreshed
 }

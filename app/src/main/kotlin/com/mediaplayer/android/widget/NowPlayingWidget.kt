@@ -124,13 +124,27 @@ class NowPlayingWidget : GlanceAppWidget() {
     private fun TransportRow(s: NowPlayingSnapshot) {
         val playPauseRes =
             if (s.isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play
+        val repeatRes = when (s.repeatMode) {
+            // Player.REPEAT_MODE_ONE = 1, REPEAT_MODE_ALL = 2.
+            1 -> R.drawable.ic_repeat_one_on
+            2 -> R.drawable.ic_repeat_on
+            else -> R.drawable.ic_repeat
+        }
+        val shuffleRes = if (s.shuffleEnabled) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle
         Row(verticalAlignment = Alignment.CenterVertically) {
+            TransportButton(
+                shuffleRes, "Casuale",
+                enabled = s.songId != null,
+                action = actionRunCallback<ShuffleAction>(),
+                active = s.shuffleEnabled,
+            )
+            Spacer(GlanceModifier.width(3.dp))
             TransportButton(
                 R.drawable.ic_widget_skip_previous, "Precedente",
                 enabled = s.hasPrevious,
                 action = actionRunCallback<PreviousAction>(),
             )
-            Spacer(GlanceModifier.width(4.dp))
+            Spacer(GlanceModifier.width(3.dp))
             TransportButton(
                 playPauseRes,
                 if (s.isPlaying) "Pausa" else "Riproduci",
@@ -138,11 +152,18 @@ class NowPlayingWidget : GlanceAppWidget() {
                 action = actionRunCallback<PlayPauseAction>(),
                 accent = true,
             )
-            Spacer(GlanceModifier.width(4.dp))
+            Spacer(GlanceModifier.width(3.dp))
             TransportButton(
                 R.drawable.ic_widget_skip_next, "Successivo",
                 enabled = s.hasNext,
                 action = actionRunCallback<NextAction>(),
+            )
+            Spacer(GlanceModifier.width(3.dp))
+            TransportButton(
+                repeatRes, "Ripeti",
+                enabled = s.songId != null,
+                action = actionRunCallback<RepeatAction>(),
+                active = s.repeatMode != 0,
             )
         }
     }
@@ -154,26 +175,35 @@ class NowPlayingWidget : GlanceAppWidget() {
         enabled: Boolean,
         action: Action,
         accent: Boolean = false,
+        active: Boolean = false,
     ) {
         val bg = when {
             !enabled -> Color(0xFF1A1A1A)
             accent -> Color(0xFFD4FF3F)
             else -> Color(0xFF1F1F1F)
         }
-        val tint = if (accent) Color(0xFF0A0A0A) else Color.White
+        // Active toggles (shuffle on / repeat != off) keep the bundled
+        // green-tinted vector — don't recolor via ColorFilter or it would
+        // overwrite the per-state icon. Standard buttons get a white tint;
+        // play/pause keeps the dark tint over the lime accent.
+        val tint = when {
+            accent -> Color(0xFF0A0A0A)
+            active -> null
+            else -> Color.White
+        }
         Box(
             modifier = GlanceModifier
-                .size(34.dp)
+                .size(30.dp)
                 .background(bg)
-                .cornerRadius(17.dp)
+                .cornerRadius(15.dp)
                 .clickable(action),
             contentAlignment = Alignment.Center,
         ) {
             Image(
                 provider = ImageProvider(iconRes),
                 contentDescription = cd,
-                colorFilter = ColorFilter.tint(ColorProvider(tint)),
-                modifier = GlanceModifier.size(18.dp),
+                colorFilter = tint?.let { ColorFilter.tint(ColorProvider(it)) },
+                modifier = GlanceModifier.size(16.dp),
             )
         }
     }

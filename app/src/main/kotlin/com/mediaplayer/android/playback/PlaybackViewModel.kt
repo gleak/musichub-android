@@ -784,6 +784,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     val loader = SingletonImageLoader.get(ctx)
                     loader.diskCache?.remove(coverUrl)
                     loader.memoryCache?.remove(MemoryCache.Key(coverUrl))
+                    CoverContentProvider.invalidate(ctx, fresh.id)
                 }
 
                 controller?.let { c ->
@@ -797,7 +798,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                                 .setArtist(fresh.artist)
                                 .setAlbumTitle(fresh.album)
                                 .setArtworkUri(
-                                    if (fresh.hasCoverArt) android.net.Uri.parse(coverUrl) else null
+                                    if (fresh.hasCoverArt) CoverContentProvider.uriFor(fresh.id) else null
                                 )
                                 .build()
                         )
@@ -865,6 +866,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 val loader = SingletonImageLoader.get(ctx)
                 loader.diskCache?.remove(coverUrl)
                 loader.memoryCache?.remove(MemoryCache.Key(coverUrl))
+                CoverContentProvider.invalidate(ctx, songId)
             }
         }
     }
@@ -1024,6 +1026,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             val loader = SingletonImageLoader.get(ctx)
             loader.diskCache?.remove(coverUrl)
             loader.memoryCache?.remove(MemoryCache.Key(coverUrl))
+            CoverContentProvider.invalidate(ctx, current.id)
         }
 
         controller?.let { c ->
@@ -1037,7 +1040,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                         .setArtist(current.artist)
                         .setAlbumTitle(current.album)
                         .setArtworkUri(
-                            if (current.hasCoverArt) android.net.Uri.parse(coverUrl) else null
+                            if (current.hasCoverArt) CoverContentProvider.uriFor(current.id) else null
                         )
                         .build()
                 )
@@ -1367,7 +1370,7 @@ private fun SongDto.toMediaItem(userQueued: Boolean = false): MediaItem {
         .setArtist(artist)
         .setAlbumTitle(album)
         .setArtworkUri(
-            if (hasCoverArt) android.net.Uri.parse(Network.coverUrl(id)) else null
+            if (hasCoverArt) CoverContentProvider.uriFor(id) else null
         )
         .apply { if (extras != null) setExtras(extras) }
         .build()

@@ -570,9 +570,8 @@ private fun AutoPlaylistMetaStrip(
     lastRefreshedAt: String?,
 ) {
     val mono = com.mediaplayer.android.ui.theme.LocalMHMono.current
-    val refreshLabel = lastRefreshedAt?.let { stamp ->
-        runCatching { stamp.substring(0, 10) }.getOrNull()
-    } ?: "Oggi"
+    val refreshLabel = com.mediaplayer.android.ui.common.formatRefreshedAt(lastRefreshedAt)
+        ?: "In attesa"
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -607,7 +606,11 @@ private fun AutoPlaylistMetaStrip(
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    text = "Aggiornata automaticamente — ${family.label}",
+                    text = "Aggiornata automaticamente — ${family.label} · " +
+                        if (family == com.mediaplayer.android.ui.common.AutoPlaylistFamily.Radar)
+                            "ogni lunedì alle 05:45"
+                        else
+                            "ogni notte alle 04:00",
                     style = MaterialTheme.typography.bodySmall,
                     color = com.mediaplayer.android.ui.theme.MHColors.TextLo,
                 )

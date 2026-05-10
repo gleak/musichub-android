@@ -209,6 +209,17 @@ interface MediaPlayerApi {
     @POST("api/playlists/auto/daily-mix/refresh")
     suspend fun refreshDailyMix(): DailyMixRefreshDto
 
+    /**
+     * Recompute every auto-playlist family for the current user in one call
+     * (Discover Daily, On Repeat, Daily Mix, Mood, Release Radar, Time
+     * Capsule, Up Next, Radar). The Profile / Download Offline "rigenera
+     * Per te" affordances route here so a single tap refreshes the whole
+     * surface instead of just Daily Mix.
+     */
+    @POST("api/playlists/auto/refresh-all")
+    suspend fun refreshAllAutoPlaylists():
+        com.mediaplayer.android.data.dto.AutoPlaylistRefreshAllDto
+
     @POST("api/playlists/{id}/share")
     suspend fun createPlaylistShare(
         @Path("id") id: Long,

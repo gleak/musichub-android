@@ -54,6 +54,8 @@ import com.mediaplayer.android.ui.common.MHLogo
 import com.mediaplayer.android.ui.common.SectionHeader
 import com.mediaplayer.android.ui.common.badgeFor
 import com.mediaplayer.android.ui.common.familyOf
+import com.mediaplayer.android.ui.common.formatMostRecentRefreshedAt
+import com.mediaplayer.android.ui.common.formatRefreshedAt
 import com.mediaplayer.android.ui.theme.LocalMHMono
 import com.mediaplayer.android.ui.theme.MHColors
 import com.mediaplayer.android.ui.theme.MHGradient
@@ -141,8 +143,13 @@ private fun ForYouContent(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                val mostRecent = formatMostRecentRefreshedAt(autoPlaylists.map { it.lastRefreshedAt })
                 Text(
-                    text = "${autoPlaylists.size} playlist · aggiornate oggi",
+                    text = if (mostRecent != null) {
+                        "${autoPlaylists.size} playlist · ultima rigenerazione $mostRecent"
+                    } else {
+                        "${autoPlaylists.size} playlist · rigenerazione notturna pianificata"
+                    },
                     style = mono.caption.copy(color = MHColors.TextLo),
                     modifier = Modifier.padding(top = 6.dp, end = 12.dp),
                 )
@@ -246,8 +253,13 @@ private fun RotationHero(pl: PlaylistDto, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 2.dp),
                 )
+                val refreshed = formatRefreshedAt(pl.lastRefreshedAt)
                 Text(
-                    text = "${pl.songCount} brani · aggiornata oggi",
+                    text = if (refreshed != null) {
+                        "${pl.songCount} brani · rigenerata $refreshed"
+                    } else {
+                        "${pl.songCount} brani · in attesa di rigenerazione"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MHColors.TextLo,
                     modifier = Modifier.padding(top = 4.dp),
@@ -405,9 +417,12 @@ private fun HowItWorksCard() {
             style = mono.eyebrow,
         )
         Text(
-            text = "Le playlist sono generate ogni giorno dal motore di MusicHub " +
+            text = "Tutte le playlist automatiche (Discover Daily, On Repeat, " +
+                "i sei Daily Mix, i sei Mood, Release Radar e Time Capsule) " +
+                "vengono rigenerate ogni notte alle 04:00 (Europe/Rome) " +
                 "analizzando i tuoi ascolti, gli artisti che segui e il momento " +
-                "della giornata. Più ascolti, più diventano accurate.",
+                "della giornata. Radar (artisti emergenti) si aggiorna invece " +
+                "una volta alla settimana, il lunedì. Più ascolti, più diventano accurate.",
             style = MaterialTheme.typography.bodySmall,
             color = MHColors.TextLo,
             modifier = Modifier.padding(top = 6.dp),

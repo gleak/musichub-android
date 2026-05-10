@@ -1,7 +1,6 @@
 package com.mediaplayer.android.playback
 
 import android.content.Context
-import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -74,7 +73,7 @@ internal class PlaybackResumption(context: Context) {
                         MediaMetadata.Builder()
                             .setTitle(s.title)
                             .setArtist(s.artist)
-                            .setArtworkUri(Uri.parse(Network.coverUrl(s.id)))
+                            .setArtworkUri(CoverContentProvider.uriFor(s.id))
                             .setIsBrowsable(false)
                             .setIsPlayable(true)
                             .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)

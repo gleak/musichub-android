@@ -2,6 +2,7 @@ package com.mediaplayer.android.playback
 
 import android.content.ContentProvider
 import android.content.ContentValues
+import android.content.Context
 import android.database.Cursor
 import android.net.Uri
 import android.os.ParcelFileDescriptor
@@ -88,5 +89,17 @@ class CoverContentProvider : ContentProvider() {
         const val AUTHORITY = "com.mediaplayer.android.covers"
 
         fun uriFor(songId: Long): Uri = Uri.parse("content://$AUTHORITY/$songId")
+
+        /**
+         * Drops the disk-cached bytes for [songId] so the next read refetches
+         * from the backend. Call after a re-download / flag-wrong / refresh
+         * so AA's grid + now-playing card pick up the new artwork instead
+         * of serving the stale file.
+         */
+        fun invalidate(context: Context, songId: Long) {
+            runCatching {
+                File(File(context.cacheDir, "covers"), songId.toString()).delete()
+            }
+        }
     }
 }

@@ -155,17 +155,19 @@ fun DownloadOfflineScreen(onBack: () -> Unit) {
         }
         SettingsCard(eyebrow = "Gestione") {
             SettingsActionRow(
-                label = "Forza rigenerazione Daily Mix",
+                label = "Forza rigenerazione playlist Per te",
                 detail = dailyMixDetail
-                    ?: "Ricalcola il Daily Mix di domani al prossimo aggiornamento",
+                    ?: "Ricalcola subito tutte le playlist automatiche " +
+                        "(Discover Daily, On Repeat, Daily Mix, Mood, " +
+                        "Release Radar, Time Capsule, Up Next, Radar)",
                 enabled = !dailyMixBusy,
                 onClick = {
                     dailyMixBusy = true
                     dailyMixDetail = "In corso…"
                     scope.launch {
-                        val result = runCatching { playlistRepo.refreshDailyMix() }
+                        val result = runCatching { playlistRepo.refreshAllAutoPlaylists() }
                         dailyMixDetail = result.fold(
-                            onSuccess = { n -> "Aggiornato ($n brani)" },
+                            onSuccess = { n -> "Aggiornate ($n brani)" },
                             onFailure = { "Errore — riprova" },
                         )
                         dailyMixBusy = false

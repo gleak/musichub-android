@@ -71,6 +71,21 @@ class MediaPlaybackService : MediaLibraryService() {
     companion object {
         const val ACTION_TOGGLE_LIKE = "com.mediaplayer.android.TOGGLE_LIKE"
         /**
+         * Custom session command for toggling shuffle from controllers (AA).
+         * No args. Flips `Player.shuffleModeEnabled`. Bound to a CommandButton
+         * in the AA custom layout because gearhead's now-playing card on some
+         * head units doesn't surface the standard shuffle control even when
+         * the player advertises COMMAND_SET_SHUFFLE_MODE.
+         */
+        const val ACTION_TOGGLE_SHUFFLE = "com.mediaplayer.android.TOGGLE_SHUFFLE"
+        /**
+         * Custom session command for cycling repeat mode (OFF → ALL → ONE → OFF).
+         * Mirrors the phone NowPlayingSheet's [PlaybackViewModel.cycleRepeat]
+         * order. Bound to an AA CommandButton for the same reason as
+         * [ACTION_TOGGLE_SHUFFLE].
+         */
+        const val ACTION_CYCLE_REPEAT = "com.mediaplayer.android.CYCLE_REPEAT"
+        /**
          * Custom session command for setting / cancelling the sleep timer.
          * Args bundle key: {@code "minutes"} (Int). 0 cancels an active timer.
          * Authoritative timer state lives on this service so controllers on
@@ -158,7 +173,16 @@ class MediaPlaybackService : MediaLibraryService() {
     private val likedRepository = LikedRepository()
     private val toggleLikeCommand =
         SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY)
+    private val toggleShuffleCommand =
+        SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY)
+    private val cycleRepeatCommand =
+        SessionCommand(ACTION_CYCLE_REPEAT, Bundle.EMPTY)
     @Volatile private var currentLiked: Boolean = false
+    /** Mirrors `player.shuffleModeEnabled` so the AA custom-layout button can
+     *  pick the right icon without touching the player off the main thread. */
+    @Volatile private var currentShuffle: Boolean = false
+    /** Mirrors `player.repeatMode` for the same reason as [currentShuffle]. */
+    @Volatile private var currentRepeatMode: Int = Player.REPEAT_MODE_OFF
 
     // --- Sleep timer (service-owned, single source of truth across phone + AA)
     //
@@ -342,7 +366,21 @@ class MediaPlaybackService : MediaLibraryService() {
                     fadeInOnAutoTransition()
                 }
             }
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                currentShuffle = shuffleModeEnabled
+                updateCustomLayout()
+            }
+            override fun onRepeatModeChanged(repeatMode: Int) {
+                currentRepeatMode = repeatMode
+                updateCustomLayout()
+            }
         })
+        // Seed cached shuffle/repeat from the player so the AA custom-layout
+        // buttons render the right state on first connect (PlaybackViewModel
+        // restores these from DataStore on its own controller; the service
+        // only mirrors what the player reports).
+        currentShuffle = player.shuffleModeEnabled
+        currentRepeatMode = player.repeatMode
 
         // Mirror player state into [WidgetState] so the Now-Playing home-screen
         // widget can repaint without holding its own MediaController. Updates
@@ -359,6 +397,12 @@ class MediaPlaybackService : MediaLibraryService() {
                 pushWidgetState()
             }
             override fun onPlaybackStateChanged(state: Int) {
+                pushWidgetState()
+            }
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                pushWidgetState()
+            }
+            override fun onRepeatModeChanged(repeatMode: Int) {
                 pushWidgetState()
             }
         })
@@ -393,6 +437,8 @@ class MediaPlaybackService : MediaLibraryService() {
             hasPrevious = player.hasPreviousMediaItem(),
             coverUri = artUri,
             cover = if (keepCover) previous.cover else null,
+            shuffleEnabled = player.shuffleModeEnabled,
+            repeatMode = player.repeatMode,
         )
         WidgetState.update(snapshot)
         if (!keepCover && artUri != null) loadCoverForWidget(artUri, songId)
@@ -536,7 +582,11 @@ class MediaPlaybackService : MediaLibraryService() {
         sleepRemainingMs: Long,
         sleepEndOfTrack: Boolean,
     ): ImmutableList<CommandButton> =
-        ImmutableList.of(buildLikeButton(liked))
+        ImmutableList.of(
+            buildLikeButton(liked),
+            buildShuffleButton(currentShuffle),
+            buildRepeatButton(currentRepeatMode),
+        )
 
     private fun buildLikeButton(liked: Boolean): CommandButton =
         CommandButton.Builder()
@@ -546,6 +596,26 @@ class MediaPlaybackService : MediaLibraryService() {
                 if (liked) R.drawable.ic_favorite else R.drawable.ic_favorite_border
             )
             .build()
+
+    private fun buildShuffleButton(enabled: Boolean): CommandButton =
+        CommandButton.Builder()
+            .setSessionCommand(toggleShuffleCommand)
+            .setDisplayName(if (enabled) "Casuale attivo" else "Casuale")
+            .setIconResId(if (enabled) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle)
+            .build()
+
+    private fun buildRepeatButton(mode: Int): CommandButton {
+        val (label, icon) = when (mode) {
+            Player.REPEAT_MODE_ONE -> "Ripeti brano" to R.drawable.ic_repeat_one_on
+            Player.REPEAT_MODE_ALL -> "Ripeti tutto" to R.drawable.ic_repeat_on
+            else -> "Ripeti" to R.drawable.ic_repeat
+        }
+        return CommandButton.Builder()
+            .setSessionCommand(cycleRepeatCommand)
+            .setDisplayName(label)
+            .setIconResId(icon)
+            .build()
+    }
 
     /**
      * Auto-resume playback when the first car controller (Android Auto /
@@ -647,6 +717,8 @@ class MediaPlaybackService : MediaLibraryService() {
                 connectionResult.availableSessionCommands.buildUpon()
                     .add(toggleLikeCommand)
                     .add(sleepTimerCommand)
+                    .add(toggleShuffleCommand)
+                    .add(cycleRepeatCommand)
                     .build()
             } else {
                 connectionResult.availableSessionCommands
@@ -720,6 +792,25 @@ class MediaPlaybackService : MediaLibraryService() {
                     } catch (_: Exception) {
                         SessionResult(SessionError.ERROR_UNKNOWN)
                     }
+                }
+                ACTION_TOGGLE_SHUFFLE -> {
+                    // Player must be touched on the application looper.
+                    withContext(Dispatchers.Main) {
+                        val p = session.player
+                        p.shuffleModeEnabled = !p.shuffleModeEnabled
+                    }
+                    SessionResult(SessionResult.RESULT_SUCCESS)
+                }
+                ACTION_CYCLE_REPEAT -> {
+                    withContext(Dispatchers.Main) {
+                        val p = session.player
+                        p.repeatMode = when (p.repeatMode) {
+                            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                            else -> Player.REPEAT_MODE_OFF
+                        }
+                    }
+                    SessionResult(SessionResult.RESULT_SUCCESS)
                 }
                 ACTION_SLEEP_TIMER -> {
                     // Phone VM sends the minute count via `args`; AA preset

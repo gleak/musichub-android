@@ -87,3 +87,33 @@ class PreviousAction : ActionCallback {
         withController(context) { c -> c.seekToPrevious() }
     }
 }
+
+@UnstableApi
+class ShuffleAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters,
+    ) {
+        withController(context) { c -> c.shuffleModeEnabled = !c.shuffleModeEnabled }
+    }
+}
+
+@UnstableApi
+class RepeatAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters,
+    ) {
+        withController(context) { c ->
+            c.repeatMode = when (c.repeatMode) {
+                androidx.media3.common.Player.REPEAT_MODE_OFF ->
+                    androidx.media3.common.Player.REPEAT_MODE_ALL
+                androidx.media3.common.Player.REPEAT_MODE_ALL ->
+                    androidx.media3.common.Player.REPEAT_MODE_ONE
+                else -> androidx.media3.common.Player.REPEAT_MODE_OFF
+            }
+        }
+    }
+}

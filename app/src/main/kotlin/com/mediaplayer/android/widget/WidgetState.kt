@@ -27,6 +27,10 @@ data class NowPlayingSnapshot(
     val hasPrevious: Boolean = false,
     val coverUri: String? = null,
     val cover: Bitmap? = null,
+    /** Mirror of `Player.shuffleModeEnabled` for the widget shuffle toggle. */
+    val shuffleEnabled: Boolean = false,
+    /** Mirror of `Player.repeatMode` (OFF/ONE/ALL) for the widget repeat icon. */
+    val repeatMode: Int = 0,
 )
 
 @UnstableApi
