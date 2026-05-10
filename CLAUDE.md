@@ -25,3 +25,21 @@ returning users will not see the new entry.
 behaviour changes do.
 
 Manual entry point: Home → Settings icon → "What's new".
+
+## Changelog tone (MANDATORY)
+
+Highlights in `Changelog.entries` must stay short and user-facing:
+
+- One short paragraph per highlight (1–3 sentences). No essays.
+- Describe the user-visible feature or bug fix and where it lives in
+  the UI. That's it.
+- **Never include**: file paths, class/method names, DTO field names,
+  JSON keys, cron expressions, package names, root-cause analysis,
+  before/after code explanations, ContentProvider / MediaSession /
+  Media3 internals, backend redeploy instructions, or any other
+  engineering implementation detail.
+- Italian, conversational, tight. Match the tone of `0.20.0`'s
+  "Shuffle che mescola di nuovo a ogni ciclo".
+
+Save the engineering context for the git commit message, not the
+changelog. The `ChangelogSheet` is read by users, not engineers.

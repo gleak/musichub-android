@@ -306,6 +306,15 @@ private fun PlaylistDetailBody(
                     append(" · ")
                     append(pluralizeSongsDetail(total))
                     if (durationLabel.isNotEmpty()) append(" · $durationLabel")
+                    // Surface the actual regeneration timestamp directly in
+                    // the hero so every auto-playlist tile shows it without
+                    // requiring the user to scroll past the cards. Falls
+                    // through silently when the field is null (shell created
+                    // by the bootstrapper but not yet refreshed).
+                    val refreshed = com.mediaplayer.android.ui.common.formatRefreshedAt(
+                        playlist.lastRefreshedAt
+                    )
+                    if (refreshed != null) append(" · Rigenerata $refreshed")
                 } else {
                     append("Playlist · ")
                     append(pluralizeSongsDetail(total))
@@ -571,7 +580,17 @@ private fun AutoPlaylistMetaStrip(
 ) {
     val mono = com.mediaplayer.android.ui.theme.LocalMHMono.current
     val refreshLabel = com.mediaplayer.android.ui.common.formatRefreshedAt(lastRefreshedAt)
+    // Card stays terse — "Oggi" / "Ieri" / "10 mag" — so it fits the
+    // half-width MetaCard without character-by-character wrapping. The
+    // full timestamp ("oggi alle 04:03") goes in the descriptive line
+    // below, which has the full row width and word-wraps cleanly.
+    val cardLabel = com.mediaplayer.android.ui.common.formatRefreshedAtShort(lastRefreshedAt)
         ?: "In attesa"
+    val scheduleLabel =
+        if (family == com.mediaplayer.android.ui.common.AutoPlaylistFamily.Radar)
+            "ogni lunedì alle 05:45"
+        else
+            "ogni notte alle 04:00"
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -581,7 +600,7 @@ private fun AutoPlaylistMetaStrip(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MetaCard(
                 label = "AGGIORNATA",
-                value = refreshLabel,
+                value = cardLabel,
                 modifier = Modifier.weight(1f),
             )
             MetaCard(
@@ -597,7 +616,7 @@ private fun AutoPlaylistMetaStrip(
                 .background(com.mediaplayer.android.ui.theme.MHColors.Lime.copy(alpha = 0.06f))
                 .padding(14.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.Top) {
                 Icon(
                     imageVector = Icons.Filled.Refresh,
                     contentDescription = null,
@@ -605,15 +624,22 @@ private fun AutoPlaylistMetaStrip(
                     modifier = Modifier.size(20.dp),
                 )
                 Spacer(Modifier.width(10.dp))
-                Text(
-                    text = "Aggiornata automaticamente — ${family.label} · " +
-                        if (family == com.mediaplayer.android.ui.common.AutoPlaylistFamily.Radar)
-                            "ogni lunedì alle 05:45"
+                Column {
+                    Text(
+                        text = if (refreshLabel != null)
+                            "Ultima rigenerazione: $refreshLabel"
                         else
-                            "ogni notte alle 04:00",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = com.mediaplayer.android.ui.theme.MHColors.TextLo,
-                )
+                            "Rigenerazione non ancora eseguita",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = com.mediaplayer.android.ui.theme.MHColors.TextHi,
+                    )
+                    Text(
+                        text = "Aggiornata automaticamente — ${family.label} · $scheduleLabel",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = com.mediaplayer.android.ui.theme.MHColors.TextLo,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
             }
         }
     }

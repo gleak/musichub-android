@@ -11,9 +11,9 @@
       "type": "SINGLE",
       "filters": [],
       "attributes": [],
-      "versionCode": 104,
-      "versionName": "0.20.3",
-      "outputFile": "mediaplayer-104-0.20.3.apk"
+      "versionCode": 109,
+      "versionName": "0.20.8",
+      "outputFile": "mediaplayer-109-0.20.8.apk"
     }
   ],
   "elementType": "File",
@@ -22,14 +22,14 @@
       "minApi": 28,
       "maxApi": 30,
       "baselineProfiles": [
-        "baselineProfiles/1/mediaplayer-104-0.20.3.dm"
+        "baselineProfiles/1/mediaplayer-109-0.20.8.dm"
       ]
     },
     {
       "minApi": 31,
       "maxApi": 2147483647,
       "baselineProfiles": [
-        "baselineProfiles/0/mediaplayer-104-0.20.3.dm"
+        "baselineProfiles/0/mediaplayer-109-0.20.8.dm"
       ]
     }
   ],

@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.20.6"
+    const val VERSION = "0.20.8"
 }
 
 data class ChangelogEntry(
@@ -22,58 +22,70 @@ data class ChangelogEntry(
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
         ChangelogEntry(
-            version = "0.20.6",
-            title = "Rigenerazione manuale: ora aggiorna tutte le playlist Per te in un colpo solo",
+            version = "0.20.8",
+            title = "Fix info di rigenerazione dentro le playlist automatiche",
             highlights = listOf(
-                "L'azione \"Rigenera playlist Per te\" (in Profilo → RIPRODUZIONE e in Profilo → Download offline) ora ricalcola tutte le playlist automatiche in un'unica chiamata: Discover Daily, On Repeat, i sei Daily Mix, i sei Mood, Release Radar, Time Capsule, Up Next e Radar. Prima la stessa azione toccava soltanto i sei Daily Mix, lasciando le altre famiglie da sincronizzare separatamente. Il sottotitolo del bottone elenca esplicitamente cosa verrà aggiornato e il risultato mostra il numero totale di brani rigenerati.",
-                "Lato server: nuovo endpoint `POST /api/playlists/auto/refresh-all` che orchestra il rinfresco sequenziale di tutte le famiglie con `force=true` (bypassa la finestra di idempotenza di 18h). Le singole famiglie continuano ad avere i loro endpoint dedicati (`/daily-mix/refresh`, `/mood/refresh`, ecc.) per usi mirati o test. Un fallimento isolato di una famiglia non blocca le altre — viene loggato e il rinfresco prosegue.",
+                "Aprendo Radar o un'altra playlist automatica ora vedi correttamente l'orario di rigenerazione nell'header — prima la riga era quella di una playlist normale e l'informazione mancava.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.20.7",
+            title = "Fix layout \"Rigenera playlist Per te\" + orario nella playlist",
+            highlights = listOf(
+                "Profilo → Riproduzione: il bottone \"Rigenera playlist Per te\" non si scompone più — il sottotitolo non occupa più una colonna sottilissima e ogni lettera tornava a capo.",
+                "Dentro le playlist automatiche ora vedi anche l'orario dell'ultima rigenerazione (es. \"oggi alle 04:03\"), oltre alla data.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.20.6",
+            title = "Rigenera tutte le playlist Per te in un tap",
+            highlights = listOf(
+                "L'azione \"Rigenera playlist Per te\" (in Profilo → Riproduzione e in Download offline) ora aggiorna in un colpo solo tutte le playlist automatiche: Discover Daily, On Repeat, i sei Daily Mix, i sei Mood, Release Radar, Time Capsule, Up Next e Radar. Prima toccava soltanto i Daily Mix.",
             ),
         ),
         ChangelogEntry(
             version = "0.20.5",
-            title = "Widget con Casuale/Ripeti, copertina già visibile, e orario di rigenerazione delle playlist Per te",
+            title = "Widget con Casuale/Ripeti e orario di rigenerazione visibile",
             highlights = listOf(
-                "Widget \"In riproduzione\" della home: aggiunti i pulsanti Casuale e Ripeti accanto a precedente, play/pausa e successivo. \"Casuale\" è un toggle on/off; \"Ripeti\" cicla tra spento → ripeti tutto → ripeti questo brano → spento. L'icona si colora di verde quando l'opzione è attiva, così si capisce a colpo d'occhio lo stato senza aprire l'app. Le 5 icone restano leggibili anche nel widget compatto perché sono state ridotte leggermente (da 34 a 30 dp con icone interne da 16 dp). Telefono, widget, Android Auto e auto-resume condividono lo stesso stato — toccando Casuale dal widget l'icona cambia anche nel player a tutto schermo e nella schermata di Android Auto.",
-                "La copertina del brano in riproduzione era già supportata nel widget — viene decodificata in anticipo dal servizio di riproduzione e ridipinta a ogni cambio brano. Con la patch sulle copertine `content://` di pochi minuti fa anche le copertine dei brani caricati dalla coda del telefono vengono risolte correttamente, quindi adesso vedi la copertina nel widget anche se la riproduzione è partita da un brano singolo, da una playlist o da un album. In assenza di copertina (brano senza artwork o backend irraggiungibile la prima volta) viene mostrata una placeholder a forma di disco.",
-                "\"Per te\": sotto il titolo è ora visibile l'orario reale dell'ultima rigenerazione delle playlist (es. \"ultima rigenerazione oggi alle 04:03\" o \"ieri alle 04:05\"), letto direttamente dal campo `lastRefreshedAt` restituito dal backend invece di un orario teorico. La carta IN ROTAZIONE mostra la stessa informazione per il singolo brano, mentre la pagina di dettaglio di ogni playlist automatica ha la sua riga \"AGGIORNATA\" già letta dallo stesso campo. La carta \"Come funziona\" spiega che tutte le playlist giornaliere (Discover Daily, On Repeat, i sei Daily Mix, i sei Mood, Release Radar e Time Capsule) vengono rigenerate ogni notte alle 04:00 (Europe/Rome), mentre Radar (artisti emergenti) resta settimanale.",
-                "Lato server: gli orari dei job di rigenerazione delle playlist automatiche sono stati allineati alle 04:00 Europe/Rome per On Repeat, Daily Mix, Mood, Release Radar e Time Capsule (Discover Daily era già lì). Prima erano sparpagliati tra le 02:30 e le 05:00 della notte, con la conseguenza che il sottotitolo \"aggiornate oggi\" nel client era vero ma non quantificabile. Ora il rinfresco serale è una sola finestra unica e si può promettere all'utente \"alle 04:00\".",
+                "Widget \"In riproduzione\": aggiunti i pulsanti Casuale e Ripeti accanto a precedente, play/pausa e successivo. L'icona diventa verde quando l'opzione è attiva, così vedi lo stato senza aprire l'app. Telefono, widget e Android Auto restano sincronizzati.",
+                "Le copertine dei brani caricati dal telefono ora compaiono correttamente anche nel widget. Quando manca l'artwork resta una placeholder a forma di disco.",
+                "\"Per te\": sotto il titolo è visibile l'orario reale dell'ultima rigenerazione (es. \"oggi alle 04:03\"), invece di un orario teorico. Tutte le playlist giornaliere (Discover Daily, On Repeat, Daily Mix, Mood, Release Radar, Time Capsule) si rigenerano ogni notte alle 04:00; Radar resta settimanale.",
             ),
         ),
         ChangelogEntry(
             version = "0.20.4",
-            title = "Android Auto: copertine brano uniformi e tasti Casuale/Ripeti nel player",
+            title = "Android Auto: copertine dei brani + Casuale/Ripeti nel player",
             highlights = listOf(
-                "Android Auto: anche le copertine dei singoli brani — quelle che compaiono nel player a tutto schermo, nella lista della coda e nella resume chip al collegamento dell'auto — viaggiano ora attraverso lo stesso `content://`-provider già usato per le tile di playlist, album e artisti. Prima questi MediaItem venivano costruiti dal codice del telefono con l'URL HTTPS diretto del backend, e il processo di Gearhead di Android Auto non riusciva a recuperarli (mancavano le intestazioni `X-Api-Key` + `Bearer`), mostrando una placeholder grigia. Adesso tutte le copertine — playlist, album, artista e brano — si comportano allo stesso modo: Android Auto risolve l'URI in locale, l'app fa la richiesta autenticata nel proprio processo e mantiene la cache su disco.",
-                "Android Auto: aggiunti i pulsanti \"Casuale\" e \"Ripeti\" nella card del brano in riproduzione. Su alcune versioni di Gearhead i controlli standard di shuffle e repeat non venivano mostrati nella schermata di guida nonostante il player li dichiarasse; ora due tasti dedicati nella custom layout li rendono sempre raggiungibili. \"Casuale\" è un toggle on/off; \"Ripeti\" cicla tra spento → ripeti tutto → ripeti questo brano → spento, esattamente come sul telefono. L'icona riflette lo stato corrente (verde quando attivo, bianca quando disattivato).",
+                "Android Auto: anche le copertine dei singoli brani (player a tutto schermo, lista della coda, resume chip) si vedono correttamente, come già succedeva per playlist, album e artisti.",
+                "Android Auto: aggiunti i pulsanti Casuale e Ripeti nella card del brano in riproduzione. Casuale è un toggle on/off; Ripeti cicla tra spento → ripeti tutto → ripeti questo brano → spento. L'icona è verde quando attiva.",
             ),
         ),
         ChangelogEntry(
             version = "0.20.3",
-            title = "Android Auto: copertine finalmente visibili nella libreria",
+            title = "Android Auto: copertine visibili nella libreria",
             highlights = listOf(
-                "Android Auto: le copertine dei brani, delle playlist, degli album e degli artisti tornano a comparire nella libreria di sfoglio. La precedente correzione spostava il caricamento delle copertine sull'OkHttp dell'app, ma le tile della libreria di Android Auto vengono in realtà scaricate dal processo di Gearhead, che non ha accesso alle nostre intestazioni di autenticazione (`X-Api-Key` + `Bearer`) — il backend rispondeva 401 e la cella restava vuota. Ora le copertine viaggiano attraverso un nuovo `content://`-provider interno: Android Auto legge l'URI in locale, l'app fa la richiesta autenticata al backend nel proprio processo e mette in cache i byte su disco, così la griglia di Android Auto si popola subito e gli scroll ripetuti non ricolpiscono il server.",
+                "Le copertine di brani, playlist, album e artisti tornano a comparire nella libreria di sfoglio di Android Auto. La griglia si popola subito e gli scroll ripetuti non rallentano il server.",
             ),
         ),
         ChangelogEntry(
             version = "0.20.2",
-            title = "Importazione playlist anche da XLSX e Spotify in italiano",
+            title = "Importazione playlist da XLSX e Spotify in italiano",
             highlights = listOf(
-                "Ora puoi importare la playlist anche partendo da un file .xlsx (formato Excel) — non serve più convertirlo in CSV a mano. L'app riconosce il foglio principale, legge le righe direttamente in memoria con un parser leggero (nessuna libreria pesante aggiunta) e prosegue con lo stesso flusso di conferma e abbinamento dei CSV.",
-                "Aggiunto il supporto alle intestazioni in italiano del download \"Informazioni account\" di Spotify (\"Nome della traccia\", \"Nome dell'artista\" e simili), oltre alle varianti già supportate. Se il file ha colonne con nomi diversi, l'errore mostra ora un'anteprima delle colonne trovate e i nomi attesi nelle due lingue.",
-                "Migliorata la robustezza dell'invio al server: il file caricato viene rigenerato sempre come CSV minimale e ben formattato (con \"Track Name\" e \"Artist Name(s)\"), così il backend riceve sempre lo stesso schema indipendentemente dal formato di partenza, e i caratteri speciali (virgole, virgolette, accapo) sono correttamente protetti.",
+                "Puoi importare una playlist anche da un file .xlsx (Excel) — non serve più convertirlo in CSV a mano.",
+                "Aggiunto il supporto alle intestazioni in italiano dei file Spotify (\"Nome della traccia\", \"Nome dell'artista\"). Se i nomi delle colonne non vengono riconosciuti, il messaggio d'errore mostra cosa è stato trovato e cosa serve.",
             ),
         ),
         ChangelogEntry(
             version = "0.20.1",
             title = "Android Auto più pulito + cronologia ricerca snella",
             highlights = listOf(
-                "Android Auto: la libreria si carica anche se il telefono non era stato aperto prima. In precedenza, avviando MusicHub direttamente da Android Auto a processo freddo, l'autenticazione Google non era ancora pronta e il backend rispondeva 401 a ogni chiamata — risultato: schermata vuota. Ora il login silenzioso parte all'avvio del processo, prima di qualsiasi richiesta di sfoglio, così playlist, album, artisti e generi si popolano correttamente anche senza aprire prima l'app sul telefono.",
-                "Android Auto: il pannello del brano in riproduzione torna pulito. I 4 pulsanti del timer di sospensione (15m / 30m / 60m / fine traccia) sono stati rimossi dalla card di guida — ingombravano lo spazio e rubavano il posto al cuore. Il timer resta disponibile dalla schermata Now Playing del telefono.",
-                "Android Auto: quando colleghi il telefono al sistema dell'auto la riproduzione riparte da sola. Se la coda è ancora caricata l'app preme play; se l'app era stata chiusa, viene ripristinata l'ultima coda salvata e si avvia subito — niente più tap manuale dopo aver attaccato il cavo.",
-                "Android Auto: copertine dei brani caricate in modo più affidabile durante la navigazione. Un controllo di rete troppo aggressivo poteva azzerare le copertine per l'intera sessione dopo un singolo errore di rete iniziale; ora le richieste arrivano sempre al server e Android Auto gestisce il fallback con il proprio placeholder se il backend non è raggiungibile.",
-                "La cronologia delle ricerche recenti ora mostra solo le ultime 5 query invece di 8: lista più corta, scroll meno necessario, accesso più rapido a ciò che hai cercato di recente. Le query più vecchie cadono fuori automaticamente man mano che ne digiti di nuove.",
-                "Importazione playlist da Exportify: messaggi di errore finalmente parlanti. Prima un fallimento mostrava una pagina rossa generica senza alcun dettaglio; ora la schermata di errore riporta esattamente cosa è andato storto — file vuoto, intestazioni del CSV non riconosciute (con anteprima delle colonne trovate), nessuna riga sotto l'intestazione, errori HTTP del server con codice e messaggio, problemi di rete (timeout, host non raggiungibile, connessione rifiutata) o risposta JSON malformata.",
-                "Importazione playlist da Exportify: il parser ora riconosce anche le intestazioni in italiano (\"Titolo\", \"Nome traccia\", \"Artista\", \"Nome artista\" e varianti), oltre a quelle inglesi originali (\"Track Name\", \"Artist Name(s)\"). Chi esporta da una sessione Spotify italiana può importare direttamente senza ribattezzare le colonne a mano.",
+                "Android Auto: la libreria si carica anche avviando l'app direttamente dall'auto, senza dover aprire prima il telefono.",
+                "Android Auto: rimossi i 4 pulsanti del timer di sospensione dalla card di guida — ingombravano. Il timer resta disponibile dalla schermata Now Playing del telefono.",
+                "Android Auto: collegando il telefono all'auto la riproduzione riparte da sola, riprendendo l'ultima coda se l'app era chiusa.",
+                "Android Auto: copertine dei brani più affidabili durante la navigazione.",
+                "La cronologia delle ricerche recenti ora mostra le ultime 5 query invece di 8.",
+                "Importazione da Exportify: i messaggi di errore ora dicono cosa è andato storto (file vuoto, intestazioni non riconosciute, errori di rete, ecc.) invece di una pagina rossa generica.",
+                "Importazione da Exportify: riconosciute anche le intestazioni in italiano (\"Titolo\", \"Nome traccia\", \"Artista\", \"Nome artista\").",
             ),
         ),
         ChangelogEntry(

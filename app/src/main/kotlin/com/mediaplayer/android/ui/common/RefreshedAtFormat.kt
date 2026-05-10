@@ -45,3 +45,22 @@ fun formatMostRecentRefreshedAt(isoTimestamps: Iterable<String?>): String? {
 
 private val TIME_FMT = DateTimeFormatter.ofPattern("HH:mm", Locale.ITALIAN)
 private val DATE_FMT = DateTimeFormatter.ofPattern("d MMM", Locale.ITALIAN)
+
+/**
+ * Compact day label — "Oggi" / "Ieri" / "10 mag" — for surfaces that have
+ * little horizontal room (e.g. half-width MetaCards in the playlist
+ * detail strip). The full "oggi alle 04:03" form belongs to
+ * [formatRefreshedAt], used in the wider descriptive lines.
+ */
+fun formatRefreshedAtShort(iso: String?): String? {
+    if (iso.isNullOrBlank()) return null
+    val instant = runCatching { Instant.parse(iso) }.getOrNull() ?: return null
+    val zone = ZoneId.systemDefault()
+    val today = LocalDate.now(zone)
+    val day = instant.atZone(zone).toLocalDate()
+    return when {
+        day == today -> "Oggi"
+        day == today.minusDays(1) -> "Ieri"
+        else -> day.format(DATE_FMT)
+    }
+}

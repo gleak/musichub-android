@@ -91,12 +91,7 @@ fun ProfileScreen(
     // doubles as transient status: idle / In corso… / count or error.
     val playlistRepo = remember { PlaylistRepository() }
     val scope = rememberCoroutineScope()
-    var dailyMixDetail by remember {
-        mutableStateOf(
-            "Aggiorna ora Discover Daily, On Repeat, Daily Mix, Mood, " +
-                "Release Radar, Time Capsule, Up Next e Radar"
-        )
-    }
+    var dailyMixDetail by remember { mutableStateOf("Aggiorna ora") }
     var dailyMixBusy by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
