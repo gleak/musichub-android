@@ -116,6 +116,10 @@ object DislikedSongsCache {
      * call when every id has already been resolved. Failures degrade
      * silently — the row just won't show the "Già escluso" affordance
      * until the user revisits with a working connection.
+     *
+     * Batched at [STATUS_CHUNK_SIZE] (same reasoning as
+     * [LikedSongsCache.prime] — Tomcat's `maxParameterCount=1000` rejects
+     * single requests with too many `ids=` params).
      */
     suspend fun primeSongs(ids: Collection<Long>) {
         if (ids.isEmpty()) return
@@ -123,17 +127,23 @@ object DislikedSongsCache {
             ids.filter { it !in resolvedSongIds && it > 0L }
         }
         if (unresolved.isEmpty()) return
-        val resolved = try {
-            repository.dislikedSongStatus(unresolved)
-        } catch (_: Throwable) {
-            return
+        val merged = mutableSetOf<Long>()
+        for (chunk in unresolved.chunked(STATUS_CHUNK_SIZE)) {
+            val resolved = try {
+                repository.dislikedSongStatus(chunk)
+            } catch (_: Throwable) {
+                return
+            }
+            merged += resolved
         }
         resolveMutex.withLock {
             _dislikedSongIds.value =
-                (_dislikedSongIds.value - unresolved.toSet()) + resolved
+                (_dislikedSongIds.value - unresolved.toSet()) + merged
             resolvedSongIds += unresolved
         }
     }
+
+    private const val STATUS_CHUNK_SIZE = 500
 
     /**
      * Resolve the disliked-artist set once per process. The list is

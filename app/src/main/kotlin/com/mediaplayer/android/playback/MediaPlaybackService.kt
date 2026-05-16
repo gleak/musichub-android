@@ -33,6 +33,7 @@ import java.util.concurrent.Executors
 import com.mediaplayer.android.MainActivity
 import com.mediaplayer.android.R
 import com.mediaplayer.android.data.AuthBootstrap
+import com.mediaplayer.android.data.AuthTokenHolder
 import com.mediaplayer.android.data.LikedRepository
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.widget.NowPlayingSnapshot
@@ -873,7 +874,17 @@ class MediaPlaybackService : MediaLibraryService() {
         ): ListenableFuture<LibraryResult<MediaItem>> =
             serviceScope.future {
                 AuthBootstrap.ready.await()
-                LibraryTree.item(mediaId)?.let { LibraryResult.ofItem(it, /* params = */ null) }
+                // LibraryTree.item may hit the backend (playlist details,
+                // etc.). A network failure shouldn't propagate as a failed
+                // future — AA surfaces those as generic crashes that
+                // poison the resume chip / deep-link path for the rest
+                // of the session. Map any throw to ERROR_IO instead.
+                val item = try {
+                    LibraryTree.item(mediaId)
+                } catch (_: Exception) {
+                    return@future LibraryResult.ofError(SessionError.ERROR_IO)
+                }
+                item?.let { LibraryResult.ofItem(it, /* params = */ null) }
                     ?: LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
             }
 
@@ -896,7 +907,9 @@ class MediaPlaybackService : MediaLibraryService() {
                 // Custom queue folder: snapshot the player's timeline on the
                 // application main thread (Player is single-thread-confined)
                 // and render via LibraryTree. Done here instead of inside
-                // LibraryTree so the singleton stays player-agnostic.
+                // LibraryTree so the singleton stays player-agnostic. Queue
+                // browsing is local-only — bypass the auth gate so the user
+                // can still review what's playing offline.
                 if (parentId == LibraryTree.QUEUE_ID) {
                     val (timeline, currentIndex) = withContext(Dispatchers.Main) {
                         val p = session.player
@@ -909,13 +922,38 @@ class MediaPlaybackService : MediaLibraryService() {
                     )
                 }
 
+                // If silent sign-in didn't yield a token, every backend call
+                // below would 401 and AA would render a blank panel with no
+                // indication of what's wrong. Surface a single info row so
+                // the driver knows to open the app on the phone.
+                if (AuthTokenHolder.idToken == null) {
+                    return@future LibraryResult.ofItemList(
+                        ImmutableList.of(
+                            LibraryTree.infoItem("Apri MusicHub sul telefono per accedere")
+                        ),
+                        params,
+                    )
+                }
+
                 // Player must be read on its application looper (main).
                 val currentItem = withContext(Dispatchers.Main) {
                     session.player.currentMediaItem
                 }
                 val currentSongId = currentItem?.mediaId?.removePrefix("song:")?.toLongOrNull()
 
-                val items = LibraryTree.children(parentId, currentSongId, page, pageSize)
+                val items = try {
+                    LibraryTree.children(parentId, currentSongId, page, pageSize)
+                } catch (e: Exception) {
+                    // Backend unreachable / 401 / timeout. Don't let the future
+                    // fail — AA renders a generic error and the user has no
+                    // clue what happened. A single info row is far clearer.
+                    return@future LibraryResult.ofItemList(
+                        ImmutableList.of(
+                            LibraryTree.infoItem("Server irraggiungibile, riprova")
+                        ),
+                        params,
+                    )
+                }
                 if (items == null) {
                     LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
                 } else {
@@ -1008,10 +1046,12 @@ class MediaPlaybackService : MediaLibraryService() {
                     if (!searchQuery.isNullOrBlank() &&
                         mediaItems[0].mediaId.isEmpty()
                     ) {
-                        val hits = LibraryTree.search(searchQuery, page = 0, pageSize = 50)
+                        val hits = runCatching {
+                            LibraryTree.search(searchQuery, page = 0, pageSize = 50)
+                        }.getOrDefault(emptyList())
                         val playable = hits.mapNotNull { item ->
                             item.mediaId.removePrefix("song:").toLongOrNull()?.let { sid ->
-                                LibraryTree.playableForSong(sid)
+                                runCatching { LibraryTree.playableForSong(sid) }.getOrNull()
                             }
                         }
                         if (playable.isNotEmpty()) {
@@ -1029,29 +1069,37 @@ class MediaPlaybackService : MediaLibraryService() {
 
                     // Playlist leaf → expand the whole playlist starting at pos.
                     LibraryTree.parsePlaylistLeaf(id)?.let { (pid, pos, _) ->
-                        return@future MediaSession.MediaItemsWithStartPosition(
-                            LibraryTree.playlistQueue(pid), pos, C.TIME_UNSET
+                        val q = runCatching { LibraryTree.playlistQueue(pid) }
+                            .getOrDefault(emptyList())
+                        if (q.isNotEmpty()) return@future MediaSession.MediaItemsWithStartPosition(
+                            q, pos.coerceAtMost(q.lastIndex.coerceAtLeast(0)), C.TIME_UNSET
                         )
                     }
 
                     // Album leaf → expand album from chosen position.
                     LibraryTree.parseAlbumLeaf(id)?.let { quad ->
-                        return@future MediaSession.MediaItemsWithStartPosition(
-                            LibraryTree.albumQueue(quad.a, quad.b), quad.c, C.TIME_UNSET
+                        val q = runCatching { LibraryTree.albumQueue(quad.a, quad.b) }
+                            .getOrDefault(emptyList())
+                        if (q.isNotEmpty()) return@future MediaSession.MediaItemsWithStartPosition(
+                            q, quad.c.coerceAtMost(q.lastIndex.coerceAtLeast(0)), C.TIME_UNSET
                         )
                     }
 
                     // Artist leaf → expand artist's full song list from pos.
                     LibraryTree.parseArtistLeaf(id)?.let { (name, pos, _) ->
-                        return@future MediaSession.MediaItemsWithStartPosition(
-                            LibraryTree.artistQueue(name), pos, C.TIME_UNSET
+                        val q = runCatching { LibraryTree.artistQueue(name) }
+                            .getOrDefault(emptyList())
+                        if (q.isNotEmpty()) return@future MediaSession.MediaItemsWithStartPosition(
+                            q, pos.coerceAtMost(q.lastIndex.coerceAtLeast(0)), C.TIME_UNSET
                         )
                     }
 
                     // Genre leaf → expand genre's song list from pos.
                     LibraryTree.parseGenreLeaf(id)?.let { (tag, pos, _) ->
-                        return@future MediaSession.MediaItemsWithStartPosition(
-                            LibraryTree.genreQueue(tag), pos, C.TIME_UNSET
+                        val q = runCatching { LibraryTree.genreQueue(tag) }
+                            .getOrDefault(emptyList())
+                        if (q.isNotEmpty()) return@future MediaSession.MediaItemsWithStartPosition(
+                            q, pos.coerceAtMost(q.lastIndex.coerceAtLeast(0)), C.TIME_UNSET
                         )
                     }
 
@@ -1072,15 +1120,19 @@ class MediaPlaybackService : MediaLibraryService() {
 
                     // Liked leaf → expand liked collection from pos.
                     LibraryTree.parseSimpleLeaf(id, "lk:")?.let { (pos, _) ->
-                        return@future MediaSession.MediaItemsWithStartPosition(
-                            LibraryTree.likedQueue(), pos, C.TIME_UNSET
+                        val q = runCatching { LibraryTree.likedQueue() }
+                            .getOrDefault(emptyList())
+                        if (q.isNotEmpty()) return@future MediaSession.MediaItemsWithStartPosition(
+                            q, pos.coerceAtMost(q.lastIndex.coerceAtLeast(0)), C.TIME_UNSET
                         )
                     }
 
                     // Recents leaf → expand recents queue from pos.
                     LibraryTree.parseSimpleLeaf(id, "rc:")?.let { (pos, _) ->
-                        return@future MediaSession.MediaItemsWithStartPosition(
-                            LibraryTree.recentsQueue(), pos, C.TIME_UNSET
+                        val q = runCatching { LibraryTree.recentsQueue() }
+                            .getOrDefault(emptyList())
+                        if (q.isNotEmpty()) return@future MediaSession.MediaItemsWithStartPosition(
+                            q, pos.coerceAtMost(q.lastIndex.coerceAtLeast(0)), C.TIME_UNSET
                         )
                     }
 

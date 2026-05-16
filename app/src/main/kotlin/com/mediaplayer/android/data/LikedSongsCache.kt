@@ -60,6 +60,12 @@ object LikedSongsCache {
      * every id is already resolved. Failures degrade silently — the heart
      * just stays empty until the user either toggles it or revisits the
      * screen with a working connection.
+     *
+     * Batched at [STATUS_CHUNK_SIZE] so a tap on a large playlist doesn't
+     * fan out into a single `GET /api/liked/status?ids=...` carrying every
+     * song id — Tomcat caps parameter counts at 1000 and rejects the request
+     * with a 500. Chunks are merged into the final set so the UI sees
+     * one coherent update.
      */
     suspend fun prime(ids: Collection<Long>) {
         if (ids.isEmpty()) return
@@ -67,16 +73,23 @@ object LikedSongsCache {
             ids.filter { it !in resolvedIds }
         }
         if (unresolved.isEmpty()) return
-        val liked = try {
-            repository.status(unresolved)
-        } catch (_: Throwable) {
-            return
+        val liked = mutableSetOf<Long>()
+        for (chunk in unresolved.chunked(STATUS_CHUNK_SIZE)) {
+            val resolved = try {
+                repository.status(chunk)
+            } catch (_: Throwable) {
+                return
+            }
+            liked += resolved
         }
         resolveMutex.withLock {
             _likedIds.value = (_likedIds.value - unresolved.toSet()) + liked
             resolvedIds += unresolved
         }
     }
+
+    /** Below Tomcat's default `maxParameterCount=1000` with comfortable headroom. */
+    private const val STATUS_CHUNK_SIZE = 500
 
     fun isLiked(songId: Long): Boolean = songId in _likedIds.value
 }

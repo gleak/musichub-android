@@ -11,6 +11,7 @@ import com.mediaplayer.android.data.AuthRepository
 import com.mediaplayer.android.data.AuthTokenHolder
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.PlaylistAutoSyncRunner
+import com.mediaplayer.android.data.SilentAuthOutcome
 import com.mediaplayer.android.data.dto.UserDto
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -94,24 +95,40 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
 
     init {
         viewModelScope.launch {
-            val token = authRepository.tryAutoSignIn()
-            if (token != null) {
-                AuthTokenHolder.idToken = token
-                _state.value = State.Probe(ProbeStage.Me)
-                try {
-                    _state.value = State.SignedIn(Network.api.getMe())
-                    triggerAutoSyncOnce()
-                } catch (_: Exception) {
-                    // Server rejected the token — flash the rejected-silent
-                    // probe stage briefly so the user sees what happened, then
-                    // drop back to the picker.
-                    AuthTokenHolder.idToken = null
-                    _state.value = State.Probe(ProbeStage.RejectedSilent)
-                    delay(900)
-                    _state.value = State.NotSignedIn
+            when (val outcome = authRepository.silentAuth()) {
+                is SilentAuthOutcome.Success -> {
+                    AuthTokenHolder.idToken = outcome.token
+                    _state.value = State.Probe(ProbeStage.Me)
+                    try {
+                        _state.value = State.SignedIn(Network.api.getMe())
+                        triggerAutoSyncOnce()
+                    } catch (e: Exception) {
+                        // Token retrieved but `/api/auth/me` failed. Could be
+                        // backend unreachable (no signal in the car) or actual
+                        // 401. Either way: hand the user a banner with the
+                        // classified code so the login screen isn't blank.
+                        AuthTokenHolder.idToken = null
+                        _state.value = State.Probe(ProbeStage.RejectedSilent)
+                        delay(900)
+                        _state.value = State.Error(
+                            message = e.message?.ifBlank { null }
+                                ?: "Impossibile contattare il server.",
+                            code = classifyAuthError(e),
+                        )
+                    }
                 }
-            } else {
-                _state.value = State.NotSignedIn
+                SilentAuthOutcome.NoRemembered -> _state.value = State.NotSignedIn
+                is SilentAuthOutcome.Failed -> {
+                    // Remembered account but silent attempt failed — surface
+                    // so the user knows why they're at the login screen
+                    // again. Common cause: car / weak signal kills the
+                    // Credential Manager round-trip.
+                    _state.value = State.Error(
+                        message = outcome.throwable.message?.ifBlank { null }
+                            ?: "Accesso automatico non riuscito.",
+                        code = classifyAuthError(outcome.throwable),
+                    )
+                }
             }
         }
     }

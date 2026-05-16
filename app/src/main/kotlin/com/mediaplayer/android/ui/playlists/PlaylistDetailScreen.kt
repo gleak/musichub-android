@@ -338,9 +338,10 @@ private fun PlaylistDetailBody(
                     }
                 }
             }
-            // Auto-playlists keep their stylized gradient (matches PlaylistTile);
-            // user playlists adopt the first song-with-cover as the hero artwork —
-            // the same convention PlaylistDto.coverSongId uses on the list view.
+            // Auto-playlists get a stylized collage hero (mirrors the tile in
+            // PlaylistsScreen / ForYou). User playlists adopt the first
+            // song-with-cover as the hero artwork — the same convention
+            // PlaylistDto.coverSongId uses on the list view.
             val heroCoverSongId = if (playlist.isAuto) null
                 else playlist.songs.firstOrNull { it.song.hasCoverArt }?.song?.id
             val heroEyebrow = when {
@@ -348,6 +349,16 @@ private fun PlaylistDetailBody(
                 playlist.isShared -> "PLAYLIST · COLLABORATIVA"
                 else -> null
             }
+            val autoCoverIds: List<Long> = if (playlist.isAuto) {
+                playlist.songs
+                    .asSequence()
+                    .map { it.song }
+                    .filter { it.hasCoverArt }
+                    .map { it.id }
+                    .distinct()
+                    .take(4)
+                    .toList()
+            } else emptyList()
             SpotifyHero(
                 title = playlist.name,
                 subtitle = subtitleStr,
@@ -360,6 +371,16 @@ private fun PlaylistDetailBody(
                 onShuffle = { onShufflePlay(songsForPlayback) },
                 playEnabled = entries.isNotEmpty(),
                 isPlaying = playingFromHere,
+                customCover = if (playlist.isAuto) {
+                    { size ->
+                        com.mediaplayer.android.ui.common.CollageCover(
+                            kind = playlist.kind,
+                            badge = com.mediaplayer.android.ui.common.badgeFor(playlist.kind),
+                            songIds = autoCoverIds,
+                            modifier = androidx.compose.ui.Modifier.size(size),
+                        )
+                    }
+                } else null,
                 extraActions = {
                     if (playlist.songs.isNotEmpty()) {
                         IconButton(

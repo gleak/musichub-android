@@ -35,6 +35,15 @@ object PlayerConnection {
     private val _sessionExtras = MutableStateFlow(Bundle.EMPTY)
     val sessionExtras: StateFlow<Bundle> = _sessionExtras.asStateFlow()
 
+    /**
+     * Most recent bind failure, or null when the controller is bound or
+     * still being bound. UI surfaces this so a tap on Play that would
+     * otherwise no-op (because the MediaController never came up) instead
+     * shows the user *why* nothing happened.
+     */
+    private val _bindError = MutableStateFlow<Throwable?>(null)
+    val bindError: StateFlow<Throwable?> = _bindError.asStateFlow()
+
     @Volatile
     private var inFlight: com.google.common.util.concurrent.ListenableFuture<MediaController>? = null
 
@@ -61,15 +70,24 @@ object PlayerConnection {
                     val c = future.get()
                     _controller.value = c
                     _sessionExtras.value = c.sessionExtras
+                    _bindError.value = null
                 } catch (t: Throwable) {
-                    // Bind failure — log via stderr; no UI path for this yet.
+                    // Bind failure — expose so PlaybackViewModel can surface
+                    // a dialog instead of silently swallowing every play tap.
                     t.printStackTrace()
+                    _bindError.value = t
                 } finally {
                     inFlight = null
                 }
             },
             MoreExecutors.directExecutor(),
         )
+    }
+
+    /** Retry binding after a previous failure. Resets [bindError]. */
+    fun retry(context: Context) {
+        _bindError.value = null
+        connect(context)
     }
 
     fun release() {

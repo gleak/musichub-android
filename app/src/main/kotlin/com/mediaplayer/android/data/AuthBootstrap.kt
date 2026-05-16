@@ -4,7 +4,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -41,14 +43,30 @@ object AuthBootstrap {
      */
     val ready: CompletableDeferred<Unit> = CompletableDeferred()
 
+    /**
+     * Upper bound on how long we let the silent-auth attempt block before
+     * unblocking AA browse callbacks. With the new DataStore-backed token
+     * persistence the steady-state read is sub-millisecond, but a stuck
+     * disk / first-time Credential Manager hop could in theory hang
+     * forever. Five seconds is comfortably above any realistic happy path
+     * and tight enough that AA shows its "no library yet" fallback rather
+     * than spinning indefinitely.
+     */
+    private const val SILENT_AUTH_TIMEOUT_MS = 5_000L
+
     fun start() {
         if (!started.compareAndSet(false, true)) return
         scope.launch {
             try {
                 if (AuthTokenHolder.idToken == null) {
-                    AuthRepository.instance.tryAutoSignIn()?.let { token ->
-                        AuthTokenHolder.idToken = token
+                    val token = try {
+                        withTimeout(SILENT_AUTH_TIMEOUT_MS) {
+                            AuthRepository.instance.tryAutoSignIn()
+                        }
+                    } catch (_: TimeoutCancellationException) {
+                        null
                     }
+                    token?.let { AuthTokenHolder.idToken = it }
                 }
             } finally {
                 ready.complete(Unit)

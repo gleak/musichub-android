@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.20.8"
+    const val VERSION = "0.20.9"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,17 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.20.9",
+            title = "Accesso una volta sola + errori chiari su Auto, login e player",
+            highlights = listOf(
+                "Dopo il primo accesso non ti sarà più richiesto di autenticarti con Google: l'app ricorda il tuo accesso e lo riusa per sempre. Usa \"Disconnetti\" dal profilo per cambiare account.",
+                "Android Auto: se il server non risponde la libreria non resta più in caricamento senza fine — viene mostrato \"Server irraggiungibile, riprova\". Se non hai ancora effettuato l'accesso compare \"Apri MusicHub sul telefono per accedere\".",
+                "Schermata di accesso: quando il riconoscimento automatico fallisce (ad esempio in auto con poca rete) ora vedi un riquadro rosso con il motivo, invece della solita schermata vuota.",
+                "Player: se tocchi Play e il servizio audio non è ancora pronto, ora appare una finestra con il motivo e un suggerimento, invece del tap che sembrava non fare nulla.",
+                "Playlist molto grandi: niente più errori 500 lato server quando apri una playlist con molti brani — lo stato dei \"mi piace\" viene caricato a blocchi.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.20.8",
             title = "Fix info di rigenerazione dentro le playlist automatiche",

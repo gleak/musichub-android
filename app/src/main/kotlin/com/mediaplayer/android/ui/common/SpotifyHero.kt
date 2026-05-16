@@ -93,6 +93,7 @@ fun SpotifyHero(
     eyebrow: String? = null,
     subtitleStyle: SubtitleStyle = SubtitleStyle.Default,
     extraActions: @Composable () -> Unit = {},
+    customCover: (@Composable (Dp) -> Unit)? = null,
 ) {
     var dominant by remember(coverModel) {
         mutableStateOf(fallbackGradient?.first ?: DefaultBackdrop)
@@ -124,12 +125,20 @@ fun SpotifyHero(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    HeroCover(
-                        model = coverModel,
-                        shape = coverShape,
-                        size = artSize,
-                        fallbackGradient = fallbackGradient,
-                    )
+                    if (customCover != null) {
+                        // Auto-playlist path: detail screen passes its own
+                        // CollageCover so the hero matches the tile shown on
+                        // the listing instead of falling back to a plain
+                        // grey square (which was the regression).
+                        customCover(artSize)
+                    } else {
+                        HeroCover(
+                            model = coverModel,
+                            shape = coverShape,
+                            size = artSize,
+                            fallbackGradient = fallbackGradient,
+                        )
+                    }
                     Spacer(Modifier.height(16.dp))
                 }
             }

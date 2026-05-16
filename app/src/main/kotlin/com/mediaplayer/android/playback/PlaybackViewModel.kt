@@ -152,6 +152,22 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     fun dismissPlaybackError() { _playbackError.value = null }
 
     /**
+     * Raise a synthetic error when a play tap can't proceed because the
+     * MediaController hasn't bound yet (or the bind failed). Without this
+     * the play call silently returns and the user gets no signal — exactly
+     * what the "I can't start any song" car incident showed.
+     */
+    private fun raiseControllerNotReady(reason: String) {
+        _playbackError.value = PlaybackErrorInfo(
+            songTitle = _currentSong.value?.title?.takeIf { it.isNotBlank() }
+                ?: "questo brano",
+            reason = reason,
+            errorCodeName = "PLAYER_NOT_READY",
+            recoveryHint = "Riprova fra qualche secondo. Se persiste, riavvia l'app.",
+        )
+    }
+
+    /**
      * Re-prepare and resume the current MediaItem after a transient playback
      * failure (`Riprova` button on the error dialog). No item swap, no
      * cache invalidation — that's [redownloadCurrent]'s job.
@@ -416,6 +432,16 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                 controller?.removeListener(listener)
                 controller = c
                 if (c != null) {
+                    // Auto-dismiss any "not ready" / "bind failed" dialog the
+                    // user might be staring at — the controller is here now,
+                    // so the message no longer reflects reality.
+                    val err = _playbackError.value
+                    if (err != null &&
+                        (err.errorCodeName == "PLAYER_NOT_READY" ||
+                            err.errorCodeName == "PLAYER_BIND_FAILED")
+                    ) {
+                        _playbackError.value = null
+                    }
                     c.addListener(listener)
                     val snapshot = runCatching { playbackPrefs.data.first() }.getOrNull()
                     val savedShuffle = snapshot?.get(PREF_SHUFFLE_KEY) ?: false
@@ -436,6 +462,21 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     if (c.isPlaying) startPositionPoll() else stopPositionPoll()
                 } else {
                     stopPositionPoll()
+                }
+            }
+        }
+
+        // Surface MediaController bind failures so the user sees a dialog
+        // instead of taps silently no-op'ing forever. Cleared on retry.
+        viewModelScope.launch {
+            PlayerConnection.bindError.collectLatest { err ->
+                if (err != null) {
+                    _playbackError.value = PlaybackErrorInfo(
+                        songTitle = "Player",
+                        reason = "Impossibile collegarsi al servizio di riproduzione.",
+                        errorCodeName = "PLAYER_BIND_FAILED",
+                        recoveryHint = "Chiudi e riapri l'app, oppure riavvia il telefono.",
+                    )
                 }
             }
         }
@@ -471,7 +512,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun play(song: SongDto) {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            raiseControllerNotReady("Player non ancora pronto.")
+            return
+        }
         originalSourceOrder = listOf(song.id)
         c.shuffleModeEnabled = false
         c.setMediaItem(song.toMediaItem())
@@ -481,7 +526,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     /** Start one local track. Mirrors [play] but takes a [LocalTrack]. */
     fun playLocal(track: LocalTrack) {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            raiseControllerNotReady("Player non ancora pronto.")
+            return
+        }
         LocalMediaResolver.register(track)
         originalSourceOrder = listOf(-track.id)
         c.shuffleModeEnabled = false
@@ -493,7 +542,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     /** Play a list of local tracks starting at [startIndex]. */
     fun playLocalAll(tracks: List<LocalTrack>, startIndex: Int = 0) {
         if (tracks.isEmpty()) return
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            raiseControllerNotReady("Player non ancora pronto.")
+            return
+        }
         LocalMediaResolver.registerAll(tracks)
         originalSourceOrder = tracks.map { -it.id }
         val ordered = if (_shuffleEnabled.value) tracks.shuffled() else tracks
@@ -510,7 +563,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     /** Shuffle and play a list of local tracks. */
     fun playLocalShuffled(tracks: List<LocalTrack>) {
         if (tracks.isEmpty()) return
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            raiseControllerNotReady("Player non ancora pronto.")
+            return
+        }
         LocalMediaResolver.registerAll(tracks)
         originalSourceOrder = tracks.map { -it.id }
         if (!_shuffleEnabled.value) {
@@ -526,7 +583,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     /** Insert a local track right after the currently playing item. */
     fun playNextLocal(track: LocalTrack) {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            raiseControllerNotReady("Player non ancora pronto.")
+            return
+        }
         LocalMediaResolver.register(track)
         val insertIndex = (c.currentMediaItemIndex + 1).coerceAtMost(c.mediaItemCount)
         c.addMediaItem(insertIndex, track.toMediaItem(userQueued = true))
@@ -534,7 +595,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     /** Append a local track to the tail of the user queue. */
     fun addLocalToQueue(track: LocalTrack) {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            raiseControllerNotReady("Player non ancora pronto.")
+            return
+        }
         LocalMediaResolver.register(track)
         var i = c.currentMediaItemIndex + 1
         while (i < c.mediaItemCount && c.getMediaItemAt(i).isUserQueued()) i++
@@ -543,7 +608,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     fun playPlaylist(songs: List<SongDto>, startIndex: Int = 0) {
         if (songs.isEmpty()) return
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            raiseControllerNotReady("Player non ancora pronto.")
+            return
+        }
         originalSourceOrder = songs.map { it.id }
         // Honour the existing app-level shuffle flag: if shuffle is on,
         // hand the player a pre-shuffled timeline. The player itself stays
@@ -563,7 +632,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     fun playPlaylistShuffled(songs: List<SongDto>) {
         if (songs.isEmpty()) return
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            raiseControllerNotReady("Player non ancora pronto.")
+            return
+        }
         originalSourceOrder = songs.map { it.id }
         if (!_shuffleEnabled.value) {
             _shuffleEnabled.value = true
@@ -699,7 +772,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
      * gets consumed once played. Spotify-style "Play next".
      */
     fun playNext(song: SongDto) {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            raiseControllerNotReady("Player non ancora pronto.")
+            return
+        }
         val insertIndex = (c.currentMediaItemIndex + 1).coerceAtMost(c.mediaItemCount)
         c.addMediaItem(insertIndex, song.toMediaItem(userQueued = true))
     }
@@ -710,7 +787,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
      * Spotify-style "Add to queue".
      */
     fun addToQueue(song: SongDto) {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            raiseControllerNotReady("Player non ancora pronto.")
+            return
+        }
         var i = c.currentMediaItemIndex + 1
         while (i < c.mediaItemCount && c.getMediaItemAt(i).isUserQueued()) i++
         c.addMediaItem(i.coerceAtMost(c.mediaItemCount), song.toMediaItem(userQueued = true))
