@@ -306,7 +306,11 @@ class MediaPlaybackService : MediaLibraryService() {
         // from preset chips → live `Annulla · N min` countdown (or
         // `Annulla · fine traccia`) the moment the timer is armed, and
         // ticks at minute boundaries until expiration / cancel.
-        serviceScope.launch {
+        //
+        // mainScope (not serviceScope/IO) because setSessionExtras +
+        // setCustomLayout publish through the MediaSession and must run
+        // on the session's application thread.
+        mainScope.launch {
             combine(
                 sleepTimer.isActive,
                 sleepTimer.remainingMs,
@@ -503,16 +507,29 @@ class MediaPlaybackService : MediaLibraryService() {
             p.volume = 1f
             return
         }
+        // Cancel any in-flight ramp from a previous auto-transition. The
+        // job's invokeOnCompletion resets volume so a user-skip mid-fade
+        // doesn't strand the next track at < 1.0.
         crossfadeJob?.cancel()
-        crossfadeJob = serviceScope.launch {
-            val totalMs = seconds * 1000L
-            val stepMs = 50L
-            val steps = (totalMs / stepMs).toInt().coerceAtLeast(1)
-            for (i in 0..steps) {
-                p.volume = i.toFloat() / steps
-                kotlinx.coroutines.delay(stepMs)
+        // Player.volume must be written on the application looper (= main).
+        // serviceScope is bound to Dispatchers.IO and will throw
+        // IllegalStateException("Player is accessed on the wrong thread")
+        // under Media3's strict-mode build or on a future version bump.
+        crossfadeJob = mainScope.launch {
+            try {
+                val totalMs = seconds * 1000L
+                val stepMs = 50L
+                val steps = (totalMs / stepMs).toInt().coerceAtLeast(1)
+                for (i in 0..steps) {
+                    p.volume = i.toFloat() / steps
+                    kotlinx.coroutines.delay(stepMs)
+                }
+                p.volume = 1f
+            } finally {
+                // Reset to full on any exit path (cancellation, exception)
+                // so a cancelled fade doesn't leave the next track silent.
+                p.volume = 1f
             }
-            p.volume = 1f
         }
     }
 
@@ -658,9 +675,16 @@ class MediaPlaybackService : MediaLibraryService() {
         // media notification disappears with it. When we're actively
         // playing, keep the service alive — that's the whole point of
         // foreground playback.
-        val player = mediaSession?.player
-        if (player != null && !player.playWhenReady) {
-            stopSelf()
+        //
+        // onTaskRemoved is invoked by ActivityManager on a binder thread,
+        // but Player is single-thread-confined to its application looper
+        // (= main). Post the read+stopSelf back to main so we don't trip
+        // Media3's wrong-thread guard.
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            val player = mediaSession?.player
+            if (player != null && !player.playWhenReady) {
+                stopSelf()
+            }
         }
         super.onTaskRemoved(rootIntent)
     }
