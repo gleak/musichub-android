@@ -159,8 +159,14 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
 
     fun signOut() {
         viewModelScope.launch {
-            authRepository.signOut()
+            // Null the cached token *before* hitting the repository's sign-out
+            // path. Any request the OkHttp interceptor builds from this point
+            // on will go without an Authorization header and 401 immediately
+            // — instead of riding the just-revoked identity to the backend
+            // and getting attributed to the previous user. PlaylistAutoSyncRunner
+            // in particular runs fire-and-forget and can outlive signOut().
             AuthTokenHolder.idToken = null
+            authRepository.signOut()
             _state.value = State.NotSignedIn
         }
     }

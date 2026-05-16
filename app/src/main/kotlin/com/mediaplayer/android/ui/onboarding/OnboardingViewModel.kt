@@ -28,8 +28,10 @@ class OnboardingViewModel(
 
     @Suppress("TooGenericExceptionCaught")
     fun submit(genres: List<String>) {
-        if (_saving.value) return
-        _saving.value = true
+        // compareAndSet keeps the guard atomic with the flip — a fast
+        // double-tap on Continua used to slip past `if (_saving.value)`
+        // before either call wrote true and fired two seedGenres POSTs.
+        if (!_saving.compareAndSet(false, true)) return
         _error.value = null
         viewModelScope.launch {
             try {
@@ -44,12 +46,20 @@ class OnboardingViewModel(
     }
 
     fun skip() {
-        if (_saving.value) return
-        _saving.value = true
+        if (!_saving.compareAndSet(false, true)) return
         viewModelScope.launch {
-            OnboardingPreferences.instance.markDismissed()
-            onResolved()
-            _saving.value = false
+            // try/finally so a DataStore IOException from markDismissed or
+            // a future-suspending onResolved can't leave _saving stuck at
+            // true — the screen would otherwise stay dimmed forever and
+            // the user couldn't even retry the skip.
+            try {
+                OnboardingPreferences.instance.markDismissed()
+                onResolved()
+            } catch (t: Throwable) {
+                _error.value = friendlyMessage(t)
+            } finally {
+                _saving.value = false
+            }
         }
     }
 }

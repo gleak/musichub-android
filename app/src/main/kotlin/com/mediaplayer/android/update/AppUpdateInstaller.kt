@@ -57,11 +57,28 @@ object AppUpdateInstaller {
     private val pollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var pollJob: Job? = null
 
+    // Receiver tracking so a re-tap on "Aggiorna" (or any kind of restart)
+    // cancels and unregisters the previous receiver rather than leaving it
+    // hooked into the OS forever. Always paired with applicationContext so
+    // the registration survives the originating Activity being torn down
+    // mid-download.
+    @Volatile private var activeReceiver: BroadcastReceiver? = null
+    @Volatile private var activeAppContext: Context? = null
+
     /** Clears [progress] back to Idle. Called by the banner X dismiss. */
     fun resetProgress() {
         pollJob?.cancel()
         pollJob = null
+        unregisterActiveReceiver()
         _progress.value = DownloadProgress.Idle
+    }
+
+    private fun unregisterActiveReceiver() {
+        val rec = activeReceiver ?: return
+        val ctx = activeAppContext ?: return
+        runCatching { ctx.unregisterReceiver(rec) }
+        activeReceiver = null
+        activeAppContext = null
     }
 
     /**
@@ -76,7 +93,20 @@ object AppUpdateInstaller {
         onError: (String) -> Unit,
         onReady: (File) -> Unit,
     ) {
-        val target = apkFile(context)
+        // Drop any previous receiver registration / poll loop before
+        // starting a new one. A user tapping "Aggiorna" twice in quick
+        // succession used to leak the first receiver.
+        unregisterActiveReceiver()
+        pollJob?.cancel()
+        pollJob = null
+
+        // Use applicationContext for everything that outlives the originating
+        // Activity. The DownloadManager system service is process-scoped, the
+        // BroadcastReceiver needs to survive activity teardown, and the
+        // completion callback may fire long after the user navigated away.
+        val appContext = context.applicationContext
+
+        val target = apkFile(appContext)
         if (target.exists()) target.delete()
 
         val token = AuthTokenHolder.idToken
@@ -90,7 +120,7 @@ object AppUpdateInstaller {
             request.addRequestHeader("Authorization", "Bearer $token")
         }
 
-        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val dm = appContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val downloadId = dm.enqueue(request)
 
         _progress.value = DownloadProgress.Active(
@@ -104,7 +134,9 @@ object AppUpdateInstaller {
             override fun onReceive(ctx: Context, intent: Intent) {
                 val finishedId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
                 if (finishedId != downloadId) return
-                ctx.unregisterReceiver(this)
+                // Clear receiver tracking via the central helper so a
+                // simultaneous resetProgress() can't double-unregister.
+                unregisterActiveReceiver()
                 pollJob?.cancel()
                 pollJob = null
 
@@ -161,11 +193,13 @@ object AppUpdateInstaller {
         // Android 13+ requires explicit export flag for runtime-registered receivers.
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
             Context.RECEIVER_EXPORTED else 0
-        context.registerReceiver(
+        appContext.registerReceiver(
             receiver,
             IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
             flags,
         )
+        activeReceiver = receiver
+        activeAppContext = appContext
     }
 
     /**
@@ -178,14 +212,22 @@ object AppUpdateInstaller {
         pollJob = pollScope.launch {
             val query = DownloadManager.Query().setFilterById(downloadId)
             while (isActive) {
-                val snapshot = dm.query(query)?.use { c ->
-                    if (c.moveToFirst()) {
-                        val status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                        val total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
-                        val so = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-                        Triple(status, so.coerceAtLeast(0L), total.coerceAtLeast(0L))
-                    } else null
-                }
+                // Wrap the query in runCatching — the download provider can
+                // throw SQLiteException if it's busy, or IllegalStateException
+                // if the cursor is closed underneath us. The old code let
+                // either propagate, cancel the polling coroutine, and leave
+                // the progress StateFlow stuck on its last value until (or
+                // unless) the completion broadcast arrived.
+                val snapshot = runCatching {
+                    dm.query(query)?.use { c ->
+                        if (c.moveToFirst()) {
+                            val status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                            val total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                            val so = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                            Triple(status, so.coerceAtLeast(0L), total.coerceAtLeast(0L))
+                        } else null
+                    }
+                }.getOrNull()
                 if (snapshot != null) {
                     val (status, so, total) = snapshot
                     if (status == DownloadManager.STATUS_RUNNING ||
