@@ -281,8 +281,16 @@ fun ProfileScreen(
                                     putExtra(Intent.EXTRA_SUBJECT, "MusicHub — invito")
                                     putExtra(Intent.EXTRA_TEXT, text)
                                 }
+                                // FLAG_ACTIVITY_NEW_TASK is only needed when
+                                // starting from a non-Activity Context. From
+                                // a ComponentActivity the flag forces the
+                                // chooser into a fresh task, so Back from
+                                // the messaging app drops the user to home
+                                // instead of returning to MusicHub.
                                 val chooser = Intent.createChooser(send, "Invita un amico").apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    if (context !is android.app.Activity) {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
                                 }
                                 runCatching { context.startActivity(chooser) }
                                 inviteBusy = false

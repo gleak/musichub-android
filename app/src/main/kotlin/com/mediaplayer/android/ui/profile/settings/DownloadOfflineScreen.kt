@@ -175,21 +175,46 @@ fun DownloadOfflineScreen(onBack: () -> Unit) {
                 },
             )
         }
+        // Destructive + irreversible: one tap used to wipe the whole download
+        // cache with no second confirm, despite re-downloading being
+        // bandwidth-intensive. Gate behind an AlertDialog.
+        var confirmPurge by remember { mutableStateOf(false) }
         DestructivePillButton(
             text = "Cancella tutti i download",
-            onClick = {
-                scope.launch {
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            val cache = PlayerCache.get(context)
-                            cache.keys.toList().forEach { key ->
-                                cache.removeResource(key)
-                            }
-                        }
-                    }
-                    refreshTick = System.currentTimeMillis()
-                }
-            },
+            onClick = { confirmPurge = true },
         )
+        if (confirmPurge) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { confirmPurge = false },
+                title = { Text("Cancellare tutti i download?") },
+                text = {
+                    Text(
+                        "Saranno necessari nuovi download per ascoltare offline. " +
+                            "L'azione non può essere annullata."
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        confirmPurge = false
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                runCatching {
+                                    val cache = PlayerCache.get(context)
+                                    cache.keys.toList().forEach { key ->
+                                        cache.removeResource(key)
+                                    }
+                                }
+                            }
+                            refreshTick = System.currentTimeMillis()
+                        }
+                    }) { Text("Cancella") }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = { confirmPurge = false },
+                    ) { Text("Annulla") }
+                },
+            )
+        }
     }
 }

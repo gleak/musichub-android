@@ -68,8 +68,14 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
             _state.value = try {
                 val (name, tracks) = withContext(Dispatchers.IO) {
                     val resolver = getApplication<Application>().contentResolver
-                    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
-                        ?: throw Exception("Impossibile aprire il file selezionato (il provider non ha restituito uno stream).")
+                    // Hard 10 MB cap on the raw read so a misnamed huge file
+                    // (or a zip-bomb XLSX that expands to multiple GB on
+                    // decompression) can't OOM the app. A real Exportify
+                    // / Spotify CSV for a 10k-track playlist is well under
+                    // 2 MB; this leaves comfortable headroom.
+                    val bytes = resolver.openInputStream(uri)?.use { stream ->
+                        readCapped(stream, IMPORT_FILE_CAP_BYTES)
+                    } ?: throw Exception("Impossibile aprire il file selezionato (il provider non ha restituito uno stream).")
                     val tracks = if (looksLikeXlsx(bytes)) {
                         // Spotify's Italian "Account info" download and several
                         // browser-side exporters now ship .xlsx instead of .csv;
@@ -78,7 +84,11 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
                         val rows = XlsxRowReader.read(ByteArrayInputStream(bytes))
                         CsvPlaylistParser.parseRows(rows)
                     } else {
-                        val text = bytes.toString(Charsets.UTF_8)
+                        // Strip the UTF-8 BOM (`EF BB BF`) — some browsers
+                        // emit it and it would otherwise survive as a
+                        // zero-width prefix on the first header cell,
+                        // breaking column detection on the first row.
+                        val text = bytes.toString(Charsets.UTF_8).removePrefix("﻿")
                         CsvPlaylistParser.parse(text.split('\n').map { it.trimEnd('\r') })
                     }
                     val name = resolveFilename(uri)
@@ -295,15 +305,47 @@ class SpotifyImportViewModel(application: Application) : AndroidViewModel(applic
             val col = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (it.moveToFirst() && col >= 0) it.getString(col) else null
         } ?: return "Playlist importata"
-        return raw
+        // Strip the extension *and* sanitize: a malicious or surprising
+        // file picker can return paths, control chars or zero-width chars
+        // that would otherwise go straight into the multipart `name` field
+        // we send to the backend.
+        val withoutExt = raw
             .removeSuffix(".csv")
             .removeSuffix(".CSV")
             .removeSuffix(".xlsx")
             .removeSuffix(".XLSX")
+        return withoutExt
+            .replace(Regex("[\\x00-\\x1F\\x7F]"), "")
+            .trim()
+            .take(80)
+            .ifBlank { "Playlist importata" }
+    }
+
+    /**
+     * Streams up to [cap] bytes from [stream] and throws if the source has
+     * more data left. Drops the 1-byte sentinel check overhead by reading
+     * straight into a pre-sized buffer and snapshotting only the used range.
+     */
+    private fun readCapped(stream: java.io.InputStream, cap: Int): ByteArray {
+        val buf = ByteArray(cap)
+        var read = 0
+        while (read < cap) {
+            val n = stream.read(buf, read, cap - read)
+            if (n <= 0) break
+            read += n
+        }
+        if (read >= cap && stream.read() != -1) {
+            throw Exception("File troppo grande (oltre ${cap / 1_000_000} MB) — rifiutato.")
+        }
+        return buf.copyOf(read)
     }
 
     override fun onCleared() {
         pollJob?.cancel()
         super.onCleared()
+    }
+
+    private companion object {
+        const val IMPORT_FILE_CAP_BYTES = 10 * 1024 * 1024
     }
 }

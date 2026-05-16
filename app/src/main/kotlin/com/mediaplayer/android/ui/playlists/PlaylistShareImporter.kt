@@ -48,6 +48,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.PlaylistRepository
+import com.mediaplayer.android.ui.common.friendlyMessage
 import com.mediaplayer.android.data.dto.SharePreviewDto
 import com.mediaplayer.android.ui.theme.LocalMHMono
 import com.mediaplayer.android.ui.theme.MHColors
@@ -76,11 +77,18 @@ fun PlaylistShareImporter(
     var preview by remember { mutableStateOf<SharePreviewDto?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
+    // Guard against a rotation re-running `acceptShare` after the
+    // `alreadyAccessible` branch already succeeded. The original
+    // LaunchedEffect(token) keyed on token alone, which re-fired on
+    // recomposition with the same id.
+    var previewLoaded by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(token) {
+        if (previewLoaded) return@LaunchedEffect
         try {
             val p = repository.previewShare(token)
+            previewLoaded = true
             if (p.alreadyAccessible) {
                 // Route through the cache so Home + Playlists pick it up
                 // immediately. Same call shape as repository.acceptShare,
@@ -91,7 +99,7 @@ fun PlaylistShareImporter(
                 preview = p
             }
         } catch (t: Throwable) {
-            error = t.message ?: "Impossibile caricare la playlist condivisa"
+            error = friendlyMessage(t)
         }
     }
 
@@ -110,13 +118,16 @@ fun PlaylistShareImporter(
             onClose = { if (!importing) onDismiss() },
             onAccept = {
                 if (importing) return@ImporterContent
+                // Clear any prior error so a retry-after-failure can re-arm
+                // the CTA — ImporterContent gates `enabled` on error == null.
+                error = null
                 importing = true
                 scope.launch {
                     try {
                         val detail = com.mediaplayer.android.data.PlaylistsCache.acceptShare(token)
                         onImported(detail.id, detail.name)
                     } catch (t: Throwable) {
-                        error = t.message ?: "Importazione non riuscita"
+                        error = friendlyMessage(t)
                         importing = false
                     }
                 }
@@ -243,8 +254,15 @@ private fun ImporterContent(
                     }
                 }
                 Spacer(Modifier.height(12.dp))
+                // Display the actual host the build is pointing at — the
+                // previous hardcoded "mh.duckdns.org/p/{token-prefix}" lied
+                // when Network.baseUrl pointed at staging, and the 7-char
+                // truncation never matched any real shareable URL anyway.
+                val displayHost = runCatching {
+                    android.net.Uri.parse(Network.baseUrl).host
+                }.getOrNull() ?: "share"
                 Text(
-                    text = "mh.duckdns.org/p/${shareToken.take(7)}",
+                    text = "$displayHost/share/${shareToken.take(7)}…",
                     style = mono.duration.copy(color = MHColors.OnHeroDim),
                     textAlign = TextAlign.Center,
                 )

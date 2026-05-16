@@ -105,10 +105,12 @@ fun AddToPlaylistSheet(
     val playlists = remember(cachedPlaylists) { cachedPlaylists.filterNot { it.isAuto } }
     val loading = cacheLoading && playlists.isEmpty()
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(cacheError) {
-        cacheError?.takeIf { playlists.isEmpty() }?.let {
-            errorMessage = friendlyMessage(it)
-        }
+    // Reset errorMessage when cacheError resolves so a successful retry no
+    // longer leaves the stale error toast on screen.
+    LaunchedEffect(cacheError, playlists.isEmpty()) {
+        errorMessage = cacheError
+            ?.takeIf { playlists.isEmpty() }
+            ?.let(::friendlyMessage)
     }
     var createOpen by remember { mutableStateOf(false) }
     var flagConfirmOpen by remember { mutableStateOf(false) }

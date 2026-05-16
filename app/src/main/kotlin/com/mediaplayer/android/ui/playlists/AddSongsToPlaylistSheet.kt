@@ -55,8 +55,15 @@ import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.common.EmptyState
 import com.mediaplayer.android.ui.common.friendlyMessage
 import com.mediaplayer.android.ui.theme.CoverShapes
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+// Concurrent fan-out cap for the per-song add path. Bounded so we don't
+// open 50+ sockets against the backend at once, but high enough that the
+// happy path completes in ~ceil(N/8) RTTs instead of N sequential RTTs.
+private const val CONCURRENT_ADD_BATCH = 8
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,12 +90,23 @@ fun AddSongsToPlaylistSheet(
     val accent = MaterialTheme.colorScheme.primary
 
     LaunchedEffect(query) {
-        delay(300)
+        // Show the spinner immediately so the debounce window doesn't look
+        // like a frozen UI; the previous version waited the full 300 ms
+        // before flipping `loading`.
         loading = true
+        delay(300)
+        val trimmed = query.trim()
+        // Single-character queries fan out the full catalog and rarely
+        // mean what the user wanted. Treat them as "still typing".
+        if (trimmed.isNotEmpty() && trimmed.length < 2) {
+            songs = emptyList()
+            loading = false
+            return@LaunchedEffect
+        }
         errorMessage = null
         try {
             songs = songRepository.listSongs(
-                query = query.trim().takeIf { it.isNotEmpty() },
+                query = trimmed.takeIf { it.isNotEmpty() },
                 size = 50,
             ).items
         } catch (t: Throwable) {
@@ -103,21 +121,45 @@ fun AddSongsToPlaylistSheet(
         committing = true
         scope.launch {
             try {
-                // Backend has no bulk endpoint — fan out N requests in parallel
-                // and collect failures. Each successful add updates `addedIds`
-                // so the sheet can be reopened without double-adding.
+                // Backend has no bulk endpoint — fan out N requests with a
+                // bounded concurrency window via async/awaitAll so the user
+                // doesn't pay N sequential RTTs (adding 50 songs used to
+                // take 50 round-trips, ~25s on a slow connection).
+                // Failures stay in `selectedIds` so a retry tap re-attempts
+                // only the failed ids; successes move into `addedIds`.
                 val toAdd = selectedIds.toList()
-                toAdd.forEach { songId ->
-                    runCatching {
-                        playlistRepository.addSong(playlistId, songId)
-                    }.onSuccess {
-                        addedIds.add(songId)
-                        selectedIds.remove(songId)
-                    }.onFailure {
-                        errorMessage = friendlyMessage(it)
+                var successCount = 0
+                var failureCount = 0
+                var lastError: String? = null
+                toAdd.chunked(CONCURRENT_ADD_BATCH).forEach { chunk ->
+                    val results = chunk.map { songId ->
+                        async {
+                            songId to runCatching {
+                                playlistRepository.addSong(playlistId, songId)
+                            }
+                        }
+                    }.awaitAll()
+                    for ((songId, result) in results) {
+                        result.onSuccess {
+                            addedIds.add(songId)
+                            selectedIds.remove(songId)
+                            successCount++
+                        }.onFailure {
+                            failureCount++
+                            lastError = friendlyMessage(it)
+                        }
                     }
                 }
-                if (errorMessage == null) {
+                // Build a discriminating message instead of overwriting with
+                // only the last failure — the old branch dismissed on full
+                // success but stayed open with a single error otherwise,
+                // dropping all context on how many succeeded.
+                errorMessage = when {
+                    failureCount == 0 -> null
+                    successCount == 0 -> lastError
+                    else -> "$successCount aggiunti, $failureCount non riusciti."
+                }
+                if (failureCount == 0) {
                     onSongAdded()
                     onDismiss()
                 } else {

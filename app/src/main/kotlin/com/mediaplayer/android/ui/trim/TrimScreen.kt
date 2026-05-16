@@ -701,8 +701,13 @@ private fun TrimTrack(
         val w = sizePx.width.takeIf { it > 0 } ?: 1
         val frac = (xPx / w).coerceIn(0f, 1f)
         val targetMs = fromFrac(frac)
-        if (kotlin.math.abs(targetMs - inMs) <= kotlin.math.abs(targetMs - outMs)) HandleSide.IN
-        else HandleSide.OUT
+        val toIn = kotlin.math.abs(targetMs - inMs)
+        val toOut = kotlin.math.abs(targetMs - outMs)
+        // Strict `<` so an exact tie (touch lands on the midpoint between IN
+        // and OUT, or both handles overlap during a transient drag) resolves
+        // to OUT instead of always to IN. The previous `<=` made the OUT
+        // handle ungrabbable at the midpoint.
+        if (toIn < toOut) HandleSide.IN else HandleSide.OUT
     }
     Box(
         modifier = Modifier

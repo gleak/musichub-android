@@ -69,13 +69,33 @@ object WaveformAnalyzer {
             Network.okHttp.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return false
                 val body = resp.body ?: return false
+                // Hard 50 MB cap on the body copy so a misconfigured backend
+                // returning HTML (or a redirect loop hitting a giant resource)
+                // can't fill cacheDir with several GB of garbage. A 60-minute
+                // FLAC at 1411 kbps tops out around 600 MB — for the trim
+                // use case (typical track 3-6 min) 50 MB is generous.
                 FileOutputStream(dst).use { out ->
-                    body.byteStream().use { input -> input.copyTo(out) }
+                    body.byteStream().use { input ->
+                        val buf = ByteArray(64 * 1024)
+                        var copied = 0L
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n <= 0) break
+                            copied += n
+                            if (copied > WAVEFORM_CAP_BYTES) {
+                                dst.delete()
+                                return false
+                            }
+                            out.write(buf, 0, n)
+                        }
+                    }
                 }
                 true
             }
         }.getOrElse { false }
     }
+
+    private const val WAVEFORM_CAP_BYTES = 50L * 1024 * 1024
 
     private fun decodeToPeaks(file: File, bars: Int): FloatArray? {
         val extractor = MediaExtractor()

@@ -264,7 +264,16 @@ private fun PlaylistDetailBody(
     // (song.id alone collides on duplicate songs).
     var entries by remember { mutableStateOf(playlist.songs) }
     val songsForPlayback: List<SongDto> = entries.map { it.song }
-    LaunchedEffect(songsForPlayback) {
+    // Key the prime + sync effects on a stable id-list hash. The previous
+    // List<*> key triggered on every cache refresh because each refresh
+    // produces a fresh list instance — re-priming hundreds of liked rows
+    // on every position tick was wasted work, and the sync effect kept
+    // resetting `entries` whenever the cache emitted, even if nothing had
+    // actually changed.
+    val playlistSongIdsHash = remember(playlist.songs) {
+        playlist.songs.fold(0) { acc, e -> acc * 31 + e.playlistSongId.hashCode() }
+    }
+    LaunchedEffect(playlistSongIdsHash) {
         com.mediaplayer.android.data.LikedSongsCache.prime(songsForPlayback.map { it.id })
     }
 
@@ -278,7 +287,7 @@ private fun PlaylistDetailBody(
 
     // Sync from server only when no drag is in flight. Without the guard a
     // mid-drag refresh would yank the local list out from under the gesture.
-    LaunchedEffect(playlist.songs) {
+    LaunchedEffect(playlistSongIdsHash) {
         if (!reorderState.isAnyItemDragging) entries = playlist.songs
     }
 
