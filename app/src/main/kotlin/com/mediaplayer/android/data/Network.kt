@@ -79,7 +79,14 @@ object Network {
                     ConnectivityObserver.recordBackendSuccess()
                     resp
                 } catch (e: java.io.IOException) {
-                    ConnectivityObserver.recordBackendFailure()
+                    // ExoPlayer aborts the stream on seek/skip and Coil
+                    // cancels cover loads when rows leave the viewport —
+                    // both surface as IOException("Canceled") here. Without
+                    // this guard every scrub or fast scroll flips the
+                    // offline icon on.
+                    if (!chain.call().isCanceled()) {
+                        ConnectivityObserver.recordBackendFailure()
+                    }
                     throw e
                 }
             }

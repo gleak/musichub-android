@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.20.10"
+    const val VERSION = "0.20.11"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,13 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.20.11",
+            title = "Correzioni di stabilità",
+            highlights = listOf(
+                "Risolti alcuni bug minori per un funzionamento più affidabile dell'app.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.20.10",
             title = "Correzioni di stabilità e piccoli ritocchi",
