@@ -147,15 +147,27 @@ class MainActivity : ComponentActivity() {
     private fun consumeShareIntent(intent: Intent?) {
         val data = intent?.data ?: return
         // Accept either the legacy custom scheme (`mediaplayer://share/<t>`)
-        // or the App Link form (`https://.../share/<t>`). The path layout is
-        // identical in both cases — the token is the last segment after a
-        // `/share/` (or `share` host for the custom scheme) prefix.
+        // or the App Link form (`https://<SHARE_HOST>/share/<t>`). The path
+        // layout is identical in both cases — the token is the last segment
+        // after a `/share/` (or `share` host for the custom scheme) prefix.
+        //
+        // The App-Link branch enforces an explicit host whitelist on top of
+        // the manifest's autoVerify so a phishing page hosted at
+        // `attacker.com/share/<crafted-token>` opened via an unverified
+        // intent filter on a malicious app can't lend the import dialog
+        // legitimacy. Keep this in sync with AndroidManifest.xml's
+        // `<data android:host=...>` for the BROWSABLE intent filter.
         val matchesLegacy = data.scheme == "mediaplayer" && data.host == "share"
         val matchesAppLink = data.scheme == "https" &&
+            data.host == SHARE_LINK_HOST &&
             data.pathSegments.firstOrNull() == "share"
         if (!matchesLegacy && !matchesAppLink) return
         val token = data.lastPathSegment?.takeIf { it.isNotBlank() } ?: return
         pendingShareToken.value = token
+    }
+
+    private companion object {
+        const val SHARE_LINK_HOST = "92b70eb3-9758-47a7-a830-744a9d61f809.duckdns.org"
     }
 
     private fun consumeWidgetIntent(intent: Intent?) {

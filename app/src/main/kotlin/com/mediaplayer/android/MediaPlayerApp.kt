@@ -33,8 +33,13 @@ class MediaPlayerApp : Application(), SingletonImageLoader.Factory {
     }
 
     override fun onCreate() {
-        super.onCreate()
+        // Set instance *before* super.onCreate() so manifest-declared
+        // ContentProviders (Coil, Firebase, WorkManager, etc.) that run
+        // during super can resolve `MediaPlayerApp.instance` from any
+        // by-lazy singletons they happen to touch — without this the
+        // lateinit access throws UninitializedPropertyAccessException.
         instance = this
+        super.onCreate()
         ConnectivityObserver.init()
         // Kick silent Google sign-in early so Android Auto cold-start has a
         // Bearer token by the time its first browse call hits the backend —

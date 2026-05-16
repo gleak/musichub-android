@@ -35,24 +35,38 @@ object ConnectivityObserver {
     private val _networkAvailable = MutableStateFlow(true)
     val networkAvailable: StateFlow<Boolean> = _networkAvailable.asStateFlow()
 
-    private var registered = false
+    private var cb: ConnectivityManager.NetworkCallback? = null
+    private var cmRef: ConnectivityManager? = null
 
     fun init() {
-        if (registered) return
-        registered = true
+        if (cb != null) return
         val ctx = MediaPlayerApp.instance
         val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        cmRef = cm
         val request = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
-        val cb = object : ConnectivityManager.NetworkCallback() {
+        val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) = updateFromCm(cm)
             override fun onLost(network: Network) = updateFromCm(cm)
             override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) =
                 updateFromCm(cm)
         }
-        cm.registerNetworkCallback(request, cb)
+        cm.registerNetworkCallback(request, callback)
+        cb = callback
         updateFromCm(cm)
+    }
+
+    /**
+     * Tear-down for tests. Production code never calls this — the singleton
+     * lives as long as the process. Without it parallel-class test runs leak
+     * one [ConnectivityManager.NetworkCallback] per re-init.
+     */
+    fun stop() {
+        val cm = cmRef ?: return
+        cb?.let { cm.unregisterNetworkCallback(it) }
+        cb = null
+        cmRef = null
     }
 
     private fun updateFromCm(cm: ConnectivityManager) {

@@ -38,6 +38,12 @@ internal object TokenCipher {
             init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         }
         val iv = cipher.iv
+        // Fail loud at write time on an unexpected IV size instead of
+        // silently producing a blob that decrypt() can never recover —
+        // the legacy AndroidKeyStore provider always returns 12 bytes
+        // for AES/GCM, but a swapped JCE provider could legally pick
+        // a different length.
+        require(iv.size == IV_LEN) { "Unexpected IV length: ${iv.size}, expected $IV_LEN" }
         val cipherText = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
         val packed = ByteArray(iv.size + cipherText.size).also {
             System.arraycopy(iv, 0, it, 0, iv.size)

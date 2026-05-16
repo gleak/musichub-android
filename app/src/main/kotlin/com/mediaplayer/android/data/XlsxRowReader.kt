@@ -122,6 +122,11 @@ object XlsxRowReader {
         var inV = false
         var inInlineT = false
         var lastColIndex = -1
+        // Cell reference (e.g. "A1") was malformed and we couldn't decode its
+        // column index. Drop the cell at endElement rather than shoving it into
+        // column 0 — a single bad <c> used to silently shift every subsequent
+        // column left by one and break header detection on the whole row.
+        var skipCurrentCell = false
 
         val handler = object : DefaultHandler() {
             override fun startElement(uri: String?, localName: String?, qName: String, attributes: Attributes?) {
@@ -136,9 +141,14 @@ object XlsxRowReader {
                         valBuf.setLength(0)
                         // Pad missing columns so column indices line up across rows.
                         val colIdx = colIndexOf(currentCellRef)
-                        while (lastColIndex + 1 < colIdx) {
-                            currentRow?.add("")
-                            lastColIndex++
+                        if (colIdx < 0) {
+                            skipCurrentCell = true
+                        } else {
+                            skipCurrentCell = false
+                            while (lastColIndex + 1 < colIdx) {
+                                currentRow?.add("")
+                                lastColIndex++
+                            }
                         }
                     }
                     "v" -> inV = true
@@ -153,15 +163,18 @@ object XlsxRowReader {
                     "v" -> inV = false
                     "t" -> if (currentCellType == "inlineStr") inInlineT = false
                     "c" -> {
-                        val raw = valBuf.toString()
-                        val resolved = when (currentCellType) {
-                            "s" -> raw.toIntOrNull()?.let { strings.getOrNull(it) }.orEmpty()
-                            "b" -> if (raw == "1") "TRUE" else "FALSE"
-                            "inlineStr", "str" -> raw
-                            else -> raw
+                        if (!skipCurrentCell) {
+                            val raw = valBuf.toString()
+                            val resolved = when (currentCellType) {
+                                "s" -> raw.toIntOrNull()?.let { strings.getOrNull(it) }.orEmpty()
+                                "b" -> if (raw == "1") "TRUE" else "FALSE"
+                                "inlineStr", "str" -> raw
+                                else -> raw
+                            }
+                            currentRow?.add(resolved)
+                            lastColIndex++
                         }
-                        currentRow?.add(resolved)
-                        lastColIndex++
+                        skipCurrentCell = false
                     }
                     "row" -> {
                         currentRow?.let { rows.add(it) }

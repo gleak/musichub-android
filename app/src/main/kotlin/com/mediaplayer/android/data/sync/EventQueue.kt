@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
+import com.mediaplayer.android.data.AuthBootstrap
 import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.data.MediaPlayerApi
 import com.mediaplayer.android.data.Network
@@ -271,7 +272,22 @@ object EventQueue {
         wakeup.trySend(Unit)
     }
 
+    /**
+     * Signal that a row contains a payload the dispatcher can't even
+     * attempt — malformed JSON, non-numeric song id, etc. Bumping
+     * exponential backoff would just jam the row forever, so the drainer
+     * treats poison pills as "delete and move on".
+     */
+    private class PoisonPillException(message: String) : Throwable(message)
+
     private suspend fun drainerLoop(api: MediaPlayerApi) {
+        // Don't start draining until the silent-auth attempt has resolved.
+        // Without this gate, the first batch can race AuthBootstrap and fire
+        // with `AuthTokenHolder.idToken == null` — the request 401s and the
+        // row enters backoff for a problem that has nothing to do with the
+        // network being bad. After ready completes the token is either set
+        // or genuinely absent; either way the dispatch outcome is meaningful.
+        AuthBootstrap.ready.await()
         while (true) {
             // Block until the OkHttp interceptor has reported a successful
             // call (or ConnectivityManager flips us back online). Same
@@ -287,32 +303,44 @@ object EventQueue {
             for (row in rows) {
                 Log.w(TAG, "dispatch ${row.type} id=${row.id} payload=${row.payload}")
                 val outcome = runCatching { dispatch(api, row) }
-                if (outcome.isSuccess) {
-                    Log.w(TAG, "dispatch ${row.type} id=${row.id} OK")
-                    delete(row.id)
-                } else {
-                    val attempts = row.attempts + 1
-                    val backoff = min(MAX_BACKOFF_MS, 1_000L * (1L shl min(attempts, 8)))
-                    bumpFailure(row.id, attempts, outcome.exceptionOrNull()?.message, backoff)
-                    Log.w(TAG, "dispatch ${row.type} id=${row.id} FAILED: ${outcome.exceptionOrNull()?.message}")
-                    // Network just proved bad — bail out, the interceptor
-                    // already flipped ConnectivityObserver, outer loop
-                    // re-blocks until it flips back.
-                    break
+                val exc = outcome.exceptionOrNull()
+                when {
+                    outcome.isSuccess -> {
+                        Log.w(TAG, "dispatch ${row.type} id=${row.id} OK")
+                        delete(row.id)
+                    }
+                    exc is PoisonPillException -> {
+                        Log.w(TAG, "poison-pill ${row.type} id=${row.id}: ${exc.message}")
+                        delete(row.id)
+                    }
+                    else -> {
+                        val attempts = row.attempts + 1
+                        val backoff = min(MAX_BACKOFF_MS, 1_000L * (1L shl min(attempts, 8)))
+                        bumpFailure(row.id, attempts, exc?.message, backoff)
+                        Log.w(TAG, "dispatch ${row.type} id=${row.id} FAILED: ${exc?.message}")
+                        // Network just proved bad — bail out, the interceptor
+                        // already flipped ConnectivityObserver, outer loop
+                        // re-blocks until it flips back.
+                        break
+                    }
                 }
             }
         }
     }
 
     private suspend fun dispatch(api: MediaPlayerApi, row: Row) {
+        val songId: () -> Long = {
+            row.payload.toLongOrNull()
+                ?: throw PoisonPillException("non-numeric song id: ${row.payload}")
+        }
         when (row.type) {
             EventType.PLAY -> api.recordPlay(json.decodeFromString(row.payload))
-            EventType.LIKE -> api.likeSong(row.payload.toLong())
-            EventType.UNLIKE -> api.unlikeSong(row.payload.toLong())
+            EventType.LIKE -> api.likeSong(songId())
+            EventType.UNLIKE -> api.unlikeSong(songId())
             EventType.FOLLOW -> api.followArtist(row.payload)
             EventType.UNFOLLOW -> api.unfollowArtist(row.payload)
-            EventType.DISLIKE_SONG -> api.dislikeSong(row.payload.toLong())
-            EventType.UNDISLIKE_SONG -> api.undislikeSong(row.payload.toLong())
+            EventType.DISLIKE_SONG -> api.dislikeSong(songId())
+            EventType.UNDISLIKE_SONG -> api.undislikeSong(songId())
             EventType.DISLIKE_ARTIST -> api.dislikeArtist(row.payload)
             EventType.UNDISLIKE_ARTIST -> api.undislikeArtist(row.payload)
         }
@@ -321,21 +349,43 @@ object EventQueue {
     private suspend fun readBatch(): List<Row> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val out = ArrayList<Row>(BATCH_SIZE)
+        val unknownIds = ArrayList<Long>()
         db.readableDatabase.rawQuery(
             "SELECT id, type, payload, attempts FROM $TABLE " +
                 "WHERE next_attempt_at <= ? ORDER BY id LIMIT ?",
             arrayOf(now.toString(), BATCH_SIZE.toString()),
         ).use { c ->
             while (c.moveToNext()) {
+                val id = c.getLong(0)
+                // EventType.valueOf throws on a row written by a newer build
+                // (downgrade, backup-restore). One unknown row used to crash
+                // readBatch and kill the drainer coroutine for the rest of
+                // the process — collect them and prune outside the cursor
+                // loop instead so a single bad row never stops drainage.
+                val type = runCatching { EventType.valueOf(c.getString(1)) }.getOrNull()
+                if (type == null) {
+                    unknownIds.add(id)
+                    continue
+                }
                 out.add(
                     Row(
-                        id = c.getLong(0),
-                        type = EventType.valueOf(c.getString(1)),
+                        id = id,
+                        type = type,
                         payload = c.getString(2),
                         attempts = c.getInt(3),
                     )
                 )
             }
+        }
+        if (unknownIds.isNotEmpty()) {
+            writeLock.withLock {
+                val w = db.writableDatabase
+                for (id in unknownIds) {
+                    Log.w(TAG, "pruning unknown-type queue row id=$id")
+                    w.delete(TABLE, "id = ?", arrayOf(id.toString()))
+                }
+            }
+            _pending.value = queryPendingCount()
         }
         out
     }

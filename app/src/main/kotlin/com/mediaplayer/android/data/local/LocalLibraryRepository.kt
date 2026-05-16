@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -56,7 +57,7 @@ object LocalLibraryRepository {
      * disk so the next [observe] subscription can emit instantly.
      */
     suspend fun scan(context: Context): List<LocalTrack> {
-        val fresh = scanInternal(context)
+        val fresh = withContext(Dispatchers.IO) { scanInternal(context) }
         LocalScanCache.write(context, fresh)
         return fresh
     }
@@ -111,7 +112,7 @@ object LocalLibraryRepository {
         awaitClose { resolver.unregisterContentObserver(observer) }
     }.flowOn(Dispatchers.IO)
 
-    private fun scanInternal(context: Context): List<LocalTrack> {
+    private suspend fun scanInternal(context: Context): List<LocalTrack> {
         // SAF-pinned trees never need READ_MEDIA_AUDIO — the persistable URI
         // permission granted at pick time is enough. So scan them even when
         // the legacy permission isn't granted.
@@ -255,9 +256,9 @@ object LocalLibraryRepository {
      * the local cover composable uses, so the cost has already been paid in
      * the cache for files the user actually plays.
      */
-    private fun scanSaf(context: Context): List<LocalTrack> {
+    private suspend fun scanSaf(context: Context): List<LocalTrack> {
         val prefs = LocalFolderPrefs.instance(context)
-        val pinnedRaw = kotlinx.coroutines.runBlocking { prefs.snapshot() }
+        val pinnedRaw = prefs.snapshot()
         if (pinnedRaw.isEmpty()) return emptyList()
         val resolver = context.contentResolver
         val out = ArrayList<LocalTrack>()
@@ -325,7 +326,17 @@ object LocalLibraryRepository {
                         // same SAF entry rehydrates with the same negative
                         // mediaId across scans. Bias into the Long.MAX/2..Long.MAX
                         // range so it never collides with MediaStore _IDs.
-                        val safId = SAF_ID_BASE + docUri.toString().hashCode().toLong().and(0x7FFF_FFFFL)
+                        //
+                        // Mix two String.hashCode() variants (forward + reversed)
+                        // to lift entropy from 32 bits to ~56 bits — at 31 bits
+                        // the birthday-paradox collision rate hit 50% around 54k
+                        // SAF documents; with this mix the same risk needs ~250M
+                        // documents. Masked to 56 bits so it sits between
+                        // SAF_ID_BASE (2^40) and Long.MAX_VALUE without ever
+                        // overflowing or going negative.
+                        val s = docUri.toString()
+                        val mix = s.hashCode().toLong() xor (s.reversed().hashCode().toLong() shl 31)
+                        val safId = SAF_ID_BASE + (mix and 0x00FF_FFFF_FFFF_FFFFL)
                         out += LocalTrack(
                             id = safId,
                             uri = docUri,
