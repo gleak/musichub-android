@@ -51,7 +51,12 @@ fun VideoPlayerInline(
     val context = LocalContext.current
     val videoUrl = Network.videoStreamUrl(song.id)
 
-    val dataSourceFactory = remember {
+    // Both the data-source factory and the ExoPlayer are keyed on song.id so
+    // a song change inside the inline video session (e.g. user skips via AA
+    // or notification) rebuilds the pipeline against the new MediaItem and
+    // picks up the current AuthTokenHolder snapshot. Without the key the
+    // factory pins the old token forever and the player keeps the old source.
+    val dataSourceFactory = remember(song.id) {
         // Server may invoke yt-dlp on first request — that can run 30–60s.
         // Network.okHttp's 30s readTimeout would abort; use a fresh client without one.
         val longRead = Network.okHttp.newBuilder()
@@ -74,7 +79,7 @@ fun VideoPlayerInline(
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
     }
 
-    val exoPlayer = remember {
+    val exoPlayer = remember(song.id) {
         val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
             .createMediaSource(MediaItem.fromUri(videoUrl))
         ExoPlayer.Builder(context).build().apply {
@@ -84,7 +89,9 @@ fun VideoPlayerInline(
         }
     }
 
-    DisposableEffect(Unit) {
+    // Key on exoPlayer so a song change releases the previous instance instead
+    // of leaking it until VideoPlayerInline leaves composition entirely.
+    DisposableEffect(exoPlayer) {
         onDispose { exoPlayer.release() }
     }
 

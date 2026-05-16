@@ -181,15 +181,27 @@ private fun NowPlayingContent(
     var showVideo by remember { mutableStateOf(false) }
     var pausedForVideo by remember { mutableStateOf(false) }
 
-    LaunchedEffect(showVideo) {
-        if (showVideo) {
-            if (isPlaying) {
+    // Pause/resume must be decided synchronously with the toggle, not in a
+    // LaunchedEffect that re-reads `isPlaying`: the collected State can lag
+    // the underlying StateFlow by one frame and a same-frame play/pause
+    // race could either leave audio silent after closing the video, or
+    // force-resume audio the user explicitly paused.
+    val openVideo: () -> Unit = {
+        if (!showVideo) {
+            if (viewModel.isPlaying.value) {
                 viewModel.pause()
                 pausedForVideo = true
             }
-        } else if (pausedForVideo) {
-            viewModel.play()
-            pausedForVideo = false
+            showVideo = true
+        }
+    }
+    val closeVideo: () -> Unit = {
+        if (showVideo) {
+            if (pausedForVideo) {
+                viewModel.play()
+                pausedForVideo = false
+            }
+            showVideo = false
         }
     }
 
@@ -293,7 +305,7 @@ private fun NowPlayingContent(
                     ) {
                         VideoPlayerInline(
                             song = current,
-                            onClose = { showVideo = false },
+                            onClose = closeVideo,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -490,7 +502,7 @@ private fun NowPlayingContent(
                 }
                 if (current.hasVideo) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { showVideo = !showVideo }) {
+                        IconButton(onClick = { if (showVideo) closeVideo() else openVideo() }) {
                             Icon(
                                 imageVector = if (showVideo) Icons.Filled.MusicNote
                                               else Icons.Filled.VideoLibrary,
