@@ -9,8 +9,6 @@ import android.database.ContentObserver
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import androidx.core.content.ContextCompat
@@ -89,12 +87,20 @@ object LocalLibraryRepository {
         }
 
         val resolver = context.contentResolver
-        val handler = Handler(Looper.getMainLooper())
-        val observer = object : ContentObserver(handler) {
+        // ContentObserver(null) dispatches onChange on the binder thread; we
+        // immediately hop to Dispatchers.IO so the MediaStore + SAF scan
+        // (with per-file MediaMetadataRetriever calls) never blocks anything
+        // visible. runCatching guards the system-thread callback so a transient
+        // SecurityException from a revoked SAF permission can't crash the app.
+        val observer = object : ContentObserver(null) {
             override fun onChange(selfChange: Boolean) {
-                val updated = scanInternal(context)
-                trySend(updated)
-                launch { LocalScanCache.write(context, updated) }
+                launch(Dispatchers.IO) {
+                    runCatching {
+                        val updated = scanInternal(context)
+                        trySend(updated)
+                        LocalScanCache.write(context, updated)
+                    }
+                }
             }
         }
         resolver.registerContentObserver(

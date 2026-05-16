@@ -1,6 +1,7 @@
 package com.mediaplayer.android.ui.local
 
 import android.media.MediaMetadataRetriever
+import android.util.LruCache
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,7 +29,6 @@ import com.mediaplayer.android.data.local.LocalTrack
 import com.mediaplayer.android.ui.theme.CoverShapes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Local-track cover with an embedded-ID3 fallback. The standard
@@ -53,10 +53,14 @@ fun LocalCover(
     val context = LocalContext.current
     val sizePx = with(LocalDensity.current) { size.roundToPx() }
 
-    val embedded by produceState<ByteArray?>(initialValue = embeddedCache[track.id], track.id) {
+    val embedded by produceState<ByteArray?>(
+        initialValue = embeddedCache.get(track.id)?.takeIf { it !== NO_EMBEDDED_ART },
+        track.id,
+    ) {
         if (track.albumArtUri != null) return@produceState
-        if (embeddedCache.containsKey(track.id)) {
-            value = embeddedCache[track.id]
+        val cached = embeddedCache.get(track.id)
+        if (cached != null) {
+            value = if (cached === NO_EMBEDDED_ART) null else cached
             return@produceState
         }
         val bytes = withContext(Dispatchers.IO) {
@@ -70,7 +74,7 @@ fun LocalCover(
                 runCatching { mmr.release() }
             }
         }
-        embeddedCache[track.id] = bytes
+        embeddedCache.put(track.id, bytes ?: NO_EMBEDDED_ART)
         value = bytes
     }
 
@@ -106,4 +110,16 @@ fun LocalCover(
     }
 }
 
-private val embeddedCache: ConcurrentHashMap<Long, ByteArray?> = ConcurrentHashMap()
+// Sentinel for "tried, no embedded art" so we can cache the negative result
+// without leaking memory by holding genuinely-null values in an LruCache.
+private val NO_EMBEDDED_ART = ByteArray(0)
+
+// Bounded by total bytes (~16 MB) rather than entry count: embedded pictures
+// vary wildly in size (tiny placeholders vs full-quality JPEG), so per-entry
+// limits would either evict too aggressively or pin hundreds of MB on a large
+// local library. Thread-safe; access from compose threads + IO dispatcher.
+private val embeddedCache: LruCache<Long, ByteArray> =
+    object : LruCache<Long, ByteArray>(16 * 1024 * 1024) {
+        override fun sizeOf(key: Long, value: ByteArray): Int =
+            value.size.coerceAtLeast(1)
+    }

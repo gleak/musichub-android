@@ -63,12 +63,6 @@ object ConnectivityObserver {
         // omit it even when the connection actually works.
         val online = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
         _deviceOnline.value = online
-        if (!online) {
-            // Device fully offline — backend can't be reachable until a call
-            // proves otherwise. Proactively flip the flag so the badge appears
-            // immediately rather than waiting for the next failed request.
-            _backendReachable.value = false
-        }
         recompute()
     }
 
@@ -86,11 +80,7 @@ object ConnectivityObserver {
         }
     }
 
-    // The OkHttp interceptor is the authoritative signal — if a request just
-    // succeeded, the network is by definition available, regardless of what
-    // ConnectivityManager reports. CM is downgraded to a hint that lets us
-    // surface offline state quickly when the device leaves all networks.
     private fun recompute() {
-        _networkAvailable.value = _backendReachable.value
+        _networkAvailable.value = _deviceOnline.value && _backendReachable.value
     }
 }
