@@ -17,9 +17,7 @@ import kotlinx.coroutines.launch
 @UnstableApi
 class NowPlayingWidgetReceiver : GlanceAppWidgetReceiver() {
 
-    override val glanceAppWidget: GlanceAppWidget = NowPlayingWidget()
-
-    private var scope: CoroutineScope? = null
+    override val glanceAppWidget: GlanceAppWidget = SHARED_WIDGET
 
     /**
      * While at least one widget instance is bound, listen to [WidgetState]
@@ -33,7 +31,7 @@ class NowPlayingWidgetReceiver : GlanceAppWidgetReceiver() {
      */
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
-        startObserving(context)
+        startObservingOnce(context)
     }
 
     override fun onUpdate(
@@ -42,23 +40,48 @@ class NowPlayingWidgetReceiver : GlanceAppWidgetReceiver() {
         appWidgetIds: IntArray,
     ) {
         super.onUpdate(context, appWidgetManager, appWidgetIds)
-        if (scope == null) startObserving(context)
+        startObservingOnce(context)
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
-        scope?.cancel()
-        scope = null
+        stopObserving()
     }
 
-    private fun startObserving(context: Context) {
-        if (scope != null) return
-        val s = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-        scope = s
-        val app = context.applicationContext
-        s.launch {
-            WidgetState.now.drop(1).collect {
-                runCatching { (glanceAppWidget as NowPlayingWidget).updateAll(app) }
+    companion object {
+        // Single widget instance shared across every receiver invocation.
+        // Each onReceive() previously allocated a fresh GlanceAppWidget per
+        // broadcast — fine for state-less widgets, but combined with the
+        // collector below it meant every system APPWIDGET_UPDATE stacked a
+        // new infinite collector retaining a new widget instance.
+        private val SHARED_WIDGET: GlanceAppWidget = NowPlayingWidget()
+
+        private val observerLock = Any()
+        private var observerScope: CoroutineScope? = null
+
+        // BroadcastReceiver instances are recycled per broadcast — anything
+        // stored on `this` leaks because the OS keeps re-instantiating the
+        // class. The collector lives in the companion (process-scoped) so
+        // there's only ever one active collector at a time regardless of
+        // how many system broadcasts arrive.
+        private fun startObservingOnce(context: Context) {
+            synchronized(observerLock) {
+                if (observerScope != null) return
+                val s = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+                observerScope = s
+                val app = context.applicationContext
+                s.launch {
+                    WidgetState.now.drop(1).collect {
+                        runCatching { SHARED_WIDGET.updateAll(app) }
+                    }
+                }
+            }
+        }
+
+        private fun stopObserving() {
+            synchronized(observerLock) {
+                observerScope?.cancel()
+                observerScope = null
             }
         }
     }

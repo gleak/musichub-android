@@ -36,6 +36,16 @@ internal class PlaybackResumption(context: Context) {
     /**
      * Attach to a [Player] so every meaningful change gets checkpointed.
      * Returns the listener so callers can detach it on service teardown.
+     *
+     * The trigger set deliberately excludes [Player.EVENT_IS_PLAYING_CHANGED]:
+     * play/pause toggles don't move the resume target, and the AA lyrics
+     * ticker's once-per-second `replaceMediaItem` fans EVENT_TIMELINE_CHANGED
+     * out to every other listener — including this one — so leaving
+     * IS_PLAYING_CHANGED in the trigger set on top of the per-line timeline
+     * churn meant a SharedPreferences JSON-encode + write per lyric line.
+     * The in-memory snapshot signature below additionally skips timeline-
+     * changed writes when the queue identity hasn't actually changed
+     * (lyric-line in-place updates pass through cheaply).
      */
     fun install(player: Player): Player.Listener {
         val listener = object : Player.Listener {
@@ -44,7 +54,6 @@ internal class PlaybackResumption(context: Context) {
                         Player.EVENT_TIMELINE_CHANGED,
                         Player.EVENT_MEDIA_ITEM_TRANSITION,
                         Player.EVENT_PLAY_WHEN_READY_CHANGED,
-                        Player.EVENT_IS_PLAYING_CHANGED,
                     )
                 ) {
                     save(p)
@@ -54,6 +63,12 @@ internal class PlaybackResumption(context: Context) {
         player.addListener(listener)
         return listener
     }
+
+    // Last-saved queue signature so an in-place replaceMediaItem on the
+    // current index (AA lyrics ticker, redownloadCurrent, refreshLocalDownload)
+    // doesn't trigger another disk write — the resume target is identical
+    // when the id list + current index haven't changed.
+    private var lastSig: String? = null
 
     /**
      * Restore the last saved queue into playable [MediaItem]s (with
@@ -91,6 +106,7 @@ internal class PlaybackResumption(context: Context) {
         val count = player.mediaItemCount
         if (count == 0) {
             prefs.edit().clear().apply()
+            lastSig = null
             return
         }
 
@@ -107,9 +123,21 @@ internal class PlaybackResumption(context: Context) {
             )
         }
 
+        val index = player.currentMediaItemIndex
+        // Signature: queue ids + current index. Excludes position because
+        // position drifts continuously without firing Player.Events — only
+        // the events in install() trigger a save, so the position captured
+        // here is always the position at that event boundary.
+        val sig = buildString {
+            for (s in items) append(s.id).append(',')
+            append('@').append(index)
+        }
+        if (sig == lastSig) return
+        lastSig = sig
+
         val dto = SnapshotDto(
             items = items,
-            index = player.currentMediaItemIndex,
+            index = index,
             positionMs = player.currentPosition,
         )
 
