@@ -76,9 +76,14 @@ fun QueueSheet(
     val mono = LocalMHMono.current
     val accent = MaterialTheme.colorScheme.primary
 
+    // Hoisted out of the argument list — rememberModalBottomSheetState
+    // relies on positional remembering, and inlining it makes the slot
+    // fragile against any future composition-hierarchy shift above this
+    // call site.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = sheetState,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // Eyebrow + title + header chips.

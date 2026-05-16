@@ -58,10 +58,14 @@ fun VideoPlayerInline(
     // factory pins the old token forever and the player keeps the old source.
     val dataSourceFactory = remember(song.id) {
         // Server may invoke yt-dlp on first request — that can run 30–60s.
-        // Network.okHttp's 30s readTimeout would abort; use a fresh client without one.
+        // Network.okHttp's 30s readTimeout would abort; relax it to a
+        // generous-but-finite upper bound rather than the zero (= forever)
+        // that the previous version used. A slow trickle stream would
+        // otherwise pin ExoPlayer's buffer wait indefinitely with no
+        // way for the user to recover other than closing the sheet.
         val longRead = Network.okHttp.newBuilder()
-            .readTimeout(0, TimeUnit.SECONDS)
-            .callTimeout(0, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .callTimeout(180, TimeUnit.SECONDS)
             .build()
         val upstream = OkHttpDataSource.Factory(longRead).apply {
             val token = AuthTokenHolder.idToken
@@ -117,7 +121,12 @@ fun VideoPlayerInline(
             // over the video. The transient-by-swipe behaviour preserves
             // the standard Android escape hatch.
             val view = LocalView.current
-            DisposableEffect(view) {
+            // Key on `fullscreen` (the gate that opens this dialog) so the
+            // hide/restore pair runs once per fullscreen session. Keying
+            // on `view` flapped on rotation — Compose creates a new dialog
+            // window, the new effect hid bars, then the old onDispose ran
+            // and restored them, flashing the system bars onscreen.
+            DisposableEffect(fullscreen) {
                 val window = (view.parent as? DialogWindowProvider)?.window
                 if (window != null) {
                     // Force the dialog window itself to fill the screen.
@@ -185,6 +194,10 @@ private fun VideoSurface(
             update = { view ->
                 view.player = player
                 view.setFullscreenButtonState(fullscreen)
+                // Re-bind the click listener on every update so a stale
+                // onFullscreenToggle capture from `factory` can't flip the
+                // wrong fullscreen state after a parent recomposition.
+                view.setFullscreenButtonClickListener { onFullscreenToggle() }
             },
             modifier = Modifier.fillMaxSize(),
         )

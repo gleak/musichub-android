@@ -103,7 +103,14 @@ class SearchViewModel(
             initialValue = SearchUiState.Idle,
         )
 
-    fun retry() { _retryTick.value++ }
+    fun retry() {
+        // Guard against rapid double-taps on Riprova firing two parallel
+        // fetches. flatMapLatest already cancels the prior request, but
+        // the second tap still costs a network round-trip and an extra
+        // Loading flicker — bail when we're already mid-load.
+        if (state.value is SearchUiState.Loading) return
+        _retryTick.value++
+    }
 
     init {
         // Cold-start the cache when nothing else has populated it yet.

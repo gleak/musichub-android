@@ -50,6 +50,10 @@ fun LyricsView(
     var importFailed by remember(songId) { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
+    // Capture the current songId so the import coroutine — which lives on
+    // the screen-level scope and survives a song change — can refuse to
+    // commit results into the wrong song's state.
+    val currentSongIdRef = androidx.compose.runtime.rememberUpdatedState(songId)
 
     LaunchedEffect(songId) {
         loading = true
@@ -57,7 +61,12 @@ fun LyricsView(
         importFailed = false
         lines = emptyList()
         try {
-            lines = repository.getLyrics(songId)
+            val fetched = repository.getLyrics(songId)
+            lines = fetched
+            // Empty result is the same UX as "no lyrics" — without this
+            // the else-branch rendered a blank LazyColumn with no message
+            // and no Riprova CTA.
+            if (fetched.isEmpty()) noLyrics = true
         } catch (_: Throwable) {
             noLyrics = true
         } finally {
@@ -107,15 +116,22 @@ fun LyricsView(
                         if (importing) return@Button
                         importing = true
                         importFailed = false
+                        val launchSongId = songId
                         scope.launch {
                             try {
-                                val fetched = repository.importLyrics(songId)
+                                val fetched = repository.importLyrics(launchSongId)
+                                // Bail if the user moved on to another song
+                                // while the import was in flight — without
+                                // this guard the song-B view rendered song-A's
+                                // imported lyrics.
+                                if (currentSongIdRef.value != launchSongId) return@launch
                                 lines = fetched
-                                noLyrics = false
+                                noLyrics = fetched.isEmpty()
+                                importFailed = fetched.isEmpty()
                             } catch (_: Throwable) {
-                                importFailed = true
+                                if (currentSongIdRef.value == launchSongId) importFailed = true
                             } finally {
-                                importing = false
+                                if (currentSongIdRef.value == launchSongId) importing = false
                             }
                         }
                     },

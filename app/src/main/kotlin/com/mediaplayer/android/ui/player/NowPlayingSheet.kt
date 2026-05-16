@@ -161,10 +161,14 @@ private fun NowPlayingContent(
     val videoDownloadError by viewModel.videoDownloadError.collectAsStateWithLifecycle()
     val videoReinitializing by viewModel.videoReinitializing.collectAsStateWithLifecycle()
     val videoReinitializeError by viewModel.videoReinitializeError.collectAsStateWithLifecycle()
-    var confirmRedownload by remember { mutableStateOf(false) }
-    var confirmMarkBroken by remember { mutableStateOf(false) }
-    var confirmFlagWrong by remember { mutableStateOf(false) }
-    var overflowOpen by remember { mutableStateOf(false) }
+    // Transient overlay flags use rememberSaveable so rotation / process
+    // restoration doesn't silently dismiss an open confirm dialog or close
+    // the kebab menu mid-tap. The viewmodel-owned playback state is already
+    // restored independently.
+    var confirmRedownload by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var confirmMarkBroken by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var confirmFlagWrong by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var overflowOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
     val current = song ?: run {
         LaunchedEffect(Unit) { onDismiss() }
@@ -173,13 +177,18 @@ private fun NowPlayingContent(
 
     val dislike = com.mediaplayer.android.ui.common.rememberDislikeActions(current.id, current.artist)
 
+    // scrubValue stays plain remember — it's actively driven by the slider
+    // and resetting it to null on rotation matches user expectation (don't
+    // freeze the slider on a phantom drag). All the other UI overlay flags
+    // and the video pause-bookkeeping flag get rememberSaveable so the open
+    // queue / equalizer / video / sleep menu survive a config change.
     var scrubValue by remember { mutableStateOf<Float?>(null) }
-    var showQueue by remember { mutableStateOf(false) }
-    var showLyrics by remember { mutableStateOf(false) }
-    var showEqualizer by remember { mutableStateOf(false) }
-    var showSleepMenu by remember { mutableStateOf(false) }
-    var showVideo by remember { mutableStateOf(false) }
-    var pausedForVideo by remember { mutableStateOf(false) }
+    var showQueue by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var showLyrics by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var showEqualizer by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var showSleepMenu by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var showVideo by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var pausedForVideo by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
     // Pause/resume must be decided synchronously with the toggle, not in a
     // LaunchedEffect that re-reads `isPlaying`: the collected State can lag
@@ -939,15 +948,23 @@ private fun ActiveTimerCard(
             } else {
                 // Service updates `remainingMs` only at minute boundaries (it
                 // sleeps until the next whole-minute roll-over). The hero card
-                // wants a live `mm:ss` so we tick locally between snapshots —
-                // each new snapshot resets the wall-clock baseline.
-                val targetEndAt = remember(remainingMs) {
+                // wants a live `mm:ss` so we tick locally between snapshots.
+                //
+                // The card is conditionally rendered while the timer is
+                // active — one mount = one timer session — so anchoring
+                // the wall-clock baseline + the ticking effect with a
+                // bare `remember {}` / `LaunchedEffect(Unit)` reuses the
+                // same anchor across every minute-boundary snapshot. The
+                // previous version re-anchored on every `remainingMs`
+                // emission, so any service delivery delay made the
+                // displayed mm:ss drift backward at each minute.
+                val targetEndAt = remember {
                     System.currentTimeMillis() + remainingMs.coerceAtLeast(0L)
                 }
-                var liveMs by remember(remainingMs) {
+                var liveMs by remember {
                     mutableStateOf(remainingMs.coerceAtLeast(0L))
                 }
-                LaunchedEffect(remainingMs) {
+                LaunchedEffect(Unit) {
                     while (true) {
                         val left = targetEndAt - System.currentTimeMillis()
                         liveMs = left.coerceAtLeast(0L)

@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,19 +81,23 @@ fun MiniPlayer(
     val current = song ?: return  // mini-player hidden until a track loads
     val haptics = LocalHapticFeedback.current
 
+    // Monotonic counter that bumps every time we accept a dismiss. The reset
+    // effect keys on (current.id, dismissTick) so a brand-new song arriving
+    // before the cache has emitted null (dismiss followed by an immediate
+    // queue write) starts un-armed instead of pre-armed at the right edge.
+    var dismissTick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0) }
     val dismissState = rememberSwipeToDismissBoxState(
-        // Re-key per track so dismissing one song doesn't pre-arm the bar
-        // for the next track that gets queued up.
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.StartToEnd ||
                 value == SwipeToDismissBoxValue.EndToStart
             ) {
                 viewModel.dismissPlayback()
+                dismissTick += 1
                 true
             } else false
         },
     )
-    LaunchedEffect(current.id) { dismissState.reset() }
+    LaunchedEffect(current.id, dismissTick) { dismissState.reset() }
 
     val cardShape = CoverShapes.Card
     val accent = MaterialTheme.colorScheme.primary

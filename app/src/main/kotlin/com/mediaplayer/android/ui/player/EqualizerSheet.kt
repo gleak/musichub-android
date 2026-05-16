@@ -163,10 +163,13 @@ fun EqualizerSheet(onDismiss: () -> Unit) {
             }
             Spacer(Modifier.size(20.dp))
 
-            // Audio-session + output-device info card.
+            // Audio-session + output-device info card. Output label live-
+            // updates on plug / unplug — the previous `remember(ctx)` cached
+            // the label for the life of the sheet, so headphone changes
+            // mid-session never reflected here.
             AudioSessionCard(
                 audioSessionId = s.audioSessionId,
-                output = remember(ctx) { activeOutputLabel(ctx) },
+                output = rememberActiveOutputLabel(ctx),
                 mono = mono,
                 accent = accent,
             )
@@ -381,6 +384,31 @@ private fun InfoRow(label: String, value: String, mono: com.mediaplayer.android.
  * differently from what `getDevices` reports — but good enough for the
  * info card.
  */
+/**
+ * Live audio-output label that re-reads on every plug / unplug. Registers
+ * an [android.media.AudioDeviceCallback] for the composable's lifetime and
+ * pokes a tick counter when devices change, which re-runs the label
+ * computation via the State backing the returned value.
+ */
+@Composable
+private fun rememberActiveOutputLabel(ctx: Context): String {
+    var tick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0) }
+    androidx.compose.runtime.DisposableEffect(ctx) {
+        val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        if (am == null) {
+            onDispose { }
+        } else {
+            val cb = object : android.media.AudioDeviceCallback() {
+                override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) { tick++ }
+                override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) { tick++ }
+            }
+            am.registerAudioDeviceCallback(cb, null)
+            onDispose { am.unregisterAudioDeviceCallback(cb) }
+        }
+    }
+    return androidx.compose.runtime.remember(ctx, tick) { activeOutputLabel(ctx) }
+}
+
 private fun activeOutputLabel(ctx: Context): String {
     val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return "—"
     val devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)

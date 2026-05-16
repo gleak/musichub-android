@@ -178,7 +178,11 @@ private fun HomeContent(
     androidx.compose.runtime.LaunchedEffect(recents) {
         com.mediaplayer.android.data.LikedSongsCache.prime(recents.map { it.id })
     }
-    var filter by remember { mutableStateOf(HomeFilter.All) }
+    // rememberSaveable so rotation / process restore doesn't bounce the user
+    // back to "Tutto" mid-filter on Artisti / Playlist.
+    var filter by androidx.compose.runtime.saveable.rememberSaveable {
+        mutableStateOf(HomeFilter.All)
+    }
 
     val artists = remember(recents) {
         recents.map { it.artist }.filter { it.isNotBlank() }.distinct()
