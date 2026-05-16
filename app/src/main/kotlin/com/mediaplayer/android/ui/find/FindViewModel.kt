@@ -107,7 +107,15 @@ class FindViewModel(
                         _state.value = FindUiState.Error(
                             created.errorMessage ?: "Search failed on the backend."
                         )
-                    else -> _state.value = FindUiState.Tracking(created)
+                    else -> {
+                        // Track the request id so a pause()/resume() across
+                        // submit and select restarts the right poll loop —
+                        // without this, the resume() branch falls through to
+                        // startRequestsTracking() and an auto-selected
+                        // backend response goes unreported until manual refresh.
+                        trackedRequestId = created.id
+                        _state.value = FindUiState.Tracking(created)
+                    }
                 }
             } catch (t: Throwable) {
                 _state.value = FindUiState.Error(friendlyMessage(t))
@@ -140,13 +148,22 @@ class FindViewModel(
         startRequestsTracking()
     }
 
+    // Job-tracking guard: rapid pull-to-refresh taps used to overlap on the
+    // _isRefreshing flag, ending with the flag flipped to false while a
+    // slower fetch was still in flight. Cancel-and-relaunch keeps only the
+    // most recent refresh visible to the UI.
+    private var refreshJob: Job? = null
+
     fun refreshActiveRequests() {
-        viewModelScope.launch {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
             _isRefreshing.value = true
             try {
                 _activeRequests.value = repository.list().filter { !it.status.isTerminal }
-            } catch (_: Throwable) {}
-            _isRefreshing.value = false
+            } catch (_: Throwable) {
+            } finally {
+                _isRefreshing.value = false
+            }
         }
         startRequestsTracking()
     }
@@ -158,9 +175,12 @@ class FindViewModel(
 
     private suspend fun runTrackingLoop(requestId: Long) {
         try {
+            // First fetch runs immediately so a backend that resolves the
+            // request instantly (cached query, auto-select branch) doesn't
+            // make the UI wait POLL_MS before flipping out of Searching.
+            // delay() moved to the bottom of the loop body.
             var backoff = POLL_MS
             while (true) {
-                delay(backoff)
                 val fresh = repository.detail(requestId)
                 _state.value = FindUiState.Tracking(fresh)
                 if (fresh.status.isTerminal) {
@@ -170,6 +190,7 @@ class FindViewModel(
                     startRequestsTracking()
                     break
                 }
+                delay(backoff)
                 backoff = (backoff * 2).coerceAtMost(MAX_POLL_MS)
             }
         } catch (t: Throwable) {
@@ -181,17 +202,30 @@ class FindViewModel(
         if (!screenActive) return
         requestsJob?.cancel()
         requestsJob = viewModelScope.launch {
-            try {
-                var backoff = POLL_MS
-                while (true) {
+            // Per-iteration try/catch instead of a single outer one — the old
+            // behaviour exited the loop on the first transient network error
+            // and only restarted on manual pull-to-refresh, so a brief blip
+            // turned into a permanently stale active-requests panel.
+            var backoff = POLL_MS
+            while (true) {
+                val ok = try {
                     val fresh = repository.list().filter { !it.status.isTerminal }
                     _activeRequests.value = fresh
                     if (fresh.isEmpty()) break
-                    delay(backoff)
-                    backoff = (backoff * 2).coerceAtMost(MAX_POLL_MS)
+                    true
+                } catch (_: Throwable) {
+                    false
                 }
-            } catch (_: Throwable) {
-                // Best-effort — silently stop polling on network error.
+                delay(backoff)
+                backoff = if (ok) {
+                    (backoff * 2).coerceAtMost(MAX_POLL_MS)
+                } else {
+                    // Errors keep the loop alive but stretch the backoff
+                    // immediately to the max so we don't hammer a flapping
+                    // backend; a success resets growth back to the gentler
+                    // doubling curve from POLL_MS.
+                    MAX_POLL_MS
+                }
             }
         }
     }
