@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.20.11"
+    const val VERSION = "0.21.0"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,14 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.21.0",
+            title = "La playlist non finisce mai + meno salti improvvisi",
+            highlights = listOf(
+                "Quando arrivi all'ultimo brano la playlist riparte da sola, rimescolata: il tasto avanti resta sempre attivo e la musica continua senza fermarsi, perfetto in macchina.",
+                "Meno brani che saltano da soli: quando un file scaricato risultava incompleto la canzone si interrompeva prima della fine; ora l'app se ne accorge e lo riscarica così la volta dopo riparte intero.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.20.11",
             title = "Correzioni di stabilità",

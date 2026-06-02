@@ -29,7 +29,7 @@ val localProps = Properties().apply {
 // override this in `local.properties` (`base.url.release=...`) if a
 // fallback to the legacy `http://194.116.60.68:8090` is needed for
 // debugging.
-val RELEASE_URL_DEFAULT = "https://92b70eb3-9758-47a7-a830-744a9d61f809.duckdns.org"
+val RELEASE_URL_DEFAULT = "https://q-musichub.duckdns.org"
 val SENTINEL_URL = "https://mediaplayer.invalid"
 
 fun resolveBaseUrl(variantKey: String, fallback: String): String {
@@ -75,6 +75,14 @@ android {
                 storePassword = keystorePassword
                 keyAlias = keystoreAlias
                 keyPassword = keystoreKeyPassword
+                // Force the full signing-scheme set. AGP drops v1 (JAR) signing
+                // when minSdk >= 24, leaving a v2-only APK. Some OEM package
+                // installers abort a v2-only sideload with a vague "scaricamento
+                // interrotto"/parse error, so keep v1 for install compatibility
+                // alongside v2/v3.
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
@@ -83,8 +91,8 @@ android {
         applicationId = "com.mediaplayer.android"
         minSdk = 24
         targetSdk = 35
-        versionCode = 112
-        versionName = "0.20.11"
+        versionCode = 113
+        versionName = "0.21.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

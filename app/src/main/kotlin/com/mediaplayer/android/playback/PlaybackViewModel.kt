@@ -2,6 +2,7 @@ package com.mediaplayer.android.playback
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.SharedPreferencesMigration
 import androidx.datastore.preferences.core.Preferences
@@ -242,6 +243,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             listenedMs = 0L
             _currentSong.value = nextDto
             pushDuration()
+            // Endless playlist: the moment we land on the final item, refill
+            // the timeline with a fresh shuffled pass of the source so the
+            // next button never disables and auto-advance never stops. Prune
+            // old history afterwards so a long drive doesn't grow unbounded.
+            maybeAppendEndlessBatch()
+            pruneEndlessHistory()
             pushQueueAvailability()
         }
 
@@ -258,6 +265,19 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             // skip) so the UI tracks jumps even while the periodic poll is
             // not running (paused state).
             pushPositionOnce()
+            // Phantom-skip detector. A song that AUTO-advances long before its
+            // known duration almost always means the local/cached bytes are
+            // truncated (background download killed mid-write, partial cache
+            // entry) — ExoPlayer hits an early end-of-stream and moves on, so
+            // from the driver's seat the track "skips by itself". We log it
+            // (tag below, greppable from logcat after a drive) and drop the
+            // offending file so the next play refetches clean bytes. This never
+            // fires for a phantom Bluetooth NEXT key — that arrives as a
+            // controller seek, not DISCONTINUITY_REASON_AUTO_TRANSITION — so the
+            // presence/absence of this log cleanly distinguishes the two causes.
+            if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION) {
+                maybeHealPrematureEos(oldPosition)
+            }
             // Spotify-queue contract: a user-queued item is consumed the
             // moment we leave it (auto-advance or manual skip). The new
             // item is already prepared and playing, so removing the old
@@ -675,6 +695,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     fun skipNext() {
         val c = controller ?: return
+        // Endless playlist: if we're sitting on the last item, refill from the
+        // source first so the manual next still advances (into a reshuffled
+        // replay) instead of no-op-ing.
+        if (!c.hasNextMediaItem()) maybeAppendEndlessBatch()
         if (c.hasNextMediaItem()) c.seekToNextMediaItem()
     }
 
@@ -716,6 +740,104 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         val rest = (1 until total).map { c.getMediaItemAt(it) }.shuffled()
         c.removeMediaItems(1, total)
         c.addMediaItems(1, rest)
+    }
+
+    /**
+     * Endless playlist. When playback reaches the last item of a multi-song
+     * source, append a fresh shuffled pass of that same source so the queue
+     * never runs dry: the next button stays enabled and auto-advance keeps
+     * rolling into a reshuffled replay of whatever the user put on (a
+     * playlist, album, etc.). Mirrors the "the playlist starts over, shuffled"
+     * behaviour the user expects in the car.
+     *
+     * The source pool is every non-user-queued item currently in the timeline
+     * — these are never removed on transition (only user-queued items are), so
+     * the full original set is always reconstructable from the timeline. The
+     * just-finishing song is rotated out of the first slot so a loop boundary
+     * never plays the same track twice back-to-back.
+     *
+     * No-op unless we're actually sitting on the last item, the source has at
+     * least two songs, and repeat is OFF — repeat-all already loops via the
+     * player's own wrap (+ [maybeReshuffleOnWrap]) and repeat-one intentionally
+     * holds on one track.
+     */
+    private fun maybeAppendEndlessBatch() {
+        val c = controller ?: return
+        if (c.repeatMode != Player.REPEAT_MODE_OFF) return
+        val total = c.mediaItemCount
+        if (total == 0) return
+        if (c.currentMediaItemIndex != total - 1) return
+        val source = (0 until total)
+            .map { c.getMediaItemAt(it) }
+            .filterNot { it.isUserQueued() }
+        if (source.size < 2) return
+        val currentId = c.getMediaItemAt(total - 1).mediaId
+        var batch = source.shuffled()
+        if (batch.first().mediaId == currentId) {
+            // Rotate the duplicate to the back so the loop seam isn't a repeat.
+            batch = batch.drop(1) + batch.first()
+        }
+        c.addMediaItems(batch)
+    }
+
+    /**
+     * Keep the endless timeline from growing without bound on a long drive:
+     * once played history in front of the current item exceeds
+     * [ENDLESS_HISTORY_KEEP], drop the oldest items. Everything before the
+     * current index has already been played (user-queued items are consumed on
+     * transition), so removing them only trims back-history — previous still
+     * works within the kept window. The player keeps the current item playing;
+     * the controller re-bases its index automatically.
+     */
+    private fun pruneEndlessHistory() {
+        val c = controller ?: return
+        val pruneEnd = c.currentMediaItemIndex - ENDLESS_HISTORY_KEEP
+        if (pruneEnd > 0) c.removeMediaItems(0, pruneEnd)
+    }
+
+    /**
+     * See call site in [onPositionDiscontinuity]. Given the position info of an
+     * item that just AUTO-advanced, decide whether it ended suspiciously early
+     * (truncated bytes) and, if so, drop its cached/downloaded copy so the next
+     * play refetches. [_durationMs] still holds the *old* item's duration here
+     * because [onPositionDiscontinuity] fires before [onMediaItemTransition]
+     * re-reads duration for the new item.
+     */
+    private fun maybeHealPrematureEos(oldPosition: Player.PositionInfo) {
+        val duration = _durationMs.value
+        val endedAt = oldPosition.positionMs
+        if (duration <= 0L) return
+        if (duration - endedAt < PREMATURE_EOS_MARGIN_MS) return
+        val songId = oldPosition.mediaItem?.mediaId?.toLongOrNull() ?: return
+        Log.w(
+            PHANTOM_SKIP_TAG,
+            "Song $songId auto-advanced at ${endedAt}ms of ${duration}ms " +
+                "(${duration - endedAt}ms early) — likely truncated bytes, healing.",
+        )
+        // Local files (negative id) have no backend copy to refetch; skip.
+        if (songId <= 0L || LocalMediaResolver.isLocal(songId)) return
+        healTruncatedDownload(songId)
+    }
+
+    /**
+     * Drop the streaming cache + offline copy for [songId] without touching the
+     * currently-playing item, so a song that played back truncated gets fresh
+     * bytes the next time it's selected. Mirrors the cache-eviction half of
+     * [refreshLocalDownload], minus the timeline replace (the bad song already
+     * advanced away — re-preparing it would interrupt the track now playing).
+     */
+    private fun healTruncatedDownload(songId: Long) {
+        val ctx = getApplication<Application>()
+        val streamUrl = Network.streamUrl(songId)
+        runCatching { PlayerCache.get(ctx).removeResource(streamUrl) }
+        runCatching {
+            val wasDownloaded = DownloadRepository.isDownloaded(songId)
+            DownloadRepository.remove(songId)
+            if (wasDownloaded) {
+                val title = _currentSong.value?.takeIf { it.id == songId }?.title.orEmpty()
+                DownloadRepository.download(songId, title)
+            }
+        }
     }
 
     /**
@@ -1413,6 +1535,15 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         const val VIDEO_POLL_INITIAL_MS = 2_000L
         const val VIDEO_POLL_MAX_MS = 30_000L
         const val VIDEO_POLL_MAX_ATTEMPTS = 30
+        // Endless playlist: how many already-played items to keep behind the
+        // current one before pruning, so a long drive's timeline stays bounded
+        // while "previous" still works within the window.
+        const val ENDLESS_HISTORY_KEEP = 20
+        // Phantom-skip heal: a song must AUTO-advance at least this far before
+        // its known duration to count as truncated. Wide enough to ignore
+        // gapless trims / rounding, tight enough to catch real early-EOS.
+        const val PREMATURE_EOS_MARGIN_MS = 10_000L
+        const val PHANTOM_SKIP_TAG = "PlaybackPhantomSkip"
     }
 }
 

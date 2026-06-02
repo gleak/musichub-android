@@ -92,7 +92,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https"
-                      android:host="92b70eb3-9758-47a7-a830-744a9d61f809.duckdns.org"
+                      android:host="q-musichub.duckdns.org"
                       android:pathPrefix="/share/" />
             </intent-filter>
             <!-- Back-compat for any `mediaplayer://share/<token>` links already

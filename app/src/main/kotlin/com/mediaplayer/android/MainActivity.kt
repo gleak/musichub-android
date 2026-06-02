@@ -167,7 +167,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
-        const val SHARE_LINK_HOST = "92b70eb3-9758-47a7-a830-744a9d61f809.duckdns.org"
+        const val SHARE_LINK_HOST = "q-musichub.duckdns.org"
     }
 
     private fun consumeWidgetIntent(intent: Intent?) {
