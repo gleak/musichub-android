@@ -81,9 +81,11 @@ import com.mediaplayer.android.ui.artists.ArtistListScreen
 import com.mediaplayer.android.ui.artists.ArtistScreen
 import com.mediaplayer.android.ui.auth.AuthViewModel
 import com.mediaplayer.android.ui.auth.LoginScreen
+import com.mediaplayer.android.data.SongRepository
 import com.mediaplayer.android.ui.common.CurrentUser
 import com.mediaplayer.android.ui.common.LocalCurrentUser
 import com.mediaplayer.android.ui.common.LocalNowPlaying
+import com.mediaplayer.android.ui.common.LocalSongRadio
 import com.mediaplayer.android.ui.common.NowPlayingState
 import com.mediaplayer.android.ui.find.FindScreen
 import com.mediaplayer.android.ui.home.HomeScreen
@@ -445,6 +447,21 @@ private fun AppScaffold(
     // NowPlayingSheet hero cover share an animation surface. The cover
     // physically slides + scales between the two positions on open/close —
     // see `NOW_PLAYING_COVER_KEY`.
+    // "Radio simile": fetch a song's sonic neighbours and play the seed followed
+    // by them. Provided once here (owns the activity-scoped playbackVm) so every
+    // SongKebabSheet gets the action without per-screen plumbing. Backend cascades
+    // MERT → acoustic, so even a brand-new import returns something.
+    val radioScope = rememberCoroutineScope()
+    val songRepository = remember { SongRepository() }
+    val onSongRadio: (com.mediaplayer.android.data.dto.SongDto) -> Unit = { song ->
+        radioScope.launch {
+            runCatching { songRepository.getSimilarSongs(song.id) }
+                .onSuccess { similar ->
+                    if (similar.isNotEmpty()) playbackVm.playPlaylist(listOf(song) + similar, 0)
+                }
+        }
+    }
+
     androidx.compose.animation.SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
         // Broadcast current track + playing state to every list screen so
         // SongRow can light up the active row + render MHPlayingBars
@@ -454,6 +471,7 @@ private fun AppScaffold(
                 currentSongId = currentSong?.id,
                 isPlaying = isPlaying,
             ),
+            LocalSongRadio provides onSongRadio,
         ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(

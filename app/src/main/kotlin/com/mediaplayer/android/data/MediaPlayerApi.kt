@@ -382,4 +382,14 @@ interface MediaPlayerApi {
      */
     @POST("api/songs/{id}/lyrics/import")
     suspend fun importLyrics(@Path("id") id: Long): List<LyricLineDto>
+
+    // ---------- Sonic similarity ----------
+
+    /**
+     * "Radio simile": tracks that sound like the given song. Backend ranks by
+     * audio embedding (MERT) and falls back to interpretable acoustic features for
+     * brand-new imports not embedded yet, so it returns something even cold.
+     */
+    @GET("api/songs/{id}/similar")
+    suspend fun getSimilarSongs(@Path("id") id: Long): List<SongDto>
 }

@@ -5,8 +5,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import com.mediaplayer.android.data.dto.SongDto
 import com.mediaplayer.android.ui.playlists.AddToPlaylistSheet
+
+/**
+ * "Radio simile" action, provided once by [com.mediaplayer.android.MainActivity]
+ * (which owns the activity-scoped PlaybackViewModel) and consumed by every
+ * [SongKebabSheet] without each screen having to thread a callback. Given a song
+ * it fetches its sonic neighbours (MERT → acoustic cascade, backend-side) and
+ * plays the seed followed by them as a queue. Default is a no-op.
+ */
+val LocalSongRadio = staticCompositionLocalOf<(SongDto) -> Unit> { {} }
 
 /**
  * Holds the "currently-open" song for a screen's kebab sheet.
@@ -68,6 +78,7 @@ fun SongKebabSheet(
     onAdded: (playlistName: String, song: SongDto) -> Unit = { _, _ -> },
 ) {
     val song = state.current ?: return
+    val songRadio = LocalSongRadio.current
     val dislike = rememberDislikeActions(song.id, song.artist)
     val standardFlagWrong = rememberFlagWrongAction(
         songId = song.id,
@@ -85,6 +96,7 @@ fun SongKebabSheet(
         songHasCoverArt = song.hasCoverArt,
         onPlayNext = onPlayNext?.let { cb -> { cb(song); state.close() } },
         onAddToQueue = onAddToQueue?.let { cb -> { cb(song); state.close() } },
+        onPlaySimilar = { songRadio(song); state.close() },
         onDownload = onDownload?.let { cb -> { cb(song); state.close() } },
         onDislikeSong = dislike.song(),
         onDislikeArtist = dislike.artist(),

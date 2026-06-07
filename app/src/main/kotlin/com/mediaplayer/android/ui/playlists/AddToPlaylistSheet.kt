@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.PersonOff
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SkipNext
@@ -88,6 +89,7 @@ fun AddToPlaylistSheet(
     songHasCoverArt: Boolean = true,
     onPlayNext: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
+    onPlaySimilar: (() -> Unit)? = null,
     onDownload: (() -> Unit)? = null,
     onDislikeSong: (() -> Unit)? = null,
     onDislikeArtist: (() -> Unit)? = null,
@@ -204,9 +206,16 @@ fun AddToPlaylistSheet(
                 },
             )
             val anyAux = onPlayNext != null || onAddToQueue != null ||
-                onDownload != null || onDislikeSong != null ||
+                onPlaySimilar != null || onDownload != null || onDislikeSong != null ||
                 onDislikeArtist != null || onFlagWrong != null
             if (anyAux) {
+                onPlaySimilar?.let {
+                    QueueActionRow(
+                        label = "Radio simile",
+                        icon = { Icon(Icons.Filled.Radio, contentDescription = null) },
+                        onClick = { it(); onDismiss() },
+                    )
+                }
                 onPlayNext?.let {
                     QueueActionRow(
                         label = "Riproduci dopo",

@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.21.0"
+    const val VERSION = "0.22.0"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,21 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.22.0",
+            title = "Radio simile: continua nello stesso mood",
+            highlights = listOf(
+                "Dal menu di un brano (i tre puntini) trovi \"Radio simile\": toccalo e parte una coda di canzoni che suonano come quella. Perfetto per continuare nello stesso mood senza sceglierle a mano.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.21.1",
+            title = "La musica si ferma quando scendi dall'auto",
+            highlights = listOf(
+                "Quando ti scolleghi da Android Auto la riproduzione ora si mette in pausa da sola, così non continua a suonare dal telefono in tasca. Risalendo in macchina riparte da dove eri rimasto.",
+                "Saltando un brano a mano non viene più scaricato in automatico: l'app salva offline solo le canzoni che ascolti davvero, non quelle che salti dopo pochi secondi.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.21.0",
             title = "La playlist non finisce mai + meno salti improvvisi",

@@ -30,6 +30,9 @@ class SongRepository(
         )
     }
 
+    /** "Radio simile": the song's sonic neighbours (MERT → acoustic cascade, backend-side). */
+    suspend fun getSimilarSongs(songId: Long): List<SongDto> = api.getSimilarSongs(songId)
+
     suspend fun redownload(songId: Long): SongDto = api.redownloadSong(songId)
 
     /** Report a song as "wrong"; backend wipes the file + references. Irreversible. */
