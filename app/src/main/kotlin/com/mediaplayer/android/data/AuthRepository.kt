@@ -16,7 +16,9 @@ import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.mediaplayer.android.BuildConfig
 import com.mediaplayer.android.MediaPlayerApp
+import com.mediaplayer.android.data.dto.UserDto
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.Json
 
 private val Context.authDataStore: DataStore<Preferences> by preferencesDataStore(name = "auth")
 
@@ -113,8 +115,36 @@ class AuthRepository private constructor(private val context: Context) {
         context.authDataStore.edit {
             it.remove(HAS_SIGNED_IN)
             it.remove(ID_TOKEN)
+            it.remove(USER_SNAPSHOT)
         }
     }
+
+    /**
+     * Last successful `/api/auth/me` payload, persisted so the app can start
+     * signed-in with NO network: the stored ID token already authenticates
+     * every later request, and this snapshot supplies the identity +
+     * onboarding flag the auth gate needs before any backend round-trip can
+     * succeed. Without it, a token-valid-but-offline launch bounced the user
+     * to a login screen that could not possibly work (Google needs network).
+     */
+    suspend fun cacheUser(user: UserDto) {
+        runCatching {
+            context.authDataStore.edit {
+                it[USER_SNAPSHOT] = Json.encodeToString(UserDto.serializer(), user)
+            }
+        }
+    }
+
+    /** Cached `/api/auth/me` snapshot, or null if never fetched / corrupted. */
+    suspend fun loadCachedUser(): UserDto? =
+        runCatching {
+            context.authDataStore.data.first()[USER_SNAPSHOT]?.let {
+                Json.decodeFromString(UserDto.serializer(), it)
+            }
+        }.getOrNull()
+
+    /** Persisted ID token, decrypted — for the offline sign-in fallback. */
+    suspend fun storedTokenOrNull(): String? = loadStoredToken()
 
     private suspend fun hasEverSignedIn(): Boolean =
         context.authDataStore.data.first()[HAS_SIGNED_IN] == true
@@ -181,6 +211,9 @@ class AuthRepository private constructor(private val context: Context) {
          * yields no usable Bearer; only the on-device Keystore can unwrap.
          */
         private val ID_TOKEN = stringPreferencesKey("id_token")
+
+        /** JSON-serialized [UserDto] of the last successful `/api/auth/me`. */
+        private val USER_SNAPSHOT = stringPreferencesKey("user_snapshot")
 
         val instance: AuthRepository by lazy {
             AuthRepository(MediaPlayerApp.instance)

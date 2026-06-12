@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.22.0"
+    const val VERSION = "0.22.4"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,35 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.22.4",
+            title = "L'app si apre anche senza connessione",
+            highlights = listOf(
+                "Se apri l'app senza rete (aereo, garage, zona senza segnale) non ti chiede più di rifare l'accesso: entri direttamente con il tuo account e puoi ascoltare i brani scaricati. Appena torna la connessione tutto si riallinea da solo.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.22.3",
+            title = "La musica riparte da sola dopo i cali di rete",
+            highlights = listOf(
+                "Se la connessione cade per qualche secondo (galleria, zona senza segnale) la riproduzione ora riprende da sola appena torna la rete, dal punto esatto in cui si era fermata. Prima restava ferma in silenzio finché non premevi play.",
+                "Sistemati anche alcuni piccoli difetti: il volume non salta più all'improvviso saltando velocemente più brani con la dissolvenza attiva, e il cuore del brano nei comandi dell'auto non finisce più sul brano sbagliato.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.22.2",
+            title = "Basta pause a sorpresa, anche in cuffia",
+            highlights = listOf(
+                "Risolto alla radice il problema della musica che si fermava da sola: capitava in macchina con Android Auto ma anche con le cuffie Bluetooth. Ora l'app capisce davvero quando scendi dall'auto e mette in pausa solo in quel momento — in tutti gli altri casi la riproduzione non si tocca.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.22.1",
+            title = "La musica non si ferma più da sola in auto",
+            highlights = listOf(
+                "A volte in macchina la musica si metteva in pausa da sola e dovevi farla ripartire a mano: succedeva quando Android Auto si scollegava e ricollegava per un attimo durante il viaggio. Ora l'app aspetta qualche secondo prima di mettere in pausa, così questi cali momentanei non interrompono più l'ascolto.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.22.0",
             title = "Radio simile: continua nello stesso mood",

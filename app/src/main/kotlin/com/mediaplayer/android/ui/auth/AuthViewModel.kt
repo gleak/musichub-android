@@ -13,6 +13,7 @@ import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.PlaylistAutoSyncRunner
 import com.mediaplayer.android.data.SilentAuthOutcome
 import com.mediaplayer.android.data.dto.UserDto
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -100,21 +101,36 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                     AuthTokenHolder.idToken = outcome.token
                     _state.value = State.Probe(ProbeStage.Me)
                     try {
-                        _state.value = State.SignedIn(Network.api.getMe())
+                        val user = Network.api.getMe()
+                        authRepository.cacheUser(user)
+                        _state.value = State.SignedIn(user)
                         triggerAutoSyncOnce()
                     } catch (e: Exception) {
-                        // Token retrieved but `/api/auth/me` failed. Could be
-                        // backend unreachable (no signal in the car) or actual
-                        // 401. Either way: hand the user a banner with the
-                        // classified code so the login screen isn't blank.
-                        AuthTokenHolder.idToken = null
-                        _state.value = State.Probe(ProbeStage.RejectedSilent)
-                        delay(900)
-                        _state.value = State.Error(
-                            message = e.message?.ifBlank { null }
-                                ?: "Impossibile contattare il server.",
-                            code = classifyAuthError(e),
-                        )
+                        // Token retrieved but `/api/auth/me` failed. If the
+                        // backend merely wasn't reachable (no network, server
+                        // down) and we have a cached /me snapshot from a past
+                        // session, start signed-in anyway: the stored Bearer
+                        // already authenticates everything once the network
+                        // returns, and local downloads work right now. Only a
+                        // genuine server rejection (401/403) falls through to
+                        // the login screen.
+                        val code = classifyAuthError(e)
+                        val cached =
+                            if (code != "auth/server-rejected") authRepository.loadCachedUser()
+                            else null
+                        if (cached != null) {
+                            _state.value = State.SignedIn(cached)
+                            scheduleOfflineRevalidation()
+                        } else {
+                            AuthTokenHolder.idToken = null
+                            _state.value = State.Probe(ProbeStage.RejectedSilent)
+                            delay(900)
+                            _state.value = State.Error(
+                                message = e.message?.ifBlank { null }
+                                    ?: "Impossibile contattare il server.",
+                                code = code,
+                            )
+                        }
                     }
                 }
                 SilentAuthOutcome.NoRemembered -> _state.value = State.NotSignedIn
@@ -140,6 +156,7 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                 val token = authRepository.signIn(context)
                 AuthTokenHolder.idToken = token
                 val user = Network.api.getMe()
+                authRepository.cacheUser(user)
                 _state.value = State.SignedIn(user)
                 triggerAutoSyncOnce()
             } catch (e: Exception) {
@@ -148,10 +165,61 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                     _pickerCancelled.tryEmit(Unit)
                     _state.value = State.NotSignedIn
                 } else {
-                    _state.value = State.Error(
-                        message = msg.ifEmpty { "Accesso non riuscito" },
-                        code = classifyAuthError(e),
-                    )
+                    // Offline fallback: this device signed in before (stored
+                    // token + cached /me) but the Google round-trip can't run
+                    // without network. Don't lock the user out of their local
+                    // library — proceed with the remembered identity and
+                    // revalidate when connectivity returns.
+                    val code = classifyAuthError(e)
+                    val storedToken =
+                        if (code != "auth/server-rejected") authRepository.storedTokenOrNull()
+                        else null
+                    val cached =
+                        if (storedToken != null) authRepository.loadCachedUser() else null
+                    if (storedToken != null && cached != null) {
+                        AuthTokenHolder.idToken = storedToken
+                        _state.value = State.SignedIn(cached)
+                        scheduleOfflineRevalidation()
+                    } else {
+                        _state.value = State.Error(
+                            message = msg.ifEmpty { "Accesso non riuscito" },
+                            code = code,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * After an offline start (cached user, backend unreachable) keep polling
+     * `/api/auth/me` so the snapshot refreshes as soon as the network is
+     * back — and so a genuine server-side rejection (revoked account) still
+     * kicks the session out instead of living forever on the cache.
+     */
+    private var revalidationJob: Job? = null
+    private fun scheduleOfflineRevalidation() {
+        if (revalidationJob?.isActive == true) return
+        revalidationJob = viewModelScope.launch {
+            while (_state.value is State.SignedIn) {
+                delay(30_000)
+                try {
+                    val user = Network.api.getMe()
+                    authRepository.cacheUser(user)
+                    _state.value = State.SignedIn(user)
+                    triggerAutoSyncOnce()
+                    return@launch
+                } catch (e: Exception) {
+                    if (classifyAuthError(e) == "auth/server-rejected") {
+                        AuthTokenHolder.idToken = null
+                        _state.value = State.Error(
+                            message = e.message?.ifBlank { null }
+                                ?: "Sessione rifiutata dal server.",
+                            code = "auth/server-rejected",
+                        )
+                        return@launch
+                    }
+                    // Still offline — keep polling.
                 }
             }
         }
@@ -180,6 +248,7 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
         viewModelScope.launch {
             try {
                 val user = Network.api.getMe()
+                authRepository.cacheUser(user)
                 _state.value = State.SignedIn(user)
             } catch (_: Exception) { /* keep current state on transient failure */ }
         }

@@ -91,8 +91,8 @@ android {
         applicationId = "com.mediaplayer.android"
         minSdk = 24
         targetSdk = 35
-        versionCode = 115
-        versionName = "0.22.0"
+        versionCode = 119
+        versionName = "0.22.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -213,6 +213,10 @@ dependencies {
     // on-disk index.
     implementation(libs.media3.database)
     implementation(libs.media3.ui)
+
+    // CarConnection only — authoritative "is the phone projecting to a car"
+    // signal for the leave-vehicle pause. We do NOT ship a car-app service.
+    implementation(libs.androidx.car.app)
 
     // Navigation — top-level NavHost for Search / Playlists tabs (M6).
     implementation(libs.androidx.navigation.compose)
