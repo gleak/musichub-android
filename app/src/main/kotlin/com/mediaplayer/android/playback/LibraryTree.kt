@@ -319,21 +319,21 @@ internal object LibraryTree {
      * dance fires page=0 twice in a row for the same query — once to learn
      * the result count, then to fetch the items. Memoising the most recent
      * (query, page=0) skips the second round-trip. Cache invalidates on the
-     * next non-matching call; thread-safety is per-coroutine since LibraryTree
-     * is a singleton accessed from `serviceScope.future`.
+     * next non-matching call. Held in a SINGLE @Volatile ref so the
+     * (query → items) pair swaps atomically: with split query/items fields,
+     * two searches racing on parallel IO coroutines could pair query A with
+     * query B's results.
      */
-    @Volatile private var lastSearchQuery: String? = null
-    @Volatile private var lastSearchPage0: List<MediaItem> = emptyList()
+    @Volatile private var lastSearchPage0: Pair<String, List<MediaItem>>? = null
 
     suspend fun search(query: String, page: Int = 0, pageSize: Int = PAGE_SIZE): List<MediaItem> {
-        if (page == 0 && pageSize == PAGE_SIZE && query == lastSearchQuery) {
-            return lastSearchPage0
+        if (page == 0 && pageSize == PAGE_SIZE) {
+            lastSearchPage0?.let { (q, items) -> if (q == query) return items }
         }
         val resp = Network.api.listSongs(query = query, page = page, size = pageSize)
         val items = resp.items.map { songLeaf(it) }
         if (page == 0 && pageSize == PAGE_SIZE) {
-            lastSearchQuery = query
-            lastSearchPage0 = items
+            lastSearchPage0 = query to items
         }
         return items
     }

@@ -254,6 +254,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
         override fun onPlaybackStateChanged(state: Int) {
             pushDuration()
+            // The service self-heals transient stream errors (retry with
+            // backoff); once playback is healthy again drop any error dialog
+            // still on screen so the user isn't asked to fix a solved problem.
+            if (state == Player.STATE_READY) _playbackError.value = null
         }
 
         override fun onPositionDiscontinuity(
@@ -389,10 +393,22 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
+        // Transient transport errors are auto-retried by the service with
+        // backoff — tell the user that instead of demanding a manual retry.
+        val selfHealing = when (error.errorCode) {
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+            PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+            PlaybackException.ERROR_CODE_TIMEOUT -> true
+            else -> false
+        }
         _playbackError.value = PlaybackErrorInfo(
             songTitle = title,
             reason = reason,
             errorCodeName = error.errorCodeName,
+            recoveryHint = if (selfHealing) {
+                "Riprovo automaticamente appena la connessione torna disponibile."
+            } else null,
         )
     }
 
@@ -1417,14 +1433,19 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             // maybeRecordPlay returns.
             _currentSong.value?.takeIf { it.id == id }?.let(RecentsCache::markPlayed)
         }
-        // Auto-download every song the user actually starts (listened > 0,
-        // already gated above). Setting toggles whether we cache at all.
+        // Auto-download only songs the user actually listened through —
+        // same full-play bar used for history (>=30s OR >=50% of duration).
+        // A manual skip after a few seconds must NOT cache the track: the
+        // user rejected it, downloading it wastes storage + bandwidth and
+        // pollutes the offline library with stuff they skipped past.
         val title = trackedSongTitle
-        viewModelScope.launch {
-            if (PlayerSettings.instance.downloadAutoNow() &&
-                !DownloadRepository.isDownloaded(id)
-            ) {
-                DownloadRepository.download(id, title)
+        if (countsAsFullPlay) {
+            viewModelScope.launch {
+                if (PlayerSettings.instance.downloadAutoNow() &&
+                    !DownloadRepository.isDownloaded(id)
+                ) {
+                    DownloadRepository.download(id, title)
+                }
             }
         }
     }

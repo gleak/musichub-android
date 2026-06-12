@@ -5,9 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.os.Bundle
+import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSourceBitmapLoader
@@ -134,6 +136,43 @@ class MediaPlaybackService : MediaLibraryService() {
             "com.google.android.projection.gearhead",
             "com.google.android.car.media",
         )
+
+        /** Tag for car projection / controller diagnostics. Grep this in
+         *  logcat after a drive: pause decisions log here with the projection
+         *  state that drove them. */
+        private const val CAR_LIFECYCLE_TAG = "PlaybackCarLifecycle"
+
+        /**
+         * Grace window before the projection-dropped pause fires. Projection
+         * recovering within this window (wireless AA re-handshake) cancels
+         * it. Long enough to ride out a blip, short enough that genuinely
+         * leaving the car still pauses promptly.
+         */
+        private const val CAR_DISCONNECT_PAUSE_DELAY_MS = 6_000L
+
+        /** Tag for "why did playback stop" diagnostics: every playWhenReady
+         *  flip (with reason), suppression change, player error and sleep
+         *  expiry logs here. One logcat grep now disambiguates focus loss /
+         *  becoming-noisy / rogue controller / network error / sleep timer. */
+        private const val STOP_DIAG_TAG = "PlaybackStopDiag"
+
+        /**
+         * Errors worth retrying in place: transient transport failures where
+         * the bytes are fine and the link will likely come back (cellular
+         * dead zone mid-drive, server blip behind Caddy). Corruption-like
+         * codes are deliberately excluded — those go through the ViewModel's
+         * refreshLocalDownload path instead.
+         */
+        private val RETRYABLE_STREAM_ERROR_CODES = setOf(
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+            PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+            PlaybackException.ERROR_CODE_TIMEOUT,
+        )
+
+        /** Backoff ladder for [RETRYABLE_STREAM_ERROR_CODES]; the attempt
+         *  counter resets once the player reaches STATE_READY again. */
+        private val STREAM_RETRY_DELAYS_MS = longArrayOf(2_000L, 5_000L, 15_000L, 30_000L)
     }
 
     private var mediaSession: MediaLibrarySession? = null
@@ -143,6 +182,21 @@ class MediaPlaybackService : MediaLibraryService() {
     private var crossfadeJob: Job? = null
 
     /**
+     * Monotonic id of the newest crossfade ramp. A rapid double-skip cancels
+     * the old fade job, but its `finally` can still run AFTER the new fade
+     * has begun — an unconditional volume reset there jumped audio to 1.0
+     * mid-ramp. The finally now resets only while it still owns the newest
+     * generation. Main-thread only.
+     */
+    private var crossfadeGeneration: Int = 0
+
+    /** In-flight delayed retry after a transient stream error. */
+    private var streamRetryJob: Job? = null
+
+    /** Index into [STREAM_RETRY_DELAYS_MS]; reset on STATE_READY. */
+    private var streamRetryAttempt: Int = 0
+
+    /**
      * Cached crossfade seconds — kept in sync with [PlayerSettings] via a
      * collect on [serviceScope]. Read on every auto-transition; the prior
      * `runBlocking { crossfadeSecondsNow() }` blocked the player looper on
@@ -150,13 +204,42 @@ class MediaPlaybackService : MediaLibraryService() {
      */
     @Volatile private var crossfadeSecondsCached: Int = 0
 
-    /**
-     * Number of currently-attached AA / Automotive controllers. The AA
-     * lyrics ticker is disabled while this is 0 so phone-only playback
-     * doesn't pay for `replaceMediaItem` per lyric line.
-     */
-    private var carControllerCount: Int = 0
     private var aaLyricsTicker: AALyricsTicker? = null
+
+    /**
+     * Authoritative "is the phone projecting to a car" signal, fed by
+     * [androidx.car.app.connection.CarConnection]'s LiveData (observed on
+     * the main thread, so no lock is needed).
+     *
+     * This REPLACES the old `carControllerCount` heuristic that counted
+     * gearhead MediaController connects/disconnects. That heuristic was
+     * structurally broken (Media3 1.10.0 semantics, confirmed in library
+     * source):
+     *  - gearhead is a LEGACY controller: it has no real disconnect signal.
+     *    Media3 synthesizes `onDisconnected` after a fixed 5-minute
+     *    inactivity timeout — so passively listening in the car (no button
+     *    presses) "disconnected" the controller mid-drive and paused music.
+     *  - `onDisconnected` can fire for controllers that never reached
+     *    `onPostConnect` (connection aborted mid-handshake), driving the
+     *    count to 0 while the real controller was still attached.
+     *  - gearhead also connects controllers with NO car attached (background
+     *    media scans, AA app opens, post-boot init) — which is why the pause
+     *    also fired while listening on Bluetooth HEADPHONES.
+     */
+    private var carProjectionActive: Boolean = false
+    private var carConnection: androidx.car.app.connection.CarConnection? = null
+    private val carConnectionObserver = androidx.lifecycle.Observer<Int> { type ->
+        onCarConnectionTypeChanged(type)
+    }
+
+    /**
+     * Pending "user left the vehicle" pause, scheduled when car projection
+     * drops and cancelled if projection comes back within
+     * [CAR_DISCONNECT_PAUSE_DELAY_MS] (wireless AA can blip briefly). A
+     * genuine exit (projection stays down) still pauses after the grace
+     * window.
+     */
+    private var carDisconnectPauseJob: Job? = null
 
     /**
      * Off-main scope for `MediaLibrarySession.Callback` work (browse tree
@@ -364,6 +447,15 @@ class MediaPlaybackService : MediaLibraryService() {
         // explicitly via withContext.
         aaLyricsTicker = AALyricsTicker(player, mainScope).also { it.install() }
 
+        // Watch real car projection state. observeForever is safe here:
+        // onCreate runs on the main thread and the observer is removed in
+        // onDestroy. The first emission (NOT_CONNECTED when no car) matches
+        // the initial [carProjectionActive] = false, so nothing fires until
+        // an actual transition.
+        carConnection = androidx.car.app.connection.CarConnection(this).also {
+            it.type.observeForever(carConnectionObserver)
+        }
+
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 refreshLikeButtonForCurrent(mediaItem)
@@ -378,6 +470,39 @@ class MediaPlaybackService : MediaLibraryService() {
             override fun onRepeatModeChanged(repeatMode: Int) {
                 currentRepeatMode = repeatMode
                 updateCustomLayout()
+            }
+        })
+
+        // Stop diagnostics + transient-error self-heal. Logs WHY playback
+        // state changed (the missing fact in every "music stopped by itself"
+        // report) and retries in place after a transient transport error —
+        // without this, a cellular dead zone mid-drive left the player in
+        // STATE_IDLE forever, and with the Activity gone (AA / screen off)
+        // nobody was around to even show an error.
+        player.addListener(object : Player.Listener {
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                Log.i(
+                    STOP_DIAG_TAG,
+                    "playWhenReady=$playWhenReady reason=${playWhenReadyReason(reason)}",
+                )
+            }
+            override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+                Log.i(
+                    STOP_DIAG_TAG,
+                    "suppression=${suppressionReason(playbackSuppressionReason)}",
+                )
+            }
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY && streamRetryAttempt != 0) {
+                    Log.i(STOP_DIAG_TAG, "stream recovered, retry ladder reset")
+                    streamRetryAttempt = 0
+                    streamRetryJob?.cancel()
+                    streamRetryJob = null
+                }
+            }
+            override fun onPlayerError(error: PlaybackException) {
+                Log.w(STOP_DIAG_TAG, "playerError ${error.errorCodeName}: ${error.message}")
+                maybeRetryAfterStreamError(error)
             }
         })
         // Seed cached shuffle/repeat from the player so the AA custom-layout
@@ -508,8 +633,9 @@ class MediaPlaybackService : MediaLibraryService() {
             return
         }
         // Cancel any in-flight ramp from a previous auto-transition. The
-        // job's invokeOnCompletion resets volume so a user-skip mid-fade
-        // doesn't strand the next track at < 1.0.
+        // job's finally resets volume so a user-skip mid-fade doesn't
+        // strand the next track at < 1.0.
+        val gen = ++crossfadeGeneration
         crossfadeJob?.cancel()
         // Player.volume must be written on the application looper (= main).
         // serviceScope is bound to Dispatchers.IO and will throw
@@ -526,9 +652,12 @@ class MediaPlaybackService : MediaLibraryService() {
                 }
                 p.volume = 1f
             } finally {
-                // Reset to full on any exit path (cancellation, exception)
-                // so a cancelled fade doesn't leave the next track silent.
-                p.volume = 1f
+                // Reset to full on any exit path (cancellation, exception) so
+                // a cancelled fade doesn't leave the next track silent — but
+                // only while this is still the newest ramp: a superseded
+                // job's finally otherwise fires mid-way through its
+                // replacement and jumps the volume to 1.0.
+                if (gen == crossfadeGeneration) p.volume = 1f
             }
         }
     }
@@ -667,6 +796,114 @@ class MediaPlaybackService : MediaLibraryService() {
         }
     }
 
+    /**
+     * Reacts to [androidx.car.app.connection.CarConnection] LiveData updates
+     * (main thread). PROJECTION = Android Auto on a head unit; NATIVE would
+     * be Automotive OS. Anything else means "not in a car" — including all
+     * the gearhead controller churn that used to fake car exits.
+     */
+    private fun onCarConnectionTypeChanged(type: Int) {
+        val inCar =
+            type != androidx.car.app.connection.CarConnection.CONNECTION_TYPE_NOT_CONNECTED
+        Log.i(CAR_LIFECYCLE_TAG, "car connection type=$type inCar=$inCar (was $carProjectionActive)")
+        if (inCar == carProjectionActive) return
+        carProjectionActive = inCar
+        val session = mediaSession ?: return
+        if (inCar) {
+            // Entered the car (or projection blip recovered) — abort any
+            // pending leave-vehicle pause and resume where we left off.
+            cancelCarDisconnectPause()
+            aaLyricsTicker?.setAaConnected(true)
+            autoResumeForCar(session)
+        } else {
+            aaLyricsTicker?.setAaConnected(false)
+            scheduleCarDisconnectPause(session)
+        }
+    }
+
+    /**
+     * Schedule the "user left the vehicle" pause after car projection drops,
+     * deferred by [CAR_DISCONNECT_PAUSE_DELAY_MS] so a transient projection
+     * blip (wireless AA re-handshake) that recovers within the window — and
+     * cancels this via [cancelCarDisconnectPause] — doesn't stop playback
+     * mid-drive. Pause (not stop) keeps the queue/position intact so the
+     * next car connect resumes exactly where it left off.
+     *
+     * mainScope so the delayed `player.pause()` runs on the application
+     * looper; the job is parented to serviceScope so teardown cancels it.
+     */
+    private fun scheduleCarDisconnectPause(session: MediaSession) {
+        carDisconnectPauseJob?.cancel()
+        carDisconnectPauseJob = mainScope.launch {
+            kotlinx.coroutines.delay(CAR_DISCONNECT_PAUSE_DELAY_MS)
+            // Re-check at fire time: a projection recovery should have
+            // cancelled this job, but guard against an interleaved cancel +
+            // reschedule. Both this job and the observer run on main, so a
+            // plain read is safe.
+            if (!carProjectionActive) {
+                Log.i(CAR_LIFECYCLE_TAG, "grace elapsed, pausing (user left vehicle)")
+                session.player.pause()
+            } else {
+                Log.i(CAR_LIFECYCLE_TAG, "grace elapsed but projection is back, keep playing")
+            }
+        }
+    }
+
+    /** Cancel a pending [scheduleCarDisconnectPause] — projection came back,
+     *  so the drop was a transient blip, not the user leaving. */
+    private fun cancelCarDisconnectPause() {
+        carDisconnectPauseJob?.cancel()
+        carDisconnectPauseJob = null
+    }
+
+    private fun playWhenReadyReason(reason: Int): String = when (reason) {
+        Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST -> "USER_REQUEST"
+        Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS -> "AUDIO_FOCUS_LOSS"
+        Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY -> "AUDIO_BECOMING_NOISY"
+        Player.PLAY_WHEN_READY_CHANGE_REASON_REMOTE -> "REMOTE"
+        Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM -> "END_OF_MEDIA_ITEM"
+        Player.PLAY_WHEN_READY_CHANGE_REASON_SUPPRESSED_TOO_LONG -> "SUPPRESSED_TOO_LONG"
+        else -> "UNKNOWN($reason)"
+    }
+
+    private fun suppressionReason(reason: Int): String = when (reason) {
+        Player.PLAYBACK_SUPPRESSION_REASON_NONE -> "NONE"
+        Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS ->
+            "TRANSIENT_AUDIO_FOCUS_LOSS"
+        else -> "OTHER($reason)"
+    }
+
+    /**
+     * Transient transport error → schedule prepare()+play() with backoff.
+     * After a fatal error the player sits in STATE_IDLE at the current
+     * position; prepare() resumes from exactly there. Only fires while the
+     * user still wants playback (playWhenReady) and gives up once the
+     * ladder is exhausted so a genuinely dead server doesn't loop forever.
+     * Runs on the player listener thread (= main), as does the reset in
+     * onPlaybackStateChanged, so the attempt counter needs no lock.
+     */
+    private fun maybeRetryAfterStreamError(error: PlaybackException) {
+        if (error.errorCode !in RETRYABLE_STREAM_ERROR_CODES) return
+        val p = mediaSession?.player ?: return
+        if (!p.playWhenReady) return
+        if (streamRetryAttempt >= STREAM_RETRY_DELAYS_MS.size) {
+            Log.w(STOP_DIAG_TAG, "retry ladder exhausted, staying idle")
+            return
+        }
+        val delayMs = STREAM_RETRY_DELAYS_MS[streamRetryAttempt]
+        streamRetryAttempt++
+        streamRetryJob?.cancel()
+        streamRetryJob = mainScope.launch {
+            kotlinx.coroutines.delay(delayMs)
+            Log.i(
+                STOP_DIAG_TAG,
+                "retrying stream (attempt $streamRetryAttempt after ${delayMs}ms)",
+            )
+            p.prepare()
+            p.play()
+        }
+    }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
         mediaSession
 
@@ -691,6 +928,10 @@ class MediaPlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         EqualizerController.release()
+        // Stop watching projection state before tearing the session down so
+        // a late LiveData emission can't touch a released player.
+        carConnection?.type?.removeObserver(carConnectionObserver)
+        carConnection = null
         // Drop the lyrics listener before serviceScope is cancelled so the
         // ticker stops cleanly without a stray replaceMediaItem on a
         // half-released player.
@@ -763,23 +1004,31 @@ class MediaPlaybackService : MediaLibraryService() {
             )
         }
 
+        // Car controller connects/disconnects are logged for diagnostics but
+        // deliberately drive NO behavior. gearhead's legacy controllers
+        // "disconnect" on a 5-minute inactivity timeout and connect during
+        // carless background scans — acting on these events is what caused
+        // the phantom pauses (in the car AND on Bluetooth headphones).
+        // Car entry/exit is handled by [onCarConnectionTypeChanged].
+
         override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
             super.onPostConnect(session, controller)
             if (controller.packageName in CAR_CONTROLLER_PACKAGES) {
-                carControllerCount++
-                if (carControllerCount == 1) {
-                    aaLyricsTicker?.setAaConnected(true)
-                    autoResumeForCar(session)
-                }
+                Log.i(
+                    CAR_LIFECYCLE_TAG,
+                    "controller connect pkg=${controller.packageName}" +
+                        " (no-op, projection=$carProjectionActive)",
+                )
             }
         }
 
         override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
             if (controller.packageName in CAR_CONTROLLER_PACKAGES) {
-                carControllerCount = (carControllerCount - 1).coerceAtLeast(0)
-                if (carControllerCount == 0) {
-                    aaLyricsTicker?.setAaConnected(false)
-                }
+                Log.i(
+                    CAR_LIFECYCLE_TAG,
+                    "controller disconnect pkg=${controller.packageName}" +
+                        " (no-op, projection=$carProjectionActive)",
+                )
             }
             super.onDisconnected(session, controller)
         }
@@ -808,11 +1057,20 @@ class MediaPlaybackService : MediaLibraryService() {
                         artist?.takeIf { it.isNotBlank() },
                     ).joinToString(" — ").ifBlank { null }
                     try {
-                        if (currentLiked) likedRepository.unlike(songId, displayLabel = label)
-                        else likedRepository.like(songId, displayLabel = label)
-                        currentLiked = !currentLiked
-                        com.mediaplayer.android.data.LikedSongsCache.markLiked(songId, currentLiked)
-                        withContext(Dispatchers.Main) { updateCustomLayout() }
+                        val nowLiked = !currentLiked
+                        if (nowLiked) likedRepository.like(songId, displayLabel = label)
+                        else likedRepository.unlike(songId, displayLabel = label)
+                        com.mediaplayer.android.data.LikedSongsCache.markLiked(songId, nowLiked)
+                        withContext(Dispatchers.Main) {
+                            // Only flip the shared heart state if the liked
+                            // track is still the current one — a skip during
+                            // the network call otherwise painted song A's
+                            // liked state onto song B's card.
+                            if (songIdOf(session.player.currentMediaItem) == songId) {
+                                currentLiked = nowLiked
+                                updateCustomLayout()
+                            }
+                        }
                         SessionResult(SessionResult.RESULT_SUCCESS)
                     } catch (_: Exception) {
                         SessionResult(SessionError.ERROR_UNKNOWN)
@@ -864,10 +1122,14 @@ class MediaPlaybackService : MediaLibraryService() {
                         when {
                             !hasMinutes && !hasEndOfTrack -> sleepTimer.cancel()
                             endOfTrack -> sleepTimer.setEndOfTrack(session.player) {
+                                Log.i(STOP_DIAG_TAG, "sleep timer (end of track) fired, pausing")
                                 session.player.pause()
                             }
                             minutes <= 0 -> sleepTimer.cancel()
-                            else -> sleepTimer.set(minutes) { session.player.pause() }
+                            else -> sleepTimer.set(minutes) {
+                                Log.i(STOP_DIAG_TAG, "sleep timer (${minutes}m) fired, pausing")
+                                session.player.pause()
+                            }
                         }
                     }
                     SessionResult(SessionResult.RESULT_SUCCESS)

@@ -46,6 +46,11 @@
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
         </intent>
+        <!-- CarConnection reads Android Auto's projection state from
+             gearhead's content provider. Without this visibility entry the
+             query silently resolves to "not connected" on API 30+ and the
+             leave-vehicle pause never arms. -->
+        <provider android:authorities="androidx.car.app.connection" />
     </queries>
 
     <application

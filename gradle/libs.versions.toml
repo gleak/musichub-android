@@ -22,6 +22,13 @@ coil = "3.4.0"
 # Media3 / ExoPlayer
 media3 = "1.10.0"
 
+# androidx.car.app — used ONLY for CarConnection (real Android Auto
+# projection state). Gearhead MediaController connect/disconnect events
+# are structurally unreliable as an "in the car" signal (legacy 5-min
+# inactivity timeouts, background probes with no car attached), so the
+# leave-vehicle pause is gated on projection state instead.
+carApp = "1.4.0"
+
 # Navigation
 navigationCompose = "2.9.8"
 
@@ -83,6 +90,8 @@ androidx-media3-common-ktx          = { module = "androidx.media3:media3-common-
 # media3-database hosts StandaloneDatabaseProvider for SimpleCache's index.
 media3-database                     = { module = "androidx.media3:media3-database",                       version.ref = "media3" }
 media3-ui                           = { module = "androidx.media3:media3-ui",                               version.ref = "media3" }
+
+androidx-car-app                    = { module = "androidx.car.app:app",                                    version.ref = "carApp" }
 
 androidx-navigation-compose         = { module = "androidx.navigation:navigation-compose",                version.ref = "navigationCompose" }
 
