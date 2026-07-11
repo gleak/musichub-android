@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.22.4"
+    const val VERSION = "0.22.6"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,21 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.22.6",
+            title = "Meno brani saltati da soli in auto",
+            highlights = listOf(
+                "Se un brano ogni tanto \"saltava da solo\" in macchina — di solito per un download rovinato a metà — ora l'app se ne accorge e riscarica il file pulito anche quando è collegata all'auto a schermo spento, non più solo con l'app aperta.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.22.5",
+            title = "Shuffle più vario e tasti avanti/indietro in auto",
+            highlights = listOf(
+                "Con lo shuffle attivo su una playlist lunga ora senti davvero tutti i brani: prima, dopo un po', continuava a riproporti sempre le stesse poche canzoni. Adesso mescola pescando dall'intera playlist, e più è lunga più resta vario.",
+                "In macchina i tasti avanti e indietro rispondono sempre: il brano successivo non si blocca più a fine coda e \"precedente\" torna davvero al brano prima invece di ricominciare quello attuale.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.22.4",
             title = "L'app si apre anche senza connessione",

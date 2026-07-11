@@ -137,6 +137,12 @@ class MediaPlaybackService : MediaLibraryService() {
             "com.google.android.car.media",
         )
 
+        /** Car head units plus Bluetooth car-kit media controls — the presence
+         *  of any of these at grace-pause fire time means the user is almost
+         *  certainly still connected, so a stale projection `false` shouldn't
+         *  pause playback. See [hasConnectedCarController]. */
+        private val CAR_OR_BT_CONTROLLER_PACKAGES = CAR_CONTROLLER_PACKAGES + "com.android.bluetooth"
+
         /** Tag for car projection / controller diagnostics. Grep this in
          *  logcat after a drive: pause decisions log here with the projection
          *  state that drove them. */
@@ -179,6 +185,8 @@ class MediaPlaybackService : MediaLibraryService() {
     private var resumption: PlaybackResumption? = null
     private var resumptionListener: Player.Listener? = null
     private var prefetch: PrefetchOrchestrator? = null
+    private var endlessQueue: EndlessQueueController? = null
+    private var phantomHealer: PhantomSkipHealer? = null
     private var crossfadeJob: Job? = null
 
     /**
@@ -329,6 +337,11 @@ class MediaPlaybackService : MediaLibraryService() {
             // also covers local cached files (superset of WAKE_MODE_LOCAL).
             // Manifest already declares WAKE_LOCK.
             .setWakeMode(C.WAKE_MODE_NETWORK)
+            // PREV means "previous track", always. Media3's 3s default made
+            // seekToPrevious() restart the current song whenever the user was
+            // more than 3s in — so from a head unit, PREV "did nothing" mid-song.
+            // Zeroing the threshold makes PREV deterministically go back a track.
+            .setMaxSeekToPreviousPositionMs(0)
             .build()
 
         // Pin a fresh audio-session id BEFORE the equalizer attaches.
@@ -370,7 +383,19 @@ class MediaPlaybackService : MediaLibraryService() {
             )
         )
 
-        mediaSession = MediaLibrarySession.Builder(this, player, LibraryCallback())
+        // Endless queue lives on the player itself (not the Activity-scoped
+        // ViewModel) so it keeps refilling for head-unit / headless skips. Wrap
+        // the player so external NEXT commands refill the tail before advancing.
+        // Internal listeners (resumption, prefetch, lyrics, widget, engine) stay
+        // on the inner `player`; the session drives the forwarding wrapper.
+        endlessQueue = EndlessQueueController(player).also { it.install() }
+        // Truncated-download self-heal, also service-owned so it fires headless
+        // (Android Auto / screen off) where the VM isn't around — that's exactly
+        // where the car "skips a song by itself".
+        phantomHealer = PhantomSkipHealer(this, player).also { it.install() }
+        val sessionPlayer = EndlessForwardingPlayer(player, endlessQueue!!)
+
+        mediaSession = MediaLibrarySession.Builder(this, sessionPlayer, LibraryCallback())
             .setBitmapLoader(bitmapLoader)
             .setSessionActivity(pendingIntent)
             .setCustomLayout(
@@ -505,6 +530,32 @@ class MediaPlaybackService : MediaLibraryService() {
                 maybeRetryAfterStreamError(error)
             }
         })
+        // Any explicit transport action (NEXT / PREV / seek, or a user-driven
+        // play/pause) proves the user is present and interacting — so cancel a
+        // pending "left the vehicle" grace pause. Fixes the race where a brief
+        // wireless-AA/BT projection blip armed the 6s pause, the user pressed
+        // NEXT on the wheel (which advances via the session, NOT via
+        // CarConnection), and 6s later the still-stale projection flag paused
+        // playback, undoing the skip the user just made.
+        player.addListener(object : Player.Listener {
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int,
+            ) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK ||
+                    reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT
+                ) {
+                    cancelCarDisconnectPause()
+                }
+            }
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) {
+                    cancelCarDisconnectPause()
+                }
+            }
+        })
+
         // Seed cached shuffle/repeat from the player so the AA custom-layout
         // buttons render the right state on first connect (PlaybackViewModel
         // restores these from DataStore on its own controller; the service
@@ -839,12 +890,19 @@ class MediaPlaybackService : MediaLibraryService() {
             // Re-check at fire time: a projection recovery should have
             // cancelled this job, but guard against an interleaved cancel +
             // reschedule. Both this job and the observer run on main, so a
-            // plain read is safe.
-            if (!carProjectionActive) {
-                Log.i(CAR_LIFECYCLE_TAG, "grace elapsed, pausing (user left vehicle)")
-                session.player.pause()
-            } else {
-                Log.i(CAR_LIFECYCLE_TAG, "grace elapsed but projection is back, keep playing")
+            // plain read is safe. Also keep playing if a car controller is
+            // still connected — the CarConnection LiveData lags real reconnect
+            // on wireless AA/BT, so a stale `false` here would otherwise pause
+            // mid-drive right after a projection blip.
+            when {
+                carProjectionActive ->
+                    Log.i(CAR_LIFECYCLE_TAG, "grace elapsed but projection is back, keep playing")
+                hasConnectedCarController(session) ->
+                    Log.i(CAR_LIFECYCLE_TAG, "grace elapsed but a car controller is still connected, keep playing")
+                else -> {
+                    Log.i(CAR_LIFECYCLE_TAG, "grace elapsed, pausing (user left vehicle)")
+                    session.player.pause()
+                }
             }
         }
     }
@@ -855,6 +913,17 @@ class MediaPlaybackService : MediaLibraryService() {
         carDisconnectPauseJob?.cancel()
         carDisconnectPauseJob = null
     }
+
+    /**
+     * True if a head-unit / car-kit controller (Android Auto, Automotive, or a
+     * Bluetooth car controller) is still connected to the session. Used as a
+     * second opinion at grace-pause fire time because the [CarConnection]
+     * projection LiveData lags real reconnect on wireless AA/BT — if a car
+     * controller is present, a projection `false` is almost certainly a stale
+     * blip, so we keep playing rather than pause mid-drive.
+     */
+    private fun hasConnectedCarController(session: MediaSession): Boolean =
+        session.connectedControllers.any { it.packageName in CAR_OR_BT_CONTROLLER_PACKAGES }
 
     private fun playWhenReadyReason(reason: Int): String = when (reason) {
         Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST -> "USER_REQUEST"
@@ -943,6 +1012,11 @@ class MediaPlaybackService : MediaLibraryService() {
         // needs the player alive to unhook cleanly.
         prefetch?.release()
         prefetch = null
+        // Unhook the endless-queue + phantom-heal listeners before release.
+        endlessQueue?.release()
+        endlessQueue = null
+        phantomHealer?.release()
+        phantomHealer = null
         mediaSession?.run {
             resumptionListener?.let { player.removeListener(it) }
             player.release()
