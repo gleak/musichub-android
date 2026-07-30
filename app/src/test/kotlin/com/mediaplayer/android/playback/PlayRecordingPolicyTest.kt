@@ -96,6 +96,33 @@ class PlayRecordingPolicyTest {
         assertFalse(evaluate(listenedMs = 5_000L, durationMs = 0L)!!.countsAsFullPlay)
     }
 
+    /**
+     * The flush path used to compute the full-play rule inline, without the
+     * micro-skip floor. A bogus duration — which the player reports as a
+     * matter of course before the track is prepared — then let a sub-second
+     * listen through as a full play, recording it in history and triggering
+     * an auto-download of a song the user skipped past instantly.
+     */
+    @Test
+    fun `a tiny duration cannot turn a micro-skip into a full play`() {
+        assertNull(evaluate(listenedMs = 200L, durationMs = 100L))
+        assertNull(evaluate(listenedMs = 1L, durationMs = 1L))
+    }
+
+    @Test
+    fun `a display label joins what is present`() {
+        assertEquals("Song — Artist", PlayRecordingPolicy.displayLabel("Song", "Artist"))
+        assertEquals("Song", PlayRecordingPolicy.displayLabel("Song", null))
+        assertEquals("Artist", PlayRecordingPolicy.displayLabel(null, "Artist"))
+    }
+
+    /** An empty label would render as a blank history row, so use null. */
+    @Test
+    fun `a display label with nothing to say is null`() {
+        assertNull(PlayRecordingPolicy.displayLabel(null, null))
+        assertNull(PlayRecordingPolicy.displayLabel("", "   "))
+    }
+
     private fun evaluate(
         listenedMs: Long,
         durationMs: Long = 200_000L,

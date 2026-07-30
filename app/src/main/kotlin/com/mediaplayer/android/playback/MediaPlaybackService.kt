@@ -896,7 +896,7 @@ class MediaPlaybackService : MediaLibraryService() {
      *  - cold start, queue empty → seed from the saved [PlaybackResumption]
      *    snapshot (same data the resume chip uses), prepare, play.
      *
-     * Hops via [mainScope] so we can `await` [AuthBootstrap.ready] before
+     * Hops via [mainScope] so we can call [AuthBootstrap.awaitReady] before
      * touching the player — otherwise a cold-process AA connect can fire
      * the stream request before the silent sign-in coroutine has set the
      * Bearer token, and the backend rejects the audio fetch with 401.
@@ -905,7 +905,7 @@ class MediaPlaybackService : MediaLibraryService() {
      */
     private fun autoResumeForCar(session: MediaSession) {
         mainScope.launch {
-            AuthBootstrap.ready.await()
+            AuthBootstrap.awaitReady()
             val p = session.player
             if (p.isPlaying) return@launch
             if (p.mediaItemCount > 0) {
@@ -1340,7 +1340,7 @@ class MediaPlaybackService : MediaLibraryService() {
             mediaId: String,
         ): ListenableFuture<LibraryResult<MediaItem>> =
             serviceScope.future {
-                AuthBootstrap.ready.await()
+                AuthBootstrap.awaitReady()
                 // LibraryTree.item may hit the backend (playlist details,
                 // etc.). A network failure shouldn't propagate as a failed
                 // future — AA surfaces those as generic crashes that
@@ -1370,7 +1370,7 @@ class MediaPlaybackService : MediaLibraryService() {
                 // AuthTokenHolder. Without this gate the very first browse
                 // call hits the wire token-less and the backend returns 401,
                 // leaving the AA library blank for the whole session.
-                AuthBootstrap.ready.await()
+                AuthBootstrap.awaitReady()
                 // Custom queue folder: snapshot the player's timeline on the
                 // application main thread (Player is single-thread-confined)
                 // and render via LibraryTree. Done here instead of inside
@@ -1435,7 +1435,7 @@ class MediaPlaybackService : MediaLibraryService() {
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<Void>> =
             serviceScope.future {
-                AuthBootstrap.ready.await()
+                AuthBootstrap.awaitReady()
                 // Probe the first page to get an item count for AA's UI.
                 // The actual paged hits are fetched lazily in onGetSearchResult.
                 val firstPage = LibraryTree.search(query, page = 0, pageSize = 50)
@@ -1452,7 +1452,7 @@ class MediaPlaybackService : MediaLibraryService() {
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
             serviceScope.future {
-                AuthBootstrap.ready.await()
+                AuthBootstrap.awaitReady()
                 val hits = LibraryTree.search(query, page, pageSize)
                 LibraryResult.ofItemList(ImmutableList.copyOf(hits), params)
             }
@@ -1502,7 +1502,7 @@ class MediaPlaybackService : MediaLibraryService() {
             startPositionMs: Long,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> =
             serviceScope.future {
-                AuthBootstrap.ready.await()
+                AuthBootstrap.awaitReady()
                 // Voice-search path: AA / Google Assistant deliver
                 // "Hey Google, play X on MediaPlayer" as a single MediaItem
                 // whose only payload is RequestMetadata.searchQuery. Resolve

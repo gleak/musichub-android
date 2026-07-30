@@ -201,8 +201,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     private var trackedSongTitle: String? = null
     private var trackedSongArtist: String? = null
     private var trackedDurationMs: Long = 0L
-    private var listenedMs: Long = 0L
-    private var playingStartWall: Long = -1L
+    private val listenClock = ListenClock()
 
     private var controller: MediaController? = null
 
@@ -213,12 +212,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {
             _isPlaying.value = playing
-            if (playing && playingStartWall == -1L) {
-                playingStartWall = System.currentTimeMillis()
-            } else if (!playing && playingStartWall != -1L) {
-                listenedMs += System.currentTimeMillis() - playingStartWall
-                playingStartWall = -1L
-            }
+            if (playing) listenClock.resume() else listenClock.bank()
             if (playing) startPositionPoll() else {
                 stopPositionPoll()
                 pushPositionOnce()
@@ -226,10 +220,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            if (playingStartWall != -1L) {
-                listenedMs += System.currentTimeMillis() - playingStartWall
-                playingStartWall = if (controller?.isPlaying == true) System.currentTimeMillis() else -1L
-            }
+            listenClock.bankAndContinue(stillPlaying = controller?.isPlaying == true)
             maybeRecordPlay()
             val nextDto = mediaItem?.toSongDto()
             // Resolved id, not the raw mediaId: car / library / resumption
@@ -239,7 +230,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             trackedSongTitle = nextDto?.title
             trackedSongArtist = nextDto?.artist
             trackedDurationMs = 0L
-            listenedMs = 0L
+            listenClock.reset()
             _currentSong.value = nextDto
             refreshCurrentLiked(nextDto?.id)
             pushDuration()
@@ -1010,26 +1001,26 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 songRepository.downloadVideo(current.id)
-                var wait = VIDEO_POLL_INITIAL_MS
+                var wait = VideoJobPolling.INITIAL_DELAY_MS
                 var attempts = 0
-                while (attempts < VIDEO_POLL_MAX_ATTEMPTS) {
+                var outcome: JobPollOutcome = JobPollOutcome.StillRunning
+                while (attempts < VideoJobPolling.MAX_ATTEMPTS) {
                     delay(wait)
                     attempts++
                     val s = songRepository.getDownloadVideoStatus(current.id)
-                    when (s.status) {
-                        "DONE" -> {
-                            _currentSong.value = current.copy(hasVideo = true)
-                            break
-                        }
-                        "ERROR" -> {
-                            _videoDownloadError.value = s.error.ifBlank { "Download del video non riuscito" }
-                            break
-                        }
-                    }
-                    wait = (wait * 2).coerceAtMost(VIDEO_POLL_MAX_MS)
+                    outcome = VideoJobPolling.outcomeOf(
+                        status = s.status,
+                        error = s.error,
+                        fallbackMessage = "Download del video non riuscito",
+                    )
+                    if (outcome != JobPollOutcome.StillRunning) break
+                    wait = VideoJobPolling.nextDelayMs(wait)
                 }
-                if (attempts >= VIDEO_POLL_MAX_ATTEMPTS && _videoDownloadError.value == null) {
-                    _videoDownloadError.value = "Download del video scaduto"
+                when (val o = outcome) {
+                    JobPollOutcome.Done -> _currentSong.value = current.copy(hasVideo = true)
+                    is JobPollOutcome.Failed -> _videoDownloadError.value = o.message
+                    JobPollOutcome.StillRunning ->
+                        _videoDownloadError.value = "Download del video scaduto"
                 }
             } catch (t: Throwable) {
                 _videoDownloadError.value = t.message ?: "Download del video non riuscito"
@@ -1054,23 +1045,28 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 songRepository.reinitializeVideo(current.id)
-                var wait = VIDEO_POLL_INITIAL_MS
+                var wait = VideoJobPolling.INITIAL_DELAY_MS
                 var attempts = 0
-                while (attempts < VIDEO_POLL_MAX_ATTEMPTS) {
+                var outcome: JobPollOutcome = JobPollOutcome.StillRunning
+                while (attempts < VideoJobPolling.MAX_ATTEMPTS) {
                     delay(wait)
                     attempts++
                     val s = songRepository.getReinitializeStatus(current.id)
-                    when (s.status) {
-                        "DONE" -> break
-                        "ERROR" -> {
-                            _videoReinitializeError.value = s.error.ifBlank { "Reinizializzazione non riuscita" }
-                            break
-                        }
-                    }
-                    wait = (wait * 2).coerceAtMost(VIDEO_POLL_MAX_MS)
+                    outcome = VideoJobPolling.outcomeOf(
+                        status = s.status,
+                        error = s.error,
+                        fallbackMessage = "Reinizializzazione non riuscita",
+                    )
+                    if (outcome != JobPollOutcome.StillRunning) break
+                    wait = VideoJobPolling.nextDelayMs(wait)
                 }
-                if (attempts >= VIDEO_POLL_MAX_ATTEMPTS && _videoReinitializeError.value == null) {
-                    _videoReinitializeError.value = "Reinizializzazione scaduta"
+                when (val o = outcome) {
+                    // Nothing to update on success: the video is re-fetched
+                    // under the same id, so the current song is unchanged.
+                    JobPollOutcome.Done -> Unit
+                    is JobPollOutcome.Failed -> _videoReinitializeError.value = o.message
+                    JobPollOutcome.StillRunning ->
+                        _videoReinitializeError.value = "Reinizializzazione scaduta"
                 }
             } catch (t: Throwable) {
                 _videoReinitializeError.value = t.message ?: "Reinizializzazione non riuscita"
@@ -1317,35 +1313,17 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     private fun maybeRecordPlay() {
         val id = trackedSongId ?: return
-        // Local files (negative id) never reach the backend's history /
-        // recommender / auto-download pipelines — every one of those endpoints
-        // keys on positive song ids and would 404 or worse pollute taste.
-        if (LocalMediaResolver.isLocal(id)) return
-        val listened = listenedMs
+        val listened = listenClock.bankedMs
         val duration = trackedDurationMs
-        // Drop pure no-ops AND micro-skips. Sub-second listens are noise:
-        // user mashing skip burns a request per item without giving the
-        // recommender useful signal. Real "skipped after a moment" plays
-        // still get through above the floor.
-        if (listened < MIN_RECORD_MS) return
-
-        // The full-play rule and the completion ratio live in the policy so
-        // they can be exercised without a player. Note the same rule is
-        // duplicated further down in this file, on a path that has no
-        // micro-skip floor — worth reconciling, but not silently.
+        // Every gate lives in the policy: the local-file exclusion, the
+        // micro-skip floor, the full-play rule and the completion ratio.
+        // Both this path and flushPlayHistoryAwait go through it, so the
+        // two can't drift — they used to, and the flush path let sub-second
+        // listens count as full plays whenever the duration was bogus.
         val record = PlayRecordingPolicy.evaluate(id, listened, duration) ?: return
         val countsAsFullPlay = record.countsAsFullPlay
-        // `completion_ratio` is the per-play listened/total ratio, capped
-        // at 1.0 (replay past the end via seek-back is possible). Null
-        // when duration is unknown (live streams / pre-prepare) so the
-        // backend can distinguish "no signal" from "0% played".
-        val ratio = if (duration > 0)
-            (listened.toDouble() / duration).coerceAtMost(1.0)
-        else null
-        val playLabel = listOfNotNull(
-            trackedSongTitle?.takeIf { it.isNotBlank() },
-            trackedSongArtist?.takeIf { it.isNotBlank() },
-        ).joinToString(" — ").ifBlank { null }
+        val ratio = record.completionRatio
+        val playLabel = PlayRecordingPolicy.displayLabel(trackedSongTitle, trackedSongArtist)
         viewModelScope.launch {
             historyRepository.record(
                 songId = id,
@@ -1392,28 +1370,17 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
      * listened-ms isn't double-counted at transition time.
      */
     suspend fun flushPlayHistoryAwait() {
-        if (playingStartWall != -1L) {
-            val now = System.currentTimeMillis()
-            listenedMs += now - playingStartWall
-            playingStartWall = if (controller?.isPlaying == true) now else -1L
-        }
+        listenClock.bankAndContinue(stillPlaying = controller?.isPlaying == true)
         val id = trackedSongId ?: return
-        // Local files (negative id) never reach the backend history /
-        // recommender / auto-download pipelines — those key on positive ids
-        // and would 404 or pollute recents. Mirror maybeRecordPlay's guard.
-        if (LocalMediaResolver.isLocal(id)) return
-        val listened = listenedMs
+        val listened = listenClock.bankedMs
         val duration = trackedDurationMs
-        val countsAsFullPlay = listened >= LISTEN_THRESHOLD_MS ||
-            (duration > 0 && listened * 2 >= duration)
-        if (!countsAsFullPlay) return
-        val ratio = if (duration > 0)
-            (listened.toDouble() / duration).coerceAtMost(1.0)
-        else null
-        val flushLabel = listOfNotNull(
-            trackedSongTitle?.takeIf { it.isNotBlank() },
-            trackedSongArtist?.takeIf { it.isNotBlank() },
-        ).joinToString(" — ").ifBlank { null }
+        // Same policy as maybeRecordPlay — local-file exclusion and
+        // micro-skip floor included. This path only emits full plays;
+        // partial ones wait for the next transition to be reported as skips.
+        val record = PlayRecordingPolicy.evaluate(id, listened, duration) ?: return
+        if (!record.countsAsFullPlay) return
+        val ratio = record.completionRatio
+        val flushLabel = PlayRecordingPolicy.displayLabel(trackedSongTitle, trackedSongArtist)
         // Direct POST so /recent reflects this play on the next refresh.
         // Falls back to the queue inside recordImmediate if offline.
         historyRepository.recordImmediate(
@@ -1431,14 +1398,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         ) {
             DownloadRepository.download(id, trackedSongTitle)
         }
-        listenedMs = 0L
+        listenClock.reset()
     }
 
     override fun onCleared() {
-        if (playingStartWall != -1L) {
-            listenedMs += System.currentTimeMillis() - playingStartWall
-            playingStartWall = -1L
-        }
+        listenClock.bank()
         maybeRecordPlay()
         stopPositionPoll()
         controller?.removeListener(listener)
@@ -1481,17 +1445,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     private companion object {
         const val POSITION_POLL_MS = 1_000L
-        const val LISTEN_THRESHOLD_MS = 30_000L
-        // Floor below which a transition isn't reported at all — drops
-        // sub-second micro-skips that would otherwise spam the backend
-        // during rapid skipping with no useful recommender signal.
-        const val MIN_RECORD_MS = 1_500L
-        // Video download/reinit polling: exponential backoff, hard cap.
-        // Stops the loop wedging the network if the backend never returns
-        // a terminal status (network flap, 502, navigated-away dialog).
-        const val VIDEO_POLL_INITIAL_MS = 2_000L
-        const val VIDEO_POLL_MAX_MS = 30_000L
-        const val VIDEO_POLL_MAX_ATTEMPTS = 30
+        // The listen threshold and the micro-skip floor live in
+        // PlayRecordingPolicy; the video job backoff and its cap live in
+        // VideoJobPolling.
     }
 }
 

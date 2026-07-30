@@ -293,7 +293,7 @@ object EventQueue {
         // row enters backoff for a problem that has nothing to do with the
         // network being bad. After ready completes the token is either set
         // or genuinely absent; either way the dispatch outcome is meaningful.
-        AuthBootstrap.ready.await()
+        AuthBootstrap.awaitReady()
         while (true) {
             // Block until the OkHttp interceptor has reported a successful
             // call (or ConnectivityManager flips us back online). Same

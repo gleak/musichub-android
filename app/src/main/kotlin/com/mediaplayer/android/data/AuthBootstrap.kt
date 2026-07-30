@@ -7,6 +7,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -40,8 +41,13 @@ object AuthBootstrap {
      * is no remembered account. Either way the deferred completes so
      * awaiters don't hang forever; the network call will simply 401 and
      * the UI will surface NotSignedIn the next time AuthViewModel runs.
+     *
+     * Private on purpose: awaiting it directly is unbounded, and every
+     * caller sits on a path (AA browse callbacks, the offline queue
+     * drainer) where hanging is worse than proceeding token-less. Go
+     * through [awaitReady].
      */
-    val ready: CompletableDeferred<Unit> = CompletableDeferred()
+    private val ready: CompletableDeferred<Unit> = CompletableDeferred()
 
     /**
      * Upper bound on how long we let the silent-auth attempt block before
@@ -53,6 +59,35 @@ object AuthBootstrap {
      * than spinning indefinitely.
      */
     private const val SILENT_AUTH_TIMEOUT_MS = 5_000L
+
+    /**
+     * Upper bound on the gate itself, one second above the silent-auth
+     * budget so a normal attempt is never cut short. This is the backstop
+     * for the case the inner timeout can't cover: [start] never running at
+     * all, because something threw in `MediaPlayerApp.onCreate` ahead of
+     * it. The deferred would then stay uncompleted for the life of the
+     * process and every awaiter would block forever — a blank Android Auto
+     * library with no spinner and no error, and an offline queue that never
+     * drains. Bounded waiting turns that into a token-less request, which
+     * fails visibly and recovers on the next call.
+     */
+    private const val GATE_TIMEOUT_MS = 6_000L
+
+    /**
+     * Wait for silent auth to settle before making an authenticated call.
+     *
+     * Returns true when the attempt finished (whether or not it produced a
+     * token) and false when the gate timed out, in which case the caller
+     * should proceed anyway rather than stall.
+     *
+     * Arms [start] first: the gate is only meaningful if something is
+     * driving it, and making the first awaiter do that removes the
+     * ordering dependency on `MediaPlayerApp.onCreate` entirely.
+     */
+    suspend fun awaitReady(): Boolean {
+        start()
+        return withTimeoutOrNull(GATE_TIMEOUT_MS) { ready.await() } != null
+    }
 
     fun start() {
         if (!started.compareAndSet(false, true)) return

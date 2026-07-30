@@ -55,4 +55,15 @@ internal object PlayRecordingPolicy {
         }
         return PlayRecord(countsAsFullPlay = countsAsFullPlay, completionRatio = ratio)
     }
+
+    /**
+     * Label carried alongside the record so history stays readable when the
+     * song id no longer resolves server-side. Null when neither field has
+     * text — an empty string would render as a blank row.
+     */
+    fun displayLabel(title: String?, artist: String?): String? =
+        listOfNotNull(
+            title?.takeIf { it.isNotBlank() },
+            artist?.takeIf { it.isNotBlank() },
+        ).joinToString(" — ").ifBlank { null }
 }
