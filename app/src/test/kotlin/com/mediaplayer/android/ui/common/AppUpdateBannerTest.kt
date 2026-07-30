@@ -7,6 +7,7 @@ import androidx.compose.ui.test.performClick
 import com.mediaplayer.android.data.dto.AppUpdateDto
 import com.mediaplayer.android.ui.ScreenTest
 import com.mediaplayer.android.update.AppUpdateChecker
+import com.mediaplayer.android.update.AppUpdateInstaller
 import io.mockk.coEvery
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -24,6 +25,7 @@ class AppUpdateBannerTest : ScreenTest() {
     @After
     fun clearUpdateState() {
         AppUpdateChecker.consume()
+        AppUpdateInstaller.publishProgressForTest(AppUpdateInstaller.DownloadProgress.Idle)
     }
 
     private suspend fun publish(version: String = "9.9.9", required: Boolean = false) {
@@ -111,5 +113,92 @@ class AppUpdateBannerTest : ScreenTest() {
         hostScreen()
 
         compose.onNodeWithText("Installa").assertIsDisplayed()
+    }
+
+    // ---------- the download the user watches ----------
+
+    /**
+     * Once the APK is coming down the banner stops offering to install and
+     * starts reporting progress instead — otherwise a second tap starts a
+     * second download.
+     */
+    @Test
+    fun `an in-flight download shows its progress instead of the install button`() {
+        runBlocking { publish(version = "9.9.9") }
+        AppUpdateInstaller.publishProgressForTest(
+            AppUpdateInstaller.DownloadProgress.Active(
+                percent = 42,
+                bytesDownloaded = 21L * 1024 * 1024,
+                totalBytes = 50L * 1024 * 1024,
+            ),
+        )
+
+        hostScreen()
+
+        compose.onNodeWithText("// SCARICAMENTO APK").assertIsDisplayed()
+        compose.onNodeWithText("42%").assertIsDisplayed()
+        assertEquals(0, nodeCount("Installa"))
+    }
+
+    @Test
+    fun `the progress banner reports how much has come down`() {
+        runBlocking { publish() }
+        AppUpdateInstaller.publishProgressForTest(
+            AppUpdateInstaller.DownloadProgress.Active(
+                percent = 50,
+                bytesDownloaded = 25L * 1024 * 1024,
+                totalBytes = 50L * 1024 * 1024,
+            ),
+        )
+
+        hostScreen()
+
+        compose.onNodeWithText("MB", substring = true).assertIsDisplayed()
+    }
+
+    /**
+     * A download that died mid-flight has to offer a retry: the update is
+     * still available, only the transfer failed.
+     */
+    @Test
+    fun `a failed download offers a retry`() {
+        runBlocking { publish() }
+        AppUpdateInstaller.publishProgressForTest(
+            AppUpdateInstaller.DownloadProgress.Failed("network"),
+        )
+
+        hostScreen()
+
+        compose.onNodeWithText("// AGGIORNAMENTO FALLITO").assertIsDisplayed()
+        compose.onNodeWithText("Scaricamento interrotto").assertIsDisplayed()
+        compose.onNodeWithText("Riprova").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a required update in flight shows progress in the overlay too`() {
+        runBlocking { publish(required = true) }
+        AppUpdateInstaller.publishProgressForTest(
+            AppUpdateInstaller.DownloadProgress.Active(
+                percent = 10,
+                bytesDownloaded = 5L * 1024 * 1024,
+                totalBytes = 50L * 1024 * 1024,
+            ),
+        )
+
+        overlayScreen()
+
+        compose.onNodeWithText("10%").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a required update that failed to download can be retried`() {
+        runBlocking { publish(required = true) }
+        AppUpdateInstaller.publishProgressForTest(
+            AppUpdateInstaller.DownloadProgress.Failed("network"),
+        )
+
+        overlayScreen()
+
+        compose.onNodeWithText("Riprova").assertIsDisplayed()
     }
 }

@@ -13,6 +13,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.mediaplayer.android.MediaPlayerApp
 import com.mediaplayer.android.data.MediaPlayerApi
 import com.mediaplayer.android.data.Network
+import com.mediaplayer.android.data.LikedSongsCache
 import com.mediaplayer.android.data.RecentsCache
 import com.mediaplayer.android.data.local.LocalTrack
 import com.mediaplayer.android.ui.song
@@ -21,6 +22,8 @@ import com.mediaplayer.android.data.sync.ReadCache
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -86,6 +89,15 @@ class PlaybackViewModelTest {
         ReadCache.init(context)
         EventQueue.init(context)
         RecentsCache.clear()
+        // Shared singleton: a like left behind by another test flips the
+        // heart the wrong way on the first tap here.
+        LikedSongsCache.clear()
+        // Shuffle is persisted, so a shuffle-play in one test would still be
+        // on when the next one connects and would reorder its queue.
+        kotlinx.coroutines.runBlocking {
+            PlaybackPrefs.setShuffle(context, false)
+            PlaybackPrefs.setRepeat(context, androidx.media3.common.Player.REPEAT_MODE_OFF)
+        }
         api = mockk(relaxed = true)
         Network.apiOverride = api
         controller = mockk(relaxed = true)
@@ -554,5 +566,176 @@ class PlaybackViewModelTest {
 
         val state = viewModel.alarmExportState.value
         assertTrue("was $state", state is PlaybackViewModel.AlarmExportState.Failure)
+    }
+
+    // ---------- actions that need a backend copy ----------
+
+    /**
+     * These four all re-fetch something from the backend, and none of them
+     * mean anything for a file that lives on the phone. Each says so rather
+     * than spinning on a request that can't exist.
+     */
+    @Test
+    fun `re-downloading a local track is refused with a reason`() {
+        connect(item("-7", title = "Breed"))
+
+        viewModel.redownloadCurrent()
+
+        assertEquals("Non disponibile per i brani locali", viewModel.redownloadError.value)
+    }
+
+    @Test
+    fun `downloading a video for a local track is refused with a reason`() {
+        connect(item("-7", title = "Breed"))
+
+        viewModel.downloadVideoForCurrent()
+
+        assertEquals("Non disponibile per i brani locali", viewModel.videoDownloadError.value)
+    }
+
+    @Test
+    fun `re-initialising the video of a local track is refused with a reason`() {
+        connect(item("-7", title = "Breed"))
+
+        viewModel.reinitializeVideoForCurrent()
+
+        assertEquals(
+            "Non disponibile per i brani locali",
+            viewModel.videoReinitializeError.value,
+        )
+    }
+
+    @Test
+    fun `re-downloading asks the backend for a fresh copy`() {
+        connect(item("42", title = "Breed"))
+
+        viewModel.redownloadCurrent()
+        shadowMainLooper().idle()
+
+        coVerify(exactly = 1) { api.redownloadSong(42L) }
+    }
+
+    @Test
+    fun `a failed re-download is reported`() {
+        coEvery { api.redownloadSong(any()) } throws java.io.IOException("offline")
+        connect(item("42", title = "Breed"))
+
+        viewModel.redownloadCurrent()
+        waitUntil { viewModel.redownloadError.value != null }
+
+        assertFalse(viewModel.redownloading.value)
+    }
+
+    @Test
+    fun `dismissing a re-download error clears it`() {
+        connect(item("-7"))
+        viewModel.redownloadCurrent()
+
+        viewModel.consumeRedownloadError()
+
+        assertNull(viewModel.redownloadError.value)
+    }
+
+    @Test
+    fun `dismissing a video download error clears it`() {
+        connect(item("-7"))
+        viewModel.downloadVideoForCurrent()
+
+        viewModel.consumeVideoDownloadError()
+
+        assertNull(viewModel.videoDownloadError.value)
+    }
+
+    @Test
+    fun `dismissing a video re-initialise error clears it`() {
+        connect(item("-7"))
+        viewModel.reinitializeVideoForCurrent()
+
+        viewModel.consumeVideoReinitializeError()
+
+        assertNull(viewModel.videoReinitializeError.value)
+    }
+
+    // ---------- reporting a wrong track ----------
+
+    /**
+     * Flagging tells the backend the audio doesn't match the metadata, then
+     * tells the service to drop it from the pool the endless queue refills
+     * from — otherwise a wrap re-appends the song that was just tombstoned.
+     */
+    @Test
+    fun `flagging a track drops it from the source pool too`() {
+        connect(item("42", title = "Breed"))
+
+        viewModel.flagWrong(42L)
+        shadowMainLooper().idle()
+
+        coVerify(exactly = 1) { api.flagSongWrong(42L) }
+        verify { controller.sendCustomCommand(any(), any()) }
+    }
+
+    /** Local files and the sentinel zero have nothing to report. */
+    @Test
+    fun `flagging a local track is a no-op`() {
+        connect(item("42"))
+
+        viewModel.flagWrong(-7L)
+        shadowMainLooper().idle()
+
+        coVerify(exactly = 0) { api.flagSongWrong(any()) }
+    }
+
+    @Test
+    fun `flagging the sentinel id is a no-op`() {
+        connect(item("42"))
+
+        viewModel.flagWrong(0L)
+        shadowMainLooper().idle()
+
+        coVerify(exactly = 0) { api.flagSongWrong(any()) }
+    }
+
+    // ---------- the heart ----------
+
+    /**
+     * The heart flips from what it is showing, not from the session extras:
+     * those arrive unreliably for in-process controllers and used to carry
+     * the previous track's value across a transition, inverting the first
+     * tap after every skip.
+     */
+    @Test
+    fun `liking flips from what the heart shows`() {
+        connect(item("42", title = "Breed"))
+        assertFalse(viewModel.currentLiked.value)
+
+        viewModel.toggleCurrentLike()
+
+        assertTrue(viewModel.currentLiked.value)
+    }
+
+    @Test
+    fun `liking asks the service rather than the backend directly`() {
+        connect(item("42", title = "Breed"))
+
+        viewModel.toggleCurrentLike()
+        shadowMainLooper().idle()
+
+        verify { controller.sendCustomCommand(any(), any()) }
+    }
+
+    // ---------- play history ----------
+
+    /**
+     * The flush runs when the app goes to the background, and it only emits
+     * a play that actually counts as one — a partial listen waits for the
+     * next transition so it can be reported as the skip it was.
+     */
+    @Test
+    fun `flushing with nothing tracked sends nothing`() {
+        connect()
+
+        kotlinx.coroutines.runBlocking { viewModel.flushPlayHistoryAwait() }
+
+        coVerify(exactly = 0) { api.recordPlay(any()) }
     }
 }

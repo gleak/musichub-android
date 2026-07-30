@@ -56,6 +56,16 @@ object AppUpdateInstaller {
     private val _progress = MutableStateFlow<DownloadProgress>(DownloadProgress.Idle)
     val progress: StateFlow<DownloadProgress> = _progress.asStateFlow()
 
+    /**
+     * Test seam. The in-flight and failed states are only ever produced by a
+     * real DownloadManager job, so without this the banner the user watches
+     * an update download in can't be rendered at all. Never called from
+     * production code.
+     */
+    internal fun publishProgressForTest(progress: DownloadProgress) {
+        _progress.value = progress
+    }
+
     private val pollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var pollJob: Job? = null
 
