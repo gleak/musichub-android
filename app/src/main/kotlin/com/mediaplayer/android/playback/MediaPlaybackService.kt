@@ -46,6 +46,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.guava.future
@@ -517,6 +518,14 @@ class MediaPlaybackService : MediaLibraryService() {
             }
             override fun onRepeatModeChanged(repeatMode: Int) {
                 currentRepeatMode = repeatMode
+                // Persist it. Repeat shares its store and key with the phone,
+                // but the service never wrote it, so a mode set on the head
+                // unit was lost on service restart and silently reverted to
+                // the last phone-set value. Shuffle already round-trips this
+                // way; repeat was a half-finished mirror of it.
+                serviceScope.launch {
+                    runCatching { PlaybackPrefs.setRepeat(applicationContext, repeatMode) }
+                }
                 updateCustomLayout()
             }
         })
@@ -589,6 +598,19 @@ class MediaPlaybackService : MediaLibraryService() {
         // reorder over the full source pool on the app looper, then refreshes
         // the AA custom-layout button. DataStore replays the current value on
         // collect, so this also seeds [currentShuffle] on service start.
+        // Seed repeat once from the shared pref so a headless car start comes
+        // up in the mode the user last chose, wherever they chose it. One-shot
+        // rather than a collector: the phone controller writes the same key,
+        // and two writers on one player would fight.
+        serviceScope.launch {
+            val saved = runCatching {
+                PlaybackPrefs.repeatFlow(applicationContext).first()
+            }.getOrNull() ?: return@launch
+            withContext(Dispatchers.Main) {
+                mediaSession?.player?.repeatMode = saved
+            }
+        }
+
         serviceScope.launch {
             PlaybackPrefs.shuffleFlow(applicationContext).collectLatest { enabled ->
                 withContext(Dispatchers.Main) {

@@ -116,7 +116,15 @@ internal class AALyricsTicker(
         // Capture the pristine description from the queue's MediaItem so a
         // seek-before-first-line can restore it instead of leaving a stale
         // lyric line on the card.
-        originalDescription = item?.mediaMetadata?.description
+        // Never capture a description we wrote ourselves. applyDescription
+        // rewrites the item *in the timeline*, so an item we've already
+        // ticked over carries a lyric line in its description — and landing
+        // back on it (repeat-one, or previous into an already-played item)
+        // captured that line as the pristine text. From then on the card
+        // showed the last lyric of the previous pass during the intro, and
+        // disconnecting "restored" it instead of clearing.
+        val described = item?.mediaMetadata?.description
+        originalDescription = described?.takeUnless { it.startsWith(EYEBROW_PREFIX) }
         if (id == null) return
         // Skip the lyrics fetch when AA isn't watching — the phone has its
         // own LyricsSheet that subscribes to position directly. Cache hits
@@ -194,11 +202,19 @@ internal class AALyricsTicker(
         } else {
             collapsed
         }
-        return "// ORA · $clipped"
+        return "$EYEBROW_PREFIX$clipped"
     }
 
     private companion object {
         const val POLL_MS = 1_000L
+
+        /**
+         * Marks a description as one this ticker wrote. Used both to render
+         * the lyric eyebrow and to recognise our own output when re-reading a
+         * timeline item, so a rewritten description is never mistaken for the
+         * track's pristine one.
+         */
+        const val EYEBROW_PREFIX = "// ORA · "
 
         /**
          * Single-line clip target for `MediaMetadata.description`. Mockup

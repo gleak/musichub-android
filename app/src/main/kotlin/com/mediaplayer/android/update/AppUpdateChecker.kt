@@ -59,8 +59,20 @@ object AppUpdateChecker {
         val lastCheck = prefs.getLong(KEY_LAST_CHECK_AT, 0L)
         if (now - lastCheck < MIN_CHECK_INTERVAL_MS && _state.value != null) return
 
-        val manifest = runCatching { repository.latest() }.getOrNull() ?: return
+        val manifest = runCatching { repository.latest() }.getOrNull()
+        // Stamp the attempt whatever the answer. Returning before this meant a
+        // disabled channel or a failing endpoint never advanced the rate limit
+        // and was re-hit on every cold launch.
         prefs.edit().putLong(KEY_LAST_CHECK_AT, now).apply()
+        if (manifest == null) {
+            // No manifest: either the channel is off or the server withdrew the
+            // release. Either way stop advertising it — the previous run's
+            // manifest used to survive here, leaving a banner for an update
+            // that no longer exists, or an undismissable overlay if it was
+            // marked required.
+            _state.value = null
+            return
+        }
 
         // Server is newer than us?
         if (manifest.versionCode <= BuildConfig.VERSION_CODE) {
