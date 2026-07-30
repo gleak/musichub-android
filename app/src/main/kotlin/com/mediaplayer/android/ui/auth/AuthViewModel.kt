@@ -226,6 +226,14 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
     }
 
     fun signOut() {
+        // Stop the offline revalidation poll before anything else. Its /me call
+        // can be in flight for up to 30s carrying the outgoing user's Bearer,
+        // and its continuation unconditionally re-caches that user and forces
+        // the state back to SignedIn — which used to snap the app back into the
+        // previous account seconds after the login screen appeared, and put
+        // their /me snapshot back on disk after this method had removed it.
+        revalidationJob?.cancel()
+        revalidationJob = null
         viewModelScope.launch {
             // Null the cached token *before* hitting the repository's sign-out
             // path. Any request the OkHttp interceptor builds from this point
@@ -235,6 +243,19 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
             // in particular runs fire-and-forget and can outlive signOut().
             AuthTokenHolder.idToken = null
             authRepository.signOut()
+            // Purge every process-scoped / on-disk cache keyed to the previous
+            // identity, otherwise "Cambia account" shows user A's hearts,
+            // dislikes, recents and playlists to user B — and A's queued
+            // like/play events would drain under B's Bearer.
+            com.mediaplayer.android.data.LikedSongsCache.clear()
+            com.mediaplayer.android.data.DislikedSongsCache.clear()
+            com.mediaplayer.android.data.RecentsCache.clear()
+            com.mediaplayer.android.data.PlaylistsCache.clear()
+            com.mediaplayer.android.data.sync.EventQueue.clear()
+            com.mediaplayer.android.data.sync.ReadCache.clearAll()
+            // Recent searches are as personal as the rest: leaving them behind
+            // showed user A's last queries on user B's search screen.
+            runCatching { com.mediaplayer.android.data.SearchHistoryStore.instance.clear() }
             _state.value = State.NotSignedIn
         }
     }

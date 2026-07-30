@@ -111,12 +111,18 @@ class AuthRepository private constructor(private val context: Context) {
     }
 
     suspend fun signOut() {
-        credentialManager.clearCredentialState(ClearCredentialStateRequest())
+        // Wipe our own state first, and never let the credential-provider hop
+        // decide whether it happens. clearCredentialState is the most
+        // failure-prone call in the flow (no provider installed, Play services
+        // updating, some OEM builds); letting it throw first used to abort the
+        // whole sign-out, leaving the previous user's token and /me snapshot on
+        // disk while the UI stayed signed in.
         context.authDataStore.edit {
             it.remove(HAS_SIGNED_IN)
             it.remove(ID_TOKEN)
             it.remove(USER_SNAPSHOT)
         }
+        runCatching { credentialManager.clearCredentialState(ClearCredentialStateRequest()) }
     }
 
     /**

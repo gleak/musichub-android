@@ -8,7 +8,9 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.mediaplayer.android.BuildConfig
 import com.mediaplayer.android.data.AuthTokenHolder
 import com.mediaplayer.android.data.Network
 import kotlinx.coroutines.CoroutineScope
@@ -93,6 +95,16 @@ object AppUpdateInstaller {
         onError: (String) -> Unit,
         onReady: (File) -> Unit,
     ) {
+        // Refuse the manifest before anything is fetched. Both checks are
+        // fail-closed: an absent checksum used to mean "install without
+        // verifying", and the URL used to be trusted blindly even though the
+        // request carries the session Bearer and the API key.
+        UpdateSourcePolicy.rejectionFor(url, expectedSha256, BuildConfig.BASE_URL)?.let { reason ->
+            _progress.value = DownloadProgress.Failed(reason)
+            onError(reason)
+            return
+        }
+
         // Drop any previous receiver registration / poll loop before
         // starting a new one. A user tapping "Aggiorna" twice in quick
         // succession used to leak the first receiver.
@@ -190,10 +202,16 @@ object AppUpdateInstaller {
                 onReady(target)
             }
         }
-        // Android 13+ requires explicit export flag for runtime-registered receivers.
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-            Context.RECEIVER_EXPORTED else 0
-        appContext.registerReceiver(
+        // Exported on purpose: the completion broadcast is sent by the system
+        // DownloadManager, not by us. ContextCompat demands one of its two
+        // export flags on every API level — passing 0 throws — and applies it
+        // only where the platform actually wants it, so no version check here.
+        val flags = ContextCompat.RECEIVER_EXPORTED
+        // The three-argument Context#registerReceiver only exists from API 26
+        // while minSdk is 24, so calling it directly crashed on API 24-25.
+        // ContextCompat picks the right overload for the running level.
+        ContextCompat.registerReceiver(
+            appContext,
             receiver,
             IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
             flags,

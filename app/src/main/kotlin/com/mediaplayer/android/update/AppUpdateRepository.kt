@@ -5,8 +5,11 @@ import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.AppUpdateDto
 
 class AppUpdateRepository(
-    private val api: MediaPlayerApi = Network.api,
+    private val injectedApi: MediaPlayerApi? = null,
 ) {
+    /** Resolved per call so the client can be swapped after construction. */
+    private val api: MediaPlayerApi get() = injectedApi ?: Network.api
+
     /**
      * Returns the published manifest if the server has one, or null when
      * the channel is disabled (server returns 204 No Content).
