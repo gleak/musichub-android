@@ -45,7 +45,7 @@ object WaveformAnalyzer {
     private const val PEAKS_VERSION = 1
 
     suspend fun analyze(songId: Long, bars: Int = BARS): FloatArray? = withContext(Dispatchers.IO) {
-        val cacheRoot = File(MediaPlayerApp.instance.cacheDir, CACHE_DIR).apply { mkdirs() }
+        val cacheRoot = File(MediaPlayerApp.appContext.cacheDir, CACHE_DIR).apply { mkdirs() }
         val peaksFile = File(cacheRoot, "$songId-$bars.peaks")
         readPeaksCache(peaksFile, bars)?.let { return@withContext it }
 

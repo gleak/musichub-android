@@ -49,7 +49,7 @@ object DownloadRepository {
     }
 
     fun init() {
-        val dm = DownloadRoot.getDownloadManager(MediaPlayerApp.instance)
+        val dm = DownloadRoot.getDownloadManager(MediaPlayerApp.appContext)
         dm.addListener(listener)
         refreshAsync(dm)
         // Wire the "Solo Wi-Fi" toggle to the manager's requirements so the
@@ -76,7 +76,7 @@ object DownloadRepository {
             builder.setData(it.toByteArray(Charsets.UTF_8))
         }
         DownloadService.sendAddDownload(
-            MediaPlayerApp.instance,
+            MediaPlayerApp.appContext,
             MediaDownloadService::class.java,
             builder.build(),
             /* foreground = */ false,
@@ -85,7 +85,7 @@ object DownloadRepository {
 
     fun remove(songId: Long) {
         DownloadService.sendRemoveDownload(
-            MediaPlayerApp.instance,
+            MediaPlayerApp.appContext,
             MediaDownloadService::class.java,
             songId.toString(),
             /* foreground = */ false,

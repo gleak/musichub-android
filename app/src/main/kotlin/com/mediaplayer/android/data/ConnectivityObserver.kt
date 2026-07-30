@@ -46,7 +46,7 @@ object ConnectivityObserver {
 
     fun init() {
         if (cb != null) return
-        val ctx = MediaPlayerApp.instance
+        val ctx = MediaPlayerApp.appContext
         val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         cmRef = cm
         // NET_CAPABILITY_INTERNET filter only — NET_CAPABILITY_VALIDATED is

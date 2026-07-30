@@ -55,7 +55,7 @@ object Network {
     // Cache-Control + ETag headers (Phase E); once it does, cover thumbs and
     // catalog list bodies hit the 304 path and skip the body re-download.
     private val responseCache: Cache by lazy {
-        Cache(File(MediaPlayerApp.instance.cacheDir, "http"), 50L * 1024 * 1024)
+        Cache(File(MediaPlayerApp.appContext.cacheDir, "http"), 50L * 1024 * 1024)
     }
 
     val okHttp: OkHttpClient by lazy {

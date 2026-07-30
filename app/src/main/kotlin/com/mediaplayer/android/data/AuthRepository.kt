@@ -222,7 +222,7 @@ class AuthRepository private constructor(private val context: Context) {
         private val USER_SNAPSHOT = stringPreferencesKey("user_snapshot")
 
         val instance: AuthRepository by lazy {
-            AuthRepository(MediaPlayerApp.instance)
+            AuthRepository(MediaPlayerApp.appContext)
         }
     }
 }
