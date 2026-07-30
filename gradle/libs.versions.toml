@@ -47,6 +47,25 @@ glance = "1.1.1"
 
 # Persistent key-value storage for auth state
 datastorePreferences = "1.1.4"
+
+# JVM unit tests. Robolectric supplies real android.os.Bundle / Looper so the
+# playback engine can be driven by a real ExoPlayer instead of a hand-rolled
+# fake — a fake would have to implement Timeline itself, since BasePlayer
+# derives mediaItemCount and getMediaItemAt from it.
+# Backports java.time (and friends) to API 24. Without it every java.time call
+# is a NoClassDefFoundError on API 24-25, which minSdk still admits.
+desugarJdkLibs = "2.1.5"
+
+# Coverage measurement for the JVM unit-test suite.
+kover = "0.9.1"
+
+junit = "4.13.2"
+# MediaPlayerApi is a wide Retrofit interface; a relaxed mock beats
+# hand-writing a fake with a hundred unused members.
+mockk = "1.14.2"
+robolectric = "4.16"
+androidxTestCore = "1.6.1"
+
 googleGmsGoogleServices = "4.4.4"
 firebaseAuth = "24.0.1"
 firebaseCrashlytics = "20.0.5"
@@ -107,7 +126,17 @@ androidx-glance-material3           = { module = "androidx.glance:glance-materia
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth", version.ref = "firebaseAuth" }
 firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics", version.ref = "firebaseCrashlytics" }
 
+desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
+
+junit = { module = "junit:junit", version.ref = "junit" }
+mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
+media3-test-utils = { module = "androidx.media3:media3-test-utils", version.ref = "media3" }
+media3-test-utils-robolectric = { module = "androidx.media3:media3-test-utils-robolectric", version.ref = "media3" }
+
 [plugins]
+kover                 = { id = "org.jetbrains.kotlinx.kover",                 version.ref = "kover" }
 android-application   = { id = "com.android.application",                     version.ref = "agp" }
 kotlin-android        = { id = "org.jetbrains.kotlin.android",                version.ref = "kotlin" }
 kotlin-compose        = { id = "org.jetbrains.kotlin.plugin.compose",         version.ref = "kotlin" }

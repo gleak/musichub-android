@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.22.6"
+    const val VERSION = "0.23.3"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,75 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.23.3",
+            title = "Avanti in auto, e l'app torna nel cruscotto",
+            highlights = listOf(
+                "Se fai partire un brano dalla ricerca in Android Auto, ora dietro c'è una coda vera: il tasto avanti funziona e la musica continua da sola invece di fermarsi dopo quel brano.",
+                "L'app torna a comparire tra le sorgenti musicali di Android Auto, con le sue cartelle da sfogliare e non solo l'audio.",
+                "I tasti del volante rispondono anche quando l'app è stata chiusa dal sistema.",
+                "I brani scaricati non spariscono più quando l'app sospetta un file danneggiato mentre sei in auto: la copia offline resta al suo posto se non c'è modo di riscaricarla.",
+                "Quando la musica parte dall'auto o riprende da dove l'avevi lasciata, aprendo il telefono ritrovi il brano nel mini player, la coda piena e l'ascolto conteggiato nella cronologia. Prima la schermata restava vuota e il pannello a tutto schermo si chiudeva da solo.",
+                "\"Cambia account\" ora esce davvero: la sessione precedente non torna più da sola dopo qualche secondo, e i dati del profilo vengono cancellati anche se il gestore delle credenziali non risponde.",
+                "Gli aggiornamenti dell'app vengono rifiutati se non arrivano dal server dell'app o se manca il codice di controllo del file.",
+                "Risolti due arresti anomali su telefoni Android più vecchi, nelle schermate con le date e durante il download di un aggiornamento.",
+                "La ripresa riparte dal punto in cui eri, non dall'inizio del brano.",
+                "La musica non riparte più da sola dopo che l'hai messa in pausa durante un problema di rete.",
+                "In auto le liste lunghe si scorrono fino in fondo: preferiti, generi e playlist non si fermano più alle prime righe e non ripetono gli stessi brani. Toccando un brano nella coda parte quello che hai scelto.",
+                "I pulsanti del widget nella schermata home ora funzionano.",
+                "Il cuore non si gira più al contrario al primo tocco dopo un cambio brano, e la coda mostra il brano giusto come \"in riproduzione\".",
+                "Il preset \"Personalizzato\" dell'equalizzatore richiama i tuoi livelli invece di azzerarli.",
+                "Le ricerche recenti vengono cancellate quando esci dall'account.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.23.2",
+            title = "Il tasto casuale in macchina si accende",
+            highlights = listOf(
+                "In Android Auto il pulsante Casuale (e Ripeti) ora si illumina quando è attivo: prima restava sempre spento anche col casuale acceso.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.23.1",
+            title = "Casuale su tutti i preferiti e i generi",
+            highlights = listOf(
+                "\"Riproduci tutti\" e \"Casuale\" nei Preferiti e dentro un genere ora pescano dall'intera raccolta, non solo dai brani che avevi già scorso. Così il casuale spazia davvero su tutto.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.23.0",
+            title = "Rifiniture: coda, brani locali e widget",
+            highlights = listOf(
+                "La coda ora risponde sempre alla riga giusta quando togli o salti un brano, anche mentre la lista si aggiorna da sola.",
+                "Sui brani salvati sul telefono il menù \"...\" mostra solo le azioni che hanno senso, niente più voci che non funzionano.",
+                "Segnalando un brano sbagliato non torna più a ripresentarsi nella coda infinita. E l'hero della playlist mostra Pausa solo se stai davvero ascoltando quella playlist.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.22.9",
+            title = "Cambio account pulito e shuffle più coerente",
+            highlights = listOf(
+                "Cambiando account non vedi più per errore i preferiti, i \"non consigliati\", i brani recenti o le playlist dell'account precedente: ogni utente riparte pulito.",
+                "Disattivando il casuale la playlist torna al suo ordine originale, come previsto. E il cuore non \"rimbalza\" più mentre si sincronizza.",
+                "L'app non riempie più la memoria del telefono senza limiti con i brani ascoltati in streaming.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.22.8",
+            title = "Correzioni: widget, auto e brani locali",
+            highlights = listOf(
+                "Il tasto casuale del widget in home ora funziona davvero, e il widget resta attivo anche quando la musica parte dall'auto.",
+                "In macchina, se un brano si scaricava rovinato l'app ora se ne accorge e lo ripristina come previsto — prima in certi casi non scattava.",
+                "I brani salvati sul telefono non finiscono più per sbaglio nella cronologia o nei download online.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.22.7",
+            title = "Shuffle che funziona davvero in auto",
+            highlights = listOf(
+                "In macchina il tasto shuffle ora risponde e mescola l'intera playlist, non solo i primi brani: prima in auto rimaneva praticamente inattivo e continuavi a sentire sempre le stesse canzoni. Adesso lo shuffle è lo stesso ovunque — telefono, auto e a schermo spento — e attiva o disattiva casuale con un tocco anche dai comandi dell'auto.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.22.6",
             title = "Meno brani saltati da soli in auto",

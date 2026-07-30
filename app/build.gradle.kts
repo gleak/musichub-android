@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.google.gms.google.services)
     alias(libs.plugins.google.firebase.crashlytics)
+    alias(libs.plugins.kover)
 }
 
 /**
@@ -91,8 +92,8 @@ android {
         applicationId = "com.mediaplayer.android"
         minSdk = 24
         targetSdk = 35
-        versionCode = 121
-        versionName = "0.22.6"
+        versionCode = 128
+        versionName = "0.23.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -132,6 +133,10 @@ android {
     }
 
     compileOptions {
+        // java.time is used for relative timestamps and cover generation, but
+        // it only exists from API 26 and minSdk is 24 — without desugaring
+        // those screens throw NoClassDefFoundError on API 24-25 devices.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
@@ -150,6 +155,17 @@ android {
         named("main") {
             java.srcDirs("src/main/kotlin")
         }
+        named("test") {
+            java.srcDirs("src/test/kotlin")
+        }
+    }
+
+    testOptions {
+        unitTests {
+            // Robolectric needs the merged resources/manifest to boot an
+            // Android runtime in the JVM.
+            isIncludeAndroidResources = true
+        }
     }
 
     // Build outputs name themselves `mediaplayer-<versionCode>-<versionName>.apk`
@@ -164,7 +180,56 @@ android {
     }
 }
 
+/**
+ * Coverage tracks business logic only. Compose and Glance screens are excluded
+ * deliberately: they need instrumentation (or compose-ui-test under Robolectric)
+ * to exercise, and leaving them in the denominator buries the number that
+ * actually says whether the logic is tested.
+ */
+kover {
+    reports {
+        filters {
+            excludes {
+                packages(
+                    "com.mediaplayer.android.ui",
+                    "com.mediaplayer.android.ui.*",
+                )
+                classes(
+                    // Activities and Glance widgets are UI surfaces.
+                    "com.mediaplayer.android.MainActivity*",
+                    "com.mediaplayer.android.widget.NowPlayingWidget",
+                    "com.mediaplayer.android.widget.NowPlayingWidgetKt",
+                    "com.mediaplayer.android.widget.QuickLaunchWidget",
+                    "com.mediaplayer.android.widget.QuickLaunchWidgetKt",
+                    "com.mediaplayer.android.widget.QuickLaunchConfigActivity*",
+                    // Compose compiler artefacts, not source anyone wrote.
+                    "*.ComposableSingletons*",
+                    "*.*ComposableSingletons*",
+                    // Generated serializers and BuildConfig.
+                    "*.*\$\$serializer",
+                    "com.mediaplayer.android.BuildConfig",
+                )
+                annotatedBy("androidx.compose.runtime.Composable")
+            }
+        }
+    }
+}
+
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
+
+    // JVM unit tests. The playback engine is driven by a real ExoPlayer under
+    // Robolectric rather than a fake Player: Media3's BasePlayer derives
+    // mediaItemCount / getMediaItemAt from getCurrentTimeline(), so a fake
+    // would mean reimplementing Timeline and testing that reimplementation
+    // instead of the real event ordering we care about.
+    testImplementation(libs.junit)
+    testImplementation(libs.mockk)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.media3.test.utils)
+    testImplementation(libs.media3.test.utils.robolectric)
+
     // Core + lifecycle
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
