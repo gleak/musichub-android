@@ -26,7 +26,7 @@ class ChangelogPreferences private constructor(private val context: Context) {
         private val LAST_SEEN_VERSION = stringPreferencesKey("last_seen_version")
 
         val instance: ChangelogPreferences by lazy {
-            ChangelogPreferences(MediaPlayerApp.instance)
+            ChangelogPreferences(MediaPlayerApp.appContext)
         }
     }
 }

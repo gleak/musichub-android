@@ -134,6 +134,13 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
 media3-test-utils = { module = "androidx.media3:media3-test-utils", version.ref = "media3" }
 media3-test-utils-robolectric = { module = "androidx.media3:media3-test-utils-robolectric", version.ref = "media3" }
+# Compose UI tests. Run on the JVM under Robolectric (no emulator): the
+# BOM pins the version, so these carry no version.ref of their own.
+androidx-compose-ui-test-junit4      = { module = "androidx.compose.ui:ui-test-junit4" }
+androidx-compose-ui-test-manifest    = { module = "androidx.compose.ui:ui-test-manifest" }
+# Swaps Coil's singleton loader for one that never touches the network,
+# so a screen full of cover art doesn't turn tests into an I/O suite.
+coil-test                           = { module = "io.coil-kt.coil3:coil-test", version.ref = "coil" }
 
 [plugins]
 kover                 = { id = "org.jetbrains.kotlinx.kover",                 version.ref = "kover" }

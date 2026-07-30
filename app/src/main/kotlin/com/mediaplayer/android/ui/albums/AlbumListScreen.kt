@@ -131,7 +131,12 @@ class AlbumListViewModel(
         viewModelScope.launch {
             try {
                 val page = repository.listAlbums(page = pageToLoad, size = PAGE_SIZE)
-                val merged = current.albums + page.items
+                // De-dupe on the same identity the grid keys on. Offset
+                // pagination over a catalogue that shifts between fetches
+                // (an album gained or lost a song server-side) can repeat a
+                // row, and a duplicate key throws out of the grid and takes
+                // the screen down with it.
+                val merged = (current.albums + page.items).distinctBy { it.artist to it.name }
                 nextPage = pageToLoad + 1
                 _state.value = AlbumListUiState.Success(
                     albums = merged,

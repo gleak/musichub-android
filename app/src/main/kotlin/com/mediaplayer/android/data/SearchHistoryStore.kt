@@ -48,6 +48,6 @@ class SearchHistoryStore private constructor(private val context: Context) {
         private const val MAX = 5
         private val KEY = stringPreferencesKey("recent_queries")
 
-        val instance: SearchHistoryStore by lazy { SearchHistoryStore(MediaPlayerApp.instance) }
+        val instance: SearchHistoryStore by lazy { SearchHistoryStore(MediaPlayerApp.appContext) }
     }
 }

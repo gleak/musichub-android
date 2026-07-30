@@ -31,7 +31,7 @@ class OnboardingPreferences private constructor(private val context: Context) {
         private val DISMISSED = booleanPreferencesKey("dismissed")
 
         val instance: OnboardingPreferences by lazy {
-            OnboardingPreferences(MediaPlayerApp.instance)
+            OnboardingPreferences(MediaPlayerApp.appContext)
         }
     }
 }

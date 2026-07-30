@@ -35,7 +35,12 @@ class PlaylistRepository(
         return try {
             val auto = runCatching { api.listPlaylists(kind = "auto") }.getOrDefault(emptyList())
             val user = api.listPlaylists()
-            val combined = auto + user
+            // De-dupe on id: the two calls are meant to return disjoint sets,
+            // but that's the backend's classification to keep — one playlist
+            // appearing in both would put a duplicate key in the library grid
+            // and the home carousels, which Compose turns into a crash rather
+            // than a repeated row.
+            val combined = (auto + user).distinctBy { it.id }
             ReadCache.putJson(ReadCache.Keys.PLAYLISTS_ALL, combined, ListSerializer(serializer()))
             combined
         } catch (_: IOException) {

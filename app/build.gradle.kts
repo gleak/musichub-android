@@ -181,27 +181,19 @@ android {
 }
 
 /**
- * Coverage tracks business logic only. Compose and Glance screens are excluded
- * deliberately: they need instrumentation (or compose-ui-test under Robolectric)
- * to exercise, and leaving them in the denominator buries the number that
- * actually says whether the logic is tested.
+ * Coverage tracks everything anyone wrote by hand, screens included. The
+ * UI used to be filtered out because nothing exercised it; now that Compose
+ * tests run under Robolectric in this same suite, excluding it would just
+ * flatter the number.
+ *
+ * Only generated code stays out of the denominator — nobody can test it and
+ * nobody can fix it.
  */
 kover {
     reports {
         filters {
             excludes {
-                packages(
-                    "com.mediaplayer.android.ui",
-                    "com.mediaplayer.android.ui.*",
-                )
                 classes(
-                    // Activities and Glance widgets are UI surfaces.
-                    "com.mediaplayer.android.MainActivity*",
-                    "com.mediaplayer.android.widget.NowPlayingWidget",
-                    "com.mediaplayer.android.widget.NowPlayingWidgetKt",
-                    "com.mediaplayer.android.widget.QuickLaunchWidget",
-                    "com.mediaplayer.android.widget.QuickLaunchWidgetKt",
-                    "com.mediaplayer.android.widget.QuickLaunchConfigActivity*",
                     // Compose compiler artefacts, not source anyone wrote.
                     "*.ComposableSingletons*",
                     "*.*ComposableSingletons*",
@@ -209,7 +201,6 @@ kover {
                     "*.*\$\$serializer",
                     "com.mediaplayer.android.BuildConfig",
                 )
-                annotatedBy("androidx.compose.runtime.Composable")
             }
         }
     }
@@ -229,6 +220,15 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.media3.test.utils)
     testImplementation(libs.media3.test.utils.robolectric)
+
+    // Compose screens are exercised in the same JVM suite, via Robolectric
+    // rather than an emulator. Screens take their ViewModel as a parameter
+    // and ViewModels take their repositories, so a test can feed a fake
+    // MediaPlayerApi through the real chain and assert on what renders.
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.coil.test)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     // Core + lifecycle
     implementation(libs.androidx.core.ktx)

@@ -83,7 +83,7 @@ class PlayerSettings private constructor(private val context: Context) {
         private val MIUI_WARNING_DISMISSED = booleanPreferencesKey("miui_warning_dismissed")
 
         val instance: PlayerSettings by lazy {
-            PlayerSettings(MediaPlayerApp.instance)
+            PlayerSettings(MediaPlayerApp.appContext)
         }
     }
 }

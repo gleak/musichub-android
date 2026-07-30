@@ -1,6 +1,7 @@
 package com.mediaplayer.android
 
 import android.app.Application
+import android.content.Context
 import androidx.media3.common.util.UnstableApi
 import coil3.ImageLoader
 import coil3.PlatformContext
@@ -30,6 +31,22 @@ class MediaPlayerApp : Application(), SingletonImageLoader.Factory {
     companion object {
         lateinit var instance: MediaPlayerApp
             private set
+
+        /**
+         * Test seam. Null in production, where [appContext] resolves to the
+         * real Application; set by tests that render a screen without
+         * booting `MediaPlayerApp`, whose onCreate starts auth, playback and
+         * the write queue.
+         */
+        @Volatile
+        internal var contextOverride: Context? = null
+
+        /**
+         * Application context for the app-wide singletons that only need a
+         * Context — the DataStore-backed preference holders. Anything that
+         * needs the Application itself keeps using [instance].
+         */
+        internal val appContext: Context get() = contextOverride ?: instance
     }
 
     override fun onCreate() {

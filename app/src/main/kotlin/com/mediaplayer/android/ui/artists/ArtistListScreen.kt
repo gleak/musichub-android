@@ -122,7 +122,10 @@ class ArtistListViewModel(
         viewModelScope.launch {
             try {
                 val page = repository.listArtists(page = pageToLoad, size = PAGE_SIZE)
-                val merged = current.artists + page.items
+                // De-dupe on the name the list keys on: offset pagination
+                // over a shifting catalogue can repeat a row, and a
+                // duplicate key crashes the list.
+                val merged = (current.artists + page.items).distinctBy { it.name }
                 nextPage = pageToLoad + 1
                 _state.value = ArtistListUiState.Success(
                     artists = merged,
