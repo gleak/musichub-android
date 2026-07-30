@@ -20,6 +20,7 @@ import com.mediaplayer.android.data.LikedSongsCache
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.PlaylistsCache
 import com.mediaplayer.android.data.RecentsCache
+import com.mediaplayer.android.data.sync.EventQueue
 import com.mediaplayer.android.data.sync.ReadCache
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -90,6 +91,9 @@ abstract class ScreenTest {
         val context = ApplicationProvider.getApplicationContext<Application>()
         MediaPlayerApp.contextOverride = context
         ReadCache.init(context)
+        // Mutations (like, dislike, playlist edits) are written through the
+        // offline queue, so screens that mutate need it open.
+        EventQueue.init(context)
         // The app-wide caches are objects, so state survives between tests
         // in the same JVM. Reset them or one test's fixture leaks into the
         // next one's assertions.

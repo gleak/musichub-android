@@ -79,10 +79,15 @@ internal class SyncDb(context: Context) :
         }
     }
 
+    /**
+     * IF NOT EXISTS throughout: the read cache and the write queue each open
+     * their own helper over this one file, so on a first cold launch both can
+     * reach onCreate and the loser used to crash on "table already exists".
+     */
     private fun createPendingEvents(db: SQLiteDatabase) {
         db.execSQL(
             """
-            CREATE TABLE $TABLE (
+            CREATE TABLE IF NOT EXISTS $TABLE (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 type TEXT NOT NULL,
                 payload TEXT NOT NULL,
@@ -95,14 +100,14 @@ internal class SyncDb(context: Context) :
             )
             """.trimIndent()
         )
-        db.execSQL("CREATE INDEX idx_${TABLE}_next ON $TABLE(next_attempt_at)")
-        db.execSQL("CREATE INDEX idx_${TABLE}_dedupe ON $TABLE(dedupe_key)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_${TABLE}_next ON $TABLE(next_attempt_at)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_${TABLE}_dedupe ON $TABLE(dedupe_key)")
     }
 
     private fun createCacheKv(db: SQLiteDatabase) {
         db.execSQL(
             """
-            CREATE TABLE $CACHE_TABLE (
+            CREATE TABLE IF NOT EXISTS $CACHE_TABLE (
                 key TEXT PRIMARY KEY,
                 json TEXT NOT NULL,
                 fetched_at INTEGER NOT NULL

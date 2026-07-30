@@ -85,6 +85,11 @@ fun DislikedScreen(onBack: () -> Unit) {
             // Confirmed disliked — seed the cache so kebab affordances
             // elsewhere reflect ground truth without a follow-up request.
             freshSongs.forEach { DislikedSongsCache.markSongDisliked(it.id, true) }
+            // The artist list below is filtered through the cache, so it has
+            // to be primed or the tab renders empty on a cold process even
+            // though the server just returned entries — leaving no way to
+            // un-exclude an artist until something else primed it.
+            DislikedSongsCache.primeArtists()
         } catch (t: Throwable) {
             errorMessage = t.message ?: "Errore di rete"
         } finally {
