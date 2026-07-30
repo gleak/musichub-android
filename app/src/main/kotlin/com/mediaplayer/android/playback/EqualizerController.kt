@@ -74,6 +74,16 @@ object EqualizerController {
     private val _state = MutableStateFlow<EqState?>(null)
     val state: StateFlow<EqState?> = _state.asStateFlow()
 
+    /**
+     * Test seam. Publishes [state] without opening an [Equalizer], which
+     * needs an audio HAL no JVM test has. Lets the sheet be exercised with
+     * a device that supports the effect, and with one that doesn't (null).
+     * Never called from production code.
+     */
+    internal fun publishForTest(state: EqState?) {
+        _state.value = state
+    }
+
     private var eq: Equalizer? = null
     private var appContext: Context? = null
     private var boundSessionId: Int = 0
