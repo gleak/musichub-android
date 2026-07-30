@@ -10,7 +10,9 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
 import com.mediaplayer.android.playback.MediaPlaybackService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
 /**
@@ -28,7 +30,13 @@ import kotlin.coroutines.resume
 private suspend fun withController(
     context: Context,
     block: (MediaController) -> Unit,
-) {
+) = withContext(Dispatchers.Main) {
+    // Everything here has to happen on the main looper. Glance dispatches
+    // ActionCallback.onAction on a background thread, where
+    // MediaController.Builder still binds itself to the *main* looper — so
+    // every subsequent call, release() included, tripped Media3's thread check
+    // and threw. The exception died inside Glance's coroutine, which is why the
+    // widget's transport buttons simply did nothing.
     val token = SessionToken(
         context.applicationContext,
         ComponentName(context.applicationContext, MediaPlaybackService::class.java),
@@ -43,7 +51,7 @@ private suspend fun withController(
             MoreExecutors.directExecutor(),
         )
         cont.invokeOnCancellation { future.cancel(true) }
-    } ?: return
+    } ?: return@withContext
     try {
         block(controller)
     } finally {
@@ -95,7 +103,19 @@ class ShuffleAction : ActionCallback {
         glanceId: GlanceId,
         parameters: ActionParameters,
     ) {
-        withController(context) { c -> c.shuffleModeEnabled = !c.shuffleModeEnabled }
+        // Shuffle is app-level (the native flag is pinned off and
+        // COMMAND_SET_SHUFFLE_MODE isn't granted, so setting shuffleModeEnabled
+        // is a silent no-op). Route through the same custom command the phone
+        // and Android Auto use so the widget toggle actually shuffles.
+        withController(context) { c ->
+            c.sendCustomCommand(
+                androidx.media3.session.SessionCommand(
+                    MediaPlaybackService.ACTION_TOGGLE_SHUFFLE,
+                    android.os.Bundle.EMPTY,
+                ),
+                android.os.Bundle.EMPTY,
+            )
+        }
     }
 }
 

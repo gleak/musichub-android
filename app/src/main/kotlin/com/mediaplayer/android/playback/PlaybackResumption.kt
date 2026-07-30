@@ -5,9 +5,14 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import com.mediaplayer.android.data.Network
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlin.math.abs
 
 /**
  * Tiny persistence layer so Android Auto's "resume where you left off"
@@ -32,6 +37,11 @@ internal class PlaybackResumption(context: Context) {
 
     private val prefs = context.applicationContext
         .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Position at the last write, so an unchanged queue still checkpoints as it plays. */
+    private var lastSavedPositionMs = 0L
 
     /**
      * Attach to a [Player] so every meaningful change gets checkpointed.
@@ -110,10 +120,19 @@ internal class PlaybackResumption(context: Context) {
             return
         }
 
+        val currentIndex = player.currentMediaItemIndex
         val items = mutableListOf<SongSnapshotDto>()
+        // Skip local (negative-id) tracks: load() rebuilds each item as a
+        // backend stream URL (Network.streamUrl(id)), which is a 404 for a
+        // local id — and the content:// URI that made it playable is gone
+        // after process death anyway. Track where the current item lands in
+        // the filtered list so the resume index stays correct.
+        var index = 0
         for (i in 0 until count) {
             val item = player.getMediaItemAt(i)
             val id = item.mediaId.removePrefix("song:").toLongOrNull() ?: continue
+            if (id < 0L) continue
+            if (i <= currentIndex) index = (items.size).coerceAtLeast(0)
             items.add(
                 SongSnapshotDto(
                     id = id,
@@ -122,28 +141,44 @@ internal class PlaybackResumption(context: Context) {
                 )
             )
         }
-
-        val index = player.currentMediaItemIndex
-        // Signature: queue ids + current index. Excludes position because
-        // position drifts continuously without firing Player.Events — only
-        // the events in install() trigger a save, so the position captured
-        // here is always the position at that event boundary.
+        if (items.isEmpty()) {
+            prefs.edit().clear().apply()
+            lastSig = null
+            return
+        }
+        index = index.coerceIn(0, items.lastIndex)
+        // Signature: queue ids + current index. It exists to swallow the
+        // once-per-second in-place timeline updates the lyrics ticker fans out,
+        // not to freeze the resume point — so a queue that hasn't changed
+        // identity still gets written whenever the position has moved
+        // meaningfully. Gating on identity alone pinned positionMs to whatever
+        // it was when the track started (≈0 at a transition), which is why
+        // resuming in the car always restarted the track from the beginning.
+        val position = player.currentPosition
         val sig = buildString {
             for (s in items) append(s.id).append(',')
             append('@').append(index)
         }
-        if (sig == lastSig) return
+        val positionMoved = abs(position - lastSavedPositionMs) >= POSITION_SAVE_THRESHOLD_MS
+        if (sig == lastSig && !positionMoved) return
         lastSig = sig
+        lastSavedPositionMs = position
 
         val dto = SnapshotDto(
             items = items,
             index = index,
-            positionMs = player.currentPosition,
+            positionMs = position,
         )
 
-        prefs.edit()
-            .putString(KEY_SNAPSHOT, Json.encodeToString(dto))
-            .apply()
+        // Serialize + persist off the application looper: a several-hundred-item
+        // queue's JSON encode is not free, and this fires on every timeline
+        // mutation (endless refill/prune). `dto` is a plain snapshot with no
+        // player access, so it's safe to hand to a background thread.
+        ioScope.launch {
+            prefs.edit()
+                .putString(KEY_SNAPSHOT, Json.encodeToString(dto))
+                .apply()
+        }
     }
 
     @Serializable
@@ -169,5 +204,13 @@ internal class PlaybackResumption(context: Context) {
     companion object {
         private const val PREFS = "mediaplayer_playback_resume"
         private const val KEY_SNAPSHOT = "playback_snapshot_v2"
+
+        /**
+         * How far playback must advance before an otherwise-identical queue is
+         * re-persisted. Ten seconds keeps the resume point honest without
+         * turning the lyrics ticker's per-second timeline churn into a write
+         * per second.
+         */
+        private const val POSITION_SAVE_THRESHOLD_MS = 10_000L
     }
 }

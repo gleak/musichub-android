@@ -87,7 +87,9 @@ object EqualizerController {
     private var restoreJob: Job? = null
 
     fun init(context: Context, audioSessionId: Int) {
-        if (audioSessionId == 0) return
+        // 0 = unallocated, -1 (AudioManager.ERROR) = generateAudioSessionId
+        // failed. Either way there's no valid session to bind an Equalizer to.
+        if (audioSessionId <= 0) return
         val app = context.applicationContext
         appContext = app
         boundSessionId = audioSessionId
@@ -152,6 +154,15 @@ object EqualizerController {
 
     fun applyPreset(preset: EqPreset) {
         val e = eq ?: return
+        // "Personalizzato" is where the user's own band levels live, so
+        // selecting it has to restore them. Routing it through presetLevels
+        // resolved it to a list of zeros, which flattened the EQ and then
+        // persisted those zeros over the saved levels — the one preset that
+        // destroyed data instead of applying it.
+        if (preset == EqPreset.CUSTOM) {
+            restoreCustomBands(e)
+            return
+        }
         val bandCount = e.numberOfBands.toInt()
         val range = e.bandLevelRange
         val min = range[0].toInt()
@@ -171,6 +182,27 @@ object EqualizerController {
             it[KEY_PRESET] = preset.name
         }
         _state.value = snapshot(e, preset)
+    }
+
+    /**
+     * Re-apply the band levels saved under the custom slot and mark it active.
+     * Read off the looper like the initial restore; bands the user never touched
+     * fall back to flat inside [restoreBands].
+     */
+    private fun restoreCustomBands(e: Equalizer) {
+        val app = appContext ?: return
+        restoreJob?.cancel()
+        restoreJob = scope.launch {
+            try {
+                val prefs = app.equalizerDataStore.data.first()
+                restoreBands(e, prefs)
+                editAsync { it[KEY_PRESET] = EqPreset.CUSTOM.name }
+                _state.value = snapshot(e, EqPreset.CUSTOM)
+            } catch (_: Exception) {
+                // Couldn't read DataStore — leave the hardware as it is rather
+                // than flattening what the user had.
+            }
+        }
     }
 
     private fun restoreBands(e: Equalizer, prefs: Preferences) {

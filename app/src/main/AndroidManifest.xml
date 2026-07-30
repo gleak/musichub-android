@@ -110,13 +110,20 @@
             </intent-filter>
         </activity>
 
-        <!-- Media3 MediaSessionService. The intent filter is what lets the
-             system auto-wire lock-screen / notification media controls. -->
+        <!-- Media3 MediaLibraryService. The intent filter is what lets the
+             system auto-wire lock-screen / notification media controls.
+             All three service actions are needed: MediaLibraryService is what
+             makes a SessionToken resolve this as a browsable library — with
+             only the MediaSessionService action it resolves as
+             TYPE_SESSION_SERVICE, i.e. transport but no browse tree — while
+             the legacy MediaBrowserService action is what Android Auto and
+             other MediaBrowserCompat clients actually bind against. -->
         <service
             android:name=".playback.MediaPlaybackService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="androidx.media3.session.MediaSessionService" />
                 <action android:name="android.media.browse.MediaBrowserService" />
                 <!-- Lets Google Assistant in cars route "Hey Google, play X
@@ -135,6 +142,20 @@
                 <action android:name="androidx.media3.exoplayer.downloadService.action.RESTART" />
             </intent-filter>
         </service>
+
+        <!-- Media button entry point for steering-wheel / headset / Bluetooth
+             transport keys. Media3 ships the receiver; it only has to be
+             declared. Without it a key press cannot reach us once the process
+             has been stopped (Media3 logs "Expected 1 broadcast receiver that
+             handles android.intent.action.MEDIA_BUTTON, found 0"), so the
+             wheel buttons look dead until playback is restarted by hand. -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
 
         <!-- FileProvider for the self-hosted update channel — exposes the
              downloaded APK to the system package installer with a granted

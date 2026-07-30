@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
@@ -185,7 +186,14 @@ class PrefetchOrchestrator(
         // Start missing.
         for (uri in desired) {
             if (jobs.containsKey(uri)) continue
-            jobs[uri] = startPrefetch(uri)
+            // Registered before it can run: a prefetch that finished before the
+            // assignment landed (common — CacheWriter no-ops on an
+            // already-cached range) stored an already-completed Job, and
+            // containsKey then reported that URI as in-flight forever, so it
+            // was never prefetched again.
+            val job = startPrefetch(uri)
+            jobs[uri] = job
+            job.start()
         }
     }
 
@@ -208,7 +216,7 @@ class PrefetchOrchestrator(
         jobs.clear()
     }
 
-    private fun startPrefetch(uri: String): Job = scope.launch {
+    private fun startPrefetch(uri: String): Job = scope.launch(start = CoroutineStart.LAZY) {
         try {
             val dataSpec = DataSpec.Builder()
                 .setUri(uri)
@@ -226,9 +234,12 @@ class PrefetchOrchestrator(
             if (t is kotlinx.coroutines.CancellationException) throw t
             Log.d(TAG, "prefetch failed for $uri: ${t.message}")
         } finally {
-            // Clean up the job entry if it was removed via cancellation
-            // (fast path) or finished successfully.
-            jobs.remove(uri)
+            // Only retract our own entry. An unconditional remove evicted the
+            // entry belonging to a *newer* job for the same URI (cancel +
+            // remove, then a fresh start, then this finally running late on
+            // IO), orphaning that job from cancelAll() and letting the next
+            // reschedule start a second writer over the same file.
+            jobs.remove(uri, coroutineContext[Job])
         }
     }
 

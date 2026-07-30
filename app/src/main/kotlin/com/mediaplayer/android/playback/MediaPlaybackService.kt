@@ -74,11 +74,13 @@ class MediaPlaybackService : MediaLibraryService() {
     companion object {
         const val ACTION_TOGGLE_LIKE = "com.mediaplayer.android.TOGGLE_LIKE"
         /**
-         * Custom session command for toggling shuffle from controllers (AA).
-         * No args. Flips `Player.shuffleModeEnabled`. Bound to a CommandButton
-         * in the AA custom layout because gearhead's now-playing card on some
-         * head units doesn't surface the standard shuffle control even when
-         * the player advertises COMMAND_SET_SHUFFLE_MODE.
+         * Custom session command for toggling shuffle from any controller (AA
+         * or phone). No args. Flips the shared shuffle pref; the service's
+         * shuffle-pref collector then reorders the whole source pool via
+         * [EndlessQueueController]. Bound to a CommandButton in the AA custom
+         * layout — shuffle is app-level (the native `Player.shuffleModeEnabled`
+         * is kept off), so this custom control is the single working shuffle
+         * entry point on the car surface.
          */
         const val ACTION_TOGGLE_SHUFFLE = "com.mediaplayer.android.TOGGLE_SHUFFLE"
         /**
@@ -88,6 +90,16 @@ class MediaPlaybackService : MediaLibraryService() {
          * [ACTION_TOGGLE_SHUFFLE].
          */
         const val ACTION_CYCLE_REPEAT = "com.mediaplayer.android.CYCLE_REPEAT"
+        /**
+         * Custom session command: drop a song from the endless-queue source
+         * pool so it's never re-appended on a refill/wrap. Sent by the phone
+         * VM after "brano sbagliato" (flagWrong) — the timeline items are
+         * removed there, but only the service owns [EndlessQueueController]'s
+         * [sourceItems]. Bundle key {@code "songId"} (Long).
+         */
+        const val ACTION_DROP_FROM_SOURCE = "com.mediaplayer.android.DROP_FROM_SOURCE"
+        /** Bundle key for [ACTION_DROP_FROM_SOURCE]: the song id to drop. */
+        const val EXTRA_DROP_SONG_ID = "songId"
         /**
          * Custom session command for setting / cancelling the sleep timer.
          * Args bundle key: {@code "minutes"} (Int). 0 cancels an active timer.
@@ -269,6 +281,8 @@ class MediaPlaybackService : MediaLibraryService() {
         SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY)
     private val cycleRepeatCommand =
         SessionCommand(ACTION_CYCLE_REPEAT, Bundle.EMPTY)
+    private val dropFromSourceCommand =
+        SessionCommand(ACTION_DROP_FROM_SOURCE, Bundle.EMPTY)
     @Volatile private var currentLiked: Boolean = false
     /** Mirrors `player.shuffleModeEnabled` so the AA custom-layout button can
      *  pick the right icon without touching the player off the main thread. */
@@ -307,14 +321,19 @@ class MediaPlaybackService : MediaLibraryService() {
             .setCache(streamCache)
             .setUpstreamDataSourceFactory(httpFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-        // Playback writes into the download cache so streamed songs become
-        // available offline automatically. DownloadRepository.download() is
-        // called after enough of the song is listened to, which causes
-        // DownloadManager to find the data already cached and mark it complete.
+        // Read offline copies from the download cache, but do NOT write to it
+        // from the streaming pipeline: its evictor is a NoOpCacheEvictor
+        // (DownloadRoot) so every streamed byte would persist forever in
+        // filesDir/downloads with no cap — internal storage grew unbounded.
+        // The inner streamCache (PlayerCache, 1 GiB LRU) still absorbs
+        // repeat-play/seek caching; explicit offline saves go through
+        // DownloadManager, which remains the sole writer of the download cache.
+        // (setCacheWriteDataSinkFactory(null) makes this layer read-only.)
         val downloadCache = DownloadRoot.getDownloadCache(this)
         val cacheFactory = CacheDataSource.Factory()
             .setCache(downloadCache)
             .setUpstreamDataSourceFactory(streamCacheFactory)
+            .setCacheWriteDataSinkFactory(null)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         val dataSourceFactory = DefaultDataSource.Factory(this, cacheFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
@@ -489,8 +508,12 @@ class MediaPlaybackService : MediaLibraryService() {
                 }
             }
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
-                currentShuffle = shuffleModeEnabled
-                updateCustomLayout()
+                // App owns shuffle (see [EndlessQueueController]); the AA button
+                // state is driven by the shuffle pref, not this native flag.
+                // Never let native ExoPlayer shuffle order actually take effect
+                // — a head unit / AVRCP control that flips the standard command
+                // would otherwise fight our timeline reordering. Force it off.
+                if (shuffleModeEnabled) mediaSession?.player?.shuffleModeEnabled = false
             }
             override fun onRepeatModeChanged(repeatMode: Int) {
                 currentRepeatMode = repeatMode
@@ -556,12 +579,25 @@ class MediaPlaybackService : MediaLibraryService() {
             }
         })
 
-        // Seed cached shuffle/repeat from the player so the AA custom-layout
-        // buttons render the right state on first connect (PlaybackViewModel
-        // restores these from DataStore on its own controller; the service
-        // only mirrors what the player reports).
-        currentShuffle = player.shuffleModeEnabled
+        // Repeat is native, so seed it from the player. Shuffle is app-level
+        // and seeded/kept in sync by the shuffle-pref collector below.
         currentRepeatMode = player.repeatMode
+
+        // Shuffle is service-owned. The shared shuffle pref is the single
+        // source of truth: a toggle from Android Auto (ACTION_TOGGLE_SHUFFLE)
+        // or the phone both write it, and this collector performs the actual
+        // reorder over the full source pool on the app looper, then refreshes
+        // the AA custom-layout button. DataStore replays the current value on
+        // collect, so this also seeds [currentShuffle] on service start.
+        serviceScope.launch {
+            PlaybackPrefs.shuffleFlow(applicationContext).collectLatest { enabled ->
+                withContext(Dispatchers.Main) {
+                    currentShuffle = enabled
+                    endlessQueue?.applyShuffle(enabled)
+                    updateCustomLayout()
+                }
+            }
+        }
 
         // Mirror player state into [WidgetState] so the Now-Playing home-screen
         // widget can repaint without holding its own MediaController. Updates
@@ -605,7 +641,10 @@ class MediaPlaybackService : MediaLibraryService() {
         val player = mediaSession?.player ?: return
         val item = player.currentMediaItem
         val md = item?.mediaMetadata
-        val songId = item?.mediaId?.toLongOrNull()
+        // AA / library / resumption items use the "song:{id}" mediaId form;
+        // stripping the prefix keeps the widget alive (its transport buttons
+        // gate on a non-null songId) for car-initiated playback too.
+        val songId = item?.mediaId?.removePrefix("song:")?.toLongOrNull()
         val artUri = md?.artworkUri?.toString()
         val previous = WidgetState.now.value
         val keepCover = previous.songId == songId && previous.coverUri == artUri
@@ -618,7 +657,9 @@ class MediaPlaybackService : MediaLibraryService() {
             hasPrevious = player.hasPreviousMediaItem(),
             coverUri = artUri,
             cover = if (keepCover) previous.cover else null,
-            shuffleEnabled = player.shuffleModeEnabled,
+            // Shuffle is app-level; the native flag is pinned off, so read the
+            // mirrored app-level state instead or the widget icon is always off.
+            shuffleEnabled = currentShuffle,
             repeatMode = player.repeatMode,
         )
         WidgetState.update(snapshot)
@@ -729,13 +770,23 @@ class MediaPlaybackService : MediaLibraryService() {
             return
         }
         serviceScope.launch {
-            currentLiked = try {
+            val liked = try {
                 likedRepository.status(listOf(songId)).contains(songId)
             } catch (_: Exception) {
                 false
             }
-            com.mediaplayer.android.data.LikedSongsCache.markLiked(songId, currentLiked)
-            updateCustomLayout()
+            com.mediaplayer.android.data.LikedSongsCache.markLiked(songId, liked)
+            // setCustomLayout / setSessionExtras must run on the session's
+            // application thread (serviceScope is Dispatchers.IO); publishing
+            // from IO violates the Media3 contract and races the main-thread
+            // sleep-timer collector. Hop to Main, and re-check the track is
+            // still current so a skip mid-fetch doesn't paint a stale heart.
+            withContext(Dispatchers.Main) {
+                if (songIdOf(mediaSession?.player?.currentMediaItem) == songId) {
+                    currentLiked = liked
+                    updateCustomLayout()
+                }
+            }
         }
     }
 
@@ -964,6 +1015,16 @@ class MediaPlaybackService : MediaLibraryService() {
         streamRetryJob?.cancel()
         streamRetryJob = mainScope.launch {
             kotlinx.coroutines.delay(delayMs)
+            // Re-read intent after the wait. The ladder goes up to 30s, and a
+            // user who paused during it has said what they want — resuming
+            // anyway is the "music started on its own" complaint. Checking only
+            // at schedule time was not enough: nothing cancels this job on
+            // pause, because the counter reset keys off STATE_READY, which
+            // never arrives while the player sits idle after the error.
+            if (!p.playWhenReady) {
+                Log.i(STOP_DIAG_TAG, "retry abandoned: paused during the wait")
+                return@launch
+            }
             Log.i(
                 STOP_DIAG_TAG,
                 "retrying stream (attempt $streamRetryAttempt after ${delayMs}ms)",
@@ -1059,18 +1120,31 @@ class MediaPlaybackService : MediaLibraryService() {
                     .add(sleepTimerCommand)
                     .add(toggleShuffleCommand)
                     .add(cycleRepeatCommand)
+                    .add(dropFromSourceCommand)
                     .build()
             } else {
                 connectionResult.availableSessionCommands
             }
-            // Explicitly grant shuffle + repeat to all connected controllers.
-            // Media3's defaults usually include them, but Android Auto only shows
-            // its shuffle/repeat overlay buttons when the controller advertises
-            // these commands — relying on defaults has bitten us in DHU before.
+            // Repeat is native, so grant COMMAND_SET_REPEAT_MODE — Android Auto
+            // only shows its repeat overlay when the controller advertises it
+            // (relying on defaults has bitten us in DHU before). Shuffle is
+            // app-level and exposed through our own [toggleShuffleCommand]
+            // custom button, so we deliberately do NOT grant the native
+            // COMMAND_SET_SHUFFLE_MODE to anyone: that would surface a second,
+            // dead shuffle control that fights our timeline reordering.
+            //
+            // Repeat stays native for our OWN controllers (phone VM sets
+            // c.repeatMode directly, widget too), but for Android Auto we drop
+            // COMMAND_SET_REPEAT_MODE so its native repeat overlay disappears
+            // and only our custom cycle-repeat button shows — no double control.
+            val ownController = pkg == applicationContext.packageName
             val availablePlayerCommands = connectionResult.availablePlayerCommands
                 .buildUpon()
-                .add(androidx.media3.common.Player.COMMAND_SET_SHUFFLE_MODE)
-                .add(androidx.media3.common.Player.COMMAND_SET_REPEAT_MODE)
+                .remove(androidx.media3.common.Player.COMMAND_SET_SHUFFLE_MODE)
+                .apply {
+                    if (ownController) add(androidx.media3.common.Player.COMMAND_SET_REPEAT_MODE)
+                    else remove(androidx.media3.common.Player.COMMAND_SET_REPEAT_MODE)
+                }
                 .build()
             return MediaSession.ConnectionResult.accept(
                 availableSessionCommands,
@@ -1151,11 +1225,13 @@ class MediaPlaybackService : MediaLibraryService() {
                     }
                 }
                 ACTION_TOGGLE_SHUFFLE -> {
-                    // Player must be touched on the application looper.
-                    withContext(Dispatchers.Main) {
-                        val p = session.player
-                        p.shuffleModeEnabled = !p.shuffleModeEnabled
-                    }
+                    // Shuffle is app-level and owned by [EndlessQueueController].
+                    // Flip the shared shuffle pref; the service's shuffle-pref
+                    // collector reorders the whole source pool on the app looper
+                    // and refreshes the AA button. Same path a phone toggle
+                    // takes, so behaviour is identical and works headless.
+                    val now = PlaybackPrefs.currentShuffle(applicationContext)
+                    PlaybackPrefs.setShuffle(applicationContext, !now)
                     SessionResult(SessionResult.RESULT_SUCCESS)
                 }
                 ACTION_CYCLE_REPEAT -> {
@@ -1166,6 +1242,15 @@ class MediaPlaybackService : MediaLibraryService() {
                             Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
                             else -> Player.REPEAT_MODE_OFF
                         }
+                    }
+                    SessionResult(SessionResult.RESULT_SUCCESS)
+                }
+                ACTION_DROP_FROM_SOURCE -> {
+                    val songId = args.getLong(EXTRA_DROP_SONG_ID, 0L)
+                        .takeIf { it != 0L }
+                        ?: customCommand.customExtras.getLong(EXTRA_DROP_SONG_ID, 0L)
+                    if (songId != 0L) {
+                        withContext(Dispatchers.Main) { endlessQueue?.dropFromSource(songId) }
                     }
                     SessionResult(SessionResult.RESULT_SUCCESS)
                 }
@@ -1468,13 +1553,29 @@ class MediaPlaybackService : MediaLibraryService() {
                     // without us rebuilding the queue. The MediaItems are
                     // the same instances the player already owns (URIs +
                     // KEY_USER_QUEUED extras preserved).
-                    LibraryTree.parseQueueLeaf(id)?.let { (pos, _) ->
+                    LibraryTree.parseQueueLeaf(id)?.let { (pos, sid) ->
                         val current = withContext(Dispatchers.Main) {
                             val p = mediaSession.player
                             (0 until p.mediaItemCount).map { p.getMediaItemAt(it) }
                         }
+                        // Identity first, position second. The leaf's pos was
+                        // baked when the Coda folder was browsed and the endless
+                        // engine prunes and refills underneath, so by the time
+                        // the driver taps a row that index can point at a
+                        // different song. The leaf also carries the song id, so
+                        // honour what was actually tapped and keep pos only as a
+                        // fallback — coerced, since an out-of-range start index
+                        // throws IllegalSeekPositionException.
+                        val bySongId = current.indexOfFirst {
+                            it.mediaId.removePrefix("song:").toLongOrNull() == sid
+                        }
+                        val startIdx = if (bySongId >= 0) {
+                            bySongId
+                        } else {
+                            pos.coerceIn(0, (current.size - 1).coerceAtLeast(0))
+                        }
                         return@future MediaSession.MediaItemsWithStartPosition(
-                            current, pos, C.TIME_UNSET
+                            current, startIdx, C.TIME_UNSET
                         )
                     }
 
@@ -1496,14 +1597,25 @@ class MediaPlaybackService : MediaLibraryService() {
                         )
                     }
 
+                    // Bare song leaf (search result, voice fallback) — the only
+                    // leaf with no browsing context of its own. Play it first,
+                    // then back it with a catalog page: a one-item timeline has
+                    // no next item and the endless engine won't refill from a
+                    // pool of one, so skip would stay dead until the user
+                    // started playback again from somewhere else.
                     if (id.startsWith("song:")) {
                         val songId = id.removePrefix("song:").toLongOrNull()
                         if (songId != null) {
-                            val mediaItem = mediaItems[0].buildUpon()
+                            val head = mediaItems[0].buildUpon()
                                 .setUri(Network.streamUrl(songId))
                                 .build()
+                            // Offline or backend down: fall back to the bare
+                            // item rather than failing the tap outright.
+                            val pool = runCatching { LibraryTree.allSongsQueue() }
+                                .getOrDefault(emptyList())
+                                .filterNot { it.mediaId == id }
                             return@future MediaSession.MediaItemsWithStartPosition(
-                                listOf(mediaItem), 0, startPositionMs
+                                listOf(head) + pool, 0, startPositionMs
                             )
                         }
                     }

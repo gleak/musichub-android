@@ -19,8 +19,11 @@ import com.mediaplayer.android.data.local.LocalMediaResolver
  * A song that AUTO-advances long before its known duration almost always means
  * the local/cached bytes are truncated (a background download killed mid-write,
  * a partial cache entry): ExoPlayer hits an early end-of-stream and moves on. We
- * log it (greppable tag) and drop the offending file's cache + offline copy so
- * the next play refetches clean bytes. This never fires for a Bluetooth phantom
+ * log it (greppable tag) and drop the offending file's cached bytes so the next
+ * play refetches clean ones — how far that goes is decided by
+ * [PhantomSkipPolicy.remedyFor], because deleting an offline copy that cannot
+ * be rebuilt on the current network would make things worse rather than better.
+ * This never fires for a Bluetooth phantom
  * NEXT key — that arrives as a controller SEEK, not
  * [Player.DISCONTINUITY_REASON_AUTO_TRANSITION] — so the presence/absence of the
  * log still cleanly distinguishes the two causes.
@@ -62,21 +65,23 @@ internal class PhantomSkipHealer(
         newPosition: Player.PositionInfo,
         reason: Int,
     ) {
-        if (reason != Player.DISCONTINUITY_REASON_AUTO_TRANSITION) return
-        val duration = currentDurationMs
-        if (duration <= 0L) return
-        val endedAt = oldPosition.positionMs
-        if (duration - endedAt < PREMATURE_EOS_MARGIN_MS) return
-        val item = oldPosition.mediaItem ?: return
-        val songId = item.mediaId.toLongOrNull() ?: return
+        val item = oldPosition.mediaItem
+        val detected = PhantomSkipPolicy.detect(
+            discontinuityReason = reason,
+            knownDurationMs = currentDurationMs,
+            endedAtMs = oldPosition.positionMs,
+            mediaId = item?.mediaId,
+        ) ?: return
+        val songId = detected.songId
         Log.w(
             PHANTOM_SKIP_TAG,
-            "Song $songId auto-advanced at ${endedAt}ms of ${duration}ms " +
-                "(${duration - endedAt}ms early) — likely truncated bytes, healing.",
+            "Song $songId auto-advanced at ${detected.endedAtMs}ms of " +
+                "${detected.durationMs}ms (${detected.earlyByMs}ms early) — " +
+                "likely truncated bytes, healing.",
         )
         // Local files (negative id) have no backend copy to refetch; skip.
         if (songId <= 0L || LocalMediaResolver.isLocal(songId)) return
-        heal(songId, item.mediaMetadata.title?.toString().orEmpty())
+        heal(songId, item?.mediaMetadata?.title?.toString().orEmpty())
     }
 
     /**
@@ -88,6 +93,17 @@ internal class PhantomSkipHealer(
     private fun heal(songId: Long, title: String) {
         val streamUrl = Network.streamUrl(songId)
         runCatching { PlayerCache.get(context).removeResource(streamUrl) }
+        if (PhantomSkipPolicy.remedyFor(canRedownloadNow()) ==
+            PhantomSkipRemedy.EVICT_STREAM_CACHE_ONLY
+        ) {
+            Log.w(
+                PHANTOM_SKIP_TAG,
+                "Song $songId: kept its offline copy — a replacement download " +
+                    "can't run on the current network, and deleting it now " +
+                    "would leave nothing to play.",
+            )
+            return
+        }
         runCatching {
             val wasDownloaded = DownloadRepository.isDownloaded(songId)
             DownloadRepository.remove(songId)
@@ -95,11 +111,18 @@ internal class PhantomSkipHealer(
         }
     }
 
+    /**
+     * Whether the download manager's own requirements (unmetered network by
+     * default) are satisfied at this instant. Asking Media3 rather than
+     * inspecting connectivity ourselves keeps this honest if the requirements
+     * are ever changed in [DownloadRoot] or by the download-over-wifi setting.
+     */
+    private fun canRedownloadNow(): Boolean = runCatching {
+        val manager = DownloadRoot.getDownloadManager(context)
+        manager.requirements.getNotMetRequirements(context) == 0
+    }.getOrDefault(false)
+
     private companion object {
         const val PHANTOM_SKIP_TAG = "PlaybackPhantomSkip"
-        // A song must AUTO-advance at least this far before its known duration
-        // to count as truncated. Wide enough to ignore gapless trims / rounding,
-        // tight enough to catch a real early-EOS.
-        const val PREMATURE_EOS_MARGIN_MS = 10_000L
     }
 }

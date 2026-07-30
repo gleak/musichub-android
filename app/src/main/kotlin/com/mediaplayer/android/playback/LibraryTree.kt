@@ -226,24 +226,42 @@ internal object LibraryTree {
     ): List<MediaItem>? = when {
         parentId == ROOT_ID -> rootChildren()
         parentId == ALL_SONGS_ID -> allSongs(page, pageSize)
-        parentId == PLAYLISTS_ID -> playlists()
-        parentId == MADE_FOR_YOU_ID -> madeForYou()
-        parentId == LIKED_ID -> liked()
-        parentId == RECENTS_ID -> recents()
+        parentId == PLAYLISTS_ID -> playlists().pageOf(page, pageSize)
+        parentId == MADE_FOR_YOU_ID -> madeForYou().pageOf(page, pageSize)
+        parentId == LIKED_ID -> liked(page, pageSize)
+        parentId == RECENTS_ID -> recents().pageOf(page, pageSize)
         parentId == ALBUMS_ID -> albums(page, pageSize)
         parentId == ARTISTS_ID -> artists(page, pageSize)
-        parentId == GENRES_ID -> genreTiles()
+        parentId == GENRES_ID -> genreTiles().pageOf(page, pageSize)
         parentId.startsWith(PLAYLIST_PREFIX) ->
             parentId.removePrefix(PLAYLIST_PREFIX).toLongOrNull()
-                ?.let { playlistSongs(it) }
+                ?.let { playlistSongs(it).pageOf(page, pageSize) }
         parentId.startsWith(ALBUM_PREFIX) ->
             decodeAlbumKey(parentId.removePrefix(ALBUM_PREFIX))
                 ?.let { (name, artist) -> albumSongs(name, artist) }
         parentId.startsWith(ARTIST_PREFIX) ->
             artistChildren(decodePart(parentId.removePrefix(ARTIST_PREFIX)))
         parentId.startsWith(GENRE_PREFIX) ->
-            genreSongs(parentId.removePrefix(GENRE_PREFIX))
+            genreSongs(parentId.removePrefix(GENRE_PREFIX), page, pageSize)
         else -> null
+    }
+
+    /**
+     * Client-side slice for folders the backend hands over whole (playlist
+     * contents, playlist/genre tiles, the recents shelf).
+     *
+     * Android Auto asks for successive pages as the driver scrolls; a branch
+     * that ignored the request answered page 1 with page 0's rows, so long
+     * lists repeated themselves and the tail was unreachable. Slicing keeps
+     * that honest without a second round trip, and past the end returns empty
+     * so the head unit stops asking. Callers build the leaf ids *before*
+     * slicing, so the positions baked into them stay absolute.
+     */
+    private fun List<MediaItem>.pageOf(page: Int, pageSize: Int): List<MediaItem> {
+        if (page <= 0) return take(pageSize)
+        val from = page * pageSize
+        if (from >= size) return emptyList()
+        return subList(from, minOf(from + pageSize, size)).toList()
     }
 
     /** Item lookup for resume / deep-link requests. */
@@ -461,6 +479,23 @@ internal object LibraryTree {
         Network.api.listSongs(query = null, genre = tag, page = 0, size = LIKED_LIMIT)
             .items.map { playableSong(it) }
 
+    /**
+     * Catalog page used as the backing pool for a bare `song:` leaf (search
+     * results and anywhere else a single song is handed to us without a
+     * browsing context). Every other leaf resolves to a real queue; without
+     * this one a song tap produced a one-item timeline, which has no next
+     * item and — since [EndlessQueueController] refuses to refill from a pool
+     * of fewer than two songs — could never grow one, leaving skip dead for
+     * the rest of the session.
+     *
+     * Deliberately a single [LIKED_LIMIT] page, like [genreQueue] and
+     * [likedQueue]: enough to seed an endless session, bounded so a large
+     * library can't turn one tap into an unbounded fetch.
+     */
+    suspend fun allSongsQueue(): List<MediaItem> =
+        Network.api.listSongs(query = null, genre = null, page = 0, size = LIKED_LIMIT)
+            .items.map { playableSong(it) }
+
     suspend fun likedQueue(): List<MediaItem> =
         Network.api.getLikedSongs(page = 0, size = LIKED_LIMIT).items.map { playableSong(it) }
 
@@ -469,14 +504,24 @@ internal object LibraryTree {
 
     // --- info placeholder ----------------------------------------------------
 
+    /**
+     * Empty-state row ("not signed in", "server unreachable", "no liked songs").
+     *
+     * Marked browsable rather than inert: Android Auto drops items that are
+     * neither browsable nor playable, so the explanation the user needed was
+     * silently removed and the folder just looked empty. Browsing into it
+     * returns nothing, which re-runs the query that produced the message —
+     * harmless, and the closest thing to a retry the browse API offers.
+     */
     fun infoItem(message: String): MediaItem =
         MediaItem.Builder()
             .setMediaId("info:${message.hashCode()}")
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(message)
-                    .setIsBrowsable(false)
+                    .setIsBrowsable(true)
                     .setIsPlayable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
                     .build()
             )
             .build()
@@ -640,30 +685,42 @@ internal object LibraryTree {
         )
     }
 
-    private suspend fun genreSongs(tag: String): List<MediaItem> {
+    /** Paged server-side; the old fixed first page capped a genre at [PAGE_SIZE] songs. */
+    private suspend fun genreSongs(tag: String, page: Int, pageSize: Int): List<MediaItem> {
         val resp = Network.api.listSongs(
             query = null,
             genre = tag,
-            page = 0,
-            size = PAGE_SIZE,
+            page = page,
+            size = pageSize,
         )
         val tagEnc = encodePart(tag)
-        return resp.items.mapIndexed { index, song ->
+        val list = resp.items.mapIndexed { index, song ->
             MediaItem.Builder()
-                .setMediaId("$GENRE_LEAF_PREFIX$tagEnc|$index|${song.id}")
-                .setMediaMetadata(song.asBrowseMetadata(playable = true))
-                .build()
-        }.ifEmpty { listOf(infoItem("Nessun brano per questo genere")) }
-    }
-
-    private suspend fun liked(): List<MediaItem> {
-        val page = Network.api.getLikedSongs(page = 0, size = LIKED_LIMIT)
-        val list = page.items.mapIndexed { index, song ->
-            MediaItem.Builder()
-                .setMediaId("$LIKED_LEAF_PREFIX$index|${song.id}")
+                .setMediaId("$GENRE_LEAF_PREFIX$tagEnc|${page * pageSize + index}|${song.id}")
                 .setMediaMetadata(song.asBrowseMetadata(playable = true))
                 .build()
         }
+        // Past the end, answer empty rather than an empty-state row: the head
+        // unit is paging, not looking at an empty genre.
+        if (list.isEmpty() && page > 0) return emptyList()
+        return list.ifEmpty { listOf(infoItem("Nessun brano per questo genere")) }
+    }
+
+    /**
+     * Paged server-side: the liked collection routinely outgrows a single page,
+     * and the old hard cap of [LIKED_LIMIT] made everything past it unreachable
+     * from the car. Leaf positions stay absolute so the expansion in
+     * `onSetMediaItems` still starts the queue at the right track.
+     */
+    private suspend fun liked(page: Int, pageSize: Int): List<MediaItem> {
+        val resp = Network.api.getLikedSongs(page = page, size = pageSize)
+        val list = resp.items.mapIndexed { index, song ->
+            MediaItem.Builder()
+                .setMediaId("$LIKED_LEAF_PREFIX${page * pageSize + index}|${song.id}")
+                .setMediaMetadata(song.asBrowseMetadata(playable = true))
+                .build()
+        }
+        if (list.isEmpty() && page > 0) return emptyList()
         return list.ifEmpty { listOf(infoItem("Ancora nessun brano preferito")) }
     }
 

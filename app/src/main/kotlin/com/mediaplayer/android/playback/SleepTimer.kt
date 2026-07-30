@@ -2,6 +2,7 @@ package com.mediaplayer.android.playback
 
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -50,12 +51,15 @@ class SleepTimer(private val scope: CoroutineScope) {
         cancel()
         if (minutes <= 0) return
         val totalMs = minutes * 60_000L
-        val endAtMs = System.currentTimeMillis() + totalMs
+        // Monotonic clock: wall time can jump backwards or forwards mid-timer
+        // (NITZ/NTP correction, or the user changing the clock), which made the
+        // timer either fire instantly or hang for the size of the offset.
+        val endAtMs = SystemClock.elapsedRealtime() + totalMs
         _isActive.value = true
         _remainingMs.value = totalMs
         job = scope.launch {
             while (true) {
-                val left = endAtMs - System.currentTimeMillis()
+                val left = endAtMs - SystemClock.elapsedRealtime()
                 if (left <= 0L) {
                     _isActive.value = false
                     _remainingMs.value = 0L
