@@ -48,7 +48,14 @@ class TrimViewModel(
     val inMs: StateFlow<Long> = _inMs.asStateFlow()
 
     private val _outMs = MutableStateFlow(
-        (totalDurationMs - DEFAULT_OUT_MARGIN_MS).coerceAtLeast(_inMs.value + MIN_WINDOW_MS)
+        (totalDurationMs - DEFAULT_OUT_MARGIN_MS)
+            .coerceAtLeast(_inMs.value + MIN_WINDOW_MS)
+            // On a track shorter than the minimum window the line above
+            // pushes OUT past the end of the audio, which is a position
+            // setOut would never allow and the editor cannot draw. Clamping
+            // here also lets save()'s too-short guard do its job instead of
+            // sending a region that runs off the end.
+            .coerceAtMost(totalDurationMs)
     )
     val outMs: StateFlow<Long> = _outMs.asStateFlow()
 
@@ -185,7 +192,7 @@ class TrimViewModel(
         }
     }
 
-    private companion object {
+    internal companion object {
         // Default trim picks a sensible 90 % window so the user lands inside
         // an editable region instead of having to drag both handles inward.
         const val DEFAULT_IN_MARGIN_MS = 5_000L
