@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mediaplayer.android.data.PlaylistRepository
 import com.mediaplayer.android.data.dto.ShareLinkDto
+import com.mediaplayer.android.ui.common.friendlyMessage
 import com.mediaplayer.android.ui.theme.LocalMHMono
 import com.mediaplayer.android.ui.theme.MHColors
 import kotlinx.coroutines.launch
@@ -83,7 +84,10 @@ fun PlaylistShareSheet(
         try {
             link = repository.createShare(playlistId)
         } catch (t: Throwable) {
-            error = t.message ?: "Impossibile creare il link di condivisione"
+            // friendlyMessage rather than t.message: offline used to put the
+            // raw exception text ("Unable to resolve host …") in front of the
+            // user, which is the one place in the app that still did that.
+            error = friendlyMessage(t)
         }
     }
 
@@ -202,7 +206,7 @@ fun PlaylistShareSheet(
                             error = null
                             revokedNotice = "Link revocato. Genera un nuovo link riaprendo questa schermata."
                         } catch (t: Throwable) {
-                            revokedNotice = t.message ?: "Impossibile revocare il link"
+                            revokedNotice = friendlyMessage(t)
                         } finally {
                             revoking = false
                         }
