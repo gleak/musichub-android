@@ -2,6 +2,7 @@ package com.mediaplayer.android.ui.player
 
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
@@ -68,6 +69,7 @@ class NowPlayingSheetTest : ScreenTest() {
         artist: String = "Nirvana",
         playing: Boolean = false,
         onDismiss: () -> Unit = {},
+        onTrim: (() -> Unit)? = null,
     ) {
         controller = mockk(relaxed = true)
         shuffleForcedOff = false
@@ -96,7 +98,7 @@ class NowPlayingSheetTest : ScreenTest() {
         PlayerConnection.publishForTest(controller)
         waitUntil { shuffleForcedOff }
 
-        setScreen { NowPlayingSheet(viewModel = vm, onDismiss = onDismiss) }
+        setScreen { NowPlayingSheet(viewModel = vm, onDismiss = onDismiss, onTrim = onTrim) }
         compose.waitForIdle()
     }
 
@@ -181,5 +183,130 @@ class NowPlayingSheetTest : ScreenTest() {
         compose.onNodeWithContentDescription("Comprimi").performClick()
 
         assertEquals(true, dismissed)
+    }
+
+    // ---------- sleep timer ----------
+
+    /**
+     * The timer is the one control that changes what the app does after the
+     * user has put the phone down, so the sheet has to say when it will act.
+     */
+    @Test
+    fun `the sleep timer sheet offers minutes and an end-of-track option`() {
+        sheet()
+
+        compose.onNodeWithContentDescription("Timer di sospensione").performClick()
+
+        awaitText("Timer di sospensione")
+        compose.onNodeWithText("Fine traccia").assertIsDisplayed()
+        // One MIN label per preset.
+        compose.onAllNodesWithText("MIN").onFirst().assertIsDisplayed()
+    }
+
+    @Test
+    fun `arming the end-of-track timer says what will happen`() {
+        sheet()
+        compose.onNodeWithContentDescription("Timer di sospensione").performClick()
+        awaitText("Fine traccia")
+
+        compose.onNodeWithText("Fine traccia").performClick()
+
+        awaitText("Si fermerà alla fine del brano corrente")
+    }
+
+    // ---------- the track menu ----------
+
+    @Test
+    fun `the track menu offers the actions that need a backend copy`() {
+        sheet()
+
+        compose.onNodeWithContentDescription("Altro").performClick()
+
+        awaitText("Aggiorna copia locale")
+        compose.onNodeWithText("Non consigliarmi questo brano").assertIsDisplayed()
+        compose.onNodeWithText("Non consigliarmi questo artista").assertIsDisplayed()
+        compose.onNodeWithText("Segnala brano sbagliato").assertIsDisplayed()
+    }
+
+    /**
+     * Refreshing the local copy re-downloads the audio, so it asks first
+     * rather than spending the user's data on a stray tap.
+     */
+    @Test
+    fun `refreshing the local copy asks first`() {
+        sheet()
+        compose.onNodeWithContentDescription("Altro").performClick()
+        awaitText("Aggiorna copia locale")
+
+        compose.onNodeWithText("Aggiorna copia locale").performClick()
+
+        awaitText("Aggiornare la copia locale?")
+    }
+
+    @Test
+    fun `cancelling the refresh does nothing`() {
+        sheet()
+        compose.onNodeWithContentDescription("Altro").performClick()
+        awaitText("Aggiorna copia locale")
+        compose.onNodeWithText("Aggiorna copia locale").performClick()
+        awaitText("Aggiornare la copia locale?")
+
+        compose.onNodeWithText("Annulla").performClick()
+        compose.waitForIdle()
+
+        compose.onAllNodesWithText("Aggiornare la copia locale?").assertCountEquals(0)
+    }
+
+    /** Trimming is only offered when the host screen can navigate to it. */
+    @Test
+    fun `the trim entry appears only when the caller supports it`() {
+        sheet()
+
+        compose.onNodeWithContentDescription("Altro").performClick()
+        awaitText("Aggiorna copia locale")
+
+        compose.onAllNodesWithText("Taglia traccia…").assertCountEquals(0)
+    }
+
+    @Test
+    fun `the trim entry hands back to the caller`() {
+        var trims = 0
+        sheet(onTrim = { trims++ })
+
+        compose.onNodeWithContentDescription("Altro").performClick()
+        awaitText("Taglia traccia…")
+        compose.onNodeWithText("Taglia traccia…").performClick()
+
+        assertEquals(1, trims)
+    }
+
+    // ---------- the surfaces the sheet opens ----------
+
+    @Test
+    fun `the queue button opens the queue`() {
+        sheet()
+
+        compose.onNodeWithContentDescription("Coda").performClick()
+
+        awaitText("In riproduzione", substring = true)
+    }
+
+    @Test
+    fun `the equalizer button opens the equalizer`() {
+        sheet()
+
+        compose.onNodeWithContentDescription("Equalizzatore").performClick()
+
+        awaitText("Equalizzatore non supportato su questo dispositivo")
+    }
+
+    @Test
+    fun `collapsing hands back to the caller`() {
+        var dismissed = 0
+        sheet(onDismiss = { dismissed++ })
+
+        compose.onNodeWithContentDescription("Comprimi").performClick()
+
+        assertEquals(1, dismissed)
     }
 }

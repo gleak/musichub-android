@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
@@ -13,11 +14,14 @@ import com.mediaplayer.android.MediaPlayerApp
 import com.mediaplayer.android.data.MediaPlayerApi
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.RecentsCache
+import com.mediaplayer.android.data.local.LocalTrack
+import com.mediaplayer.android.ui.song
 import com.mediaplayer.android.data.sync.EventQueue
 import com.mediaplayer.android.data.sync.ReadCache
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -268,5 +272,287 @@ class PlaybackViewModelTest {
         shadowMainLooper().idle()
 
         assertEquals(1L, viewModel.currentSong.value?.id)
+    }
+
+    /**
+     * Build the view model with no controller published. Every play entry
+     * point has to cope with this: it is the state during a cold launch and
+     * after a failed bind.
+     */
+    private fun viewModelWithoutController(): PlaybackViewModel = ViewModelProvider(
+        store,
+        ViewModelProvider.AndroidViewModelFactory.getInstance(
+            ApplicationProvider.getApplicationContext(),
+        ),
+    )[PlaybackViewModel::class.java]
+
+    private fun localTrack(
+        id: Long = 7L,
+        title: String = "Breed",
+        artist: String = "Nirvana",
+    ) = LocalTrack(
+        id = id,
+        uri = android.net.Uri.parse("content://media/external/audio/media/$id"),
+        title = title,
+        artist = artist,
+        album = "Nevermind",
+        durationMs = 200_000L,
+        albumId = null,
+        albumArtUri = null,
+        folderName = "Nirvana",
+        folderPath = "Music/Nirvana",
+        dateAddedMs = 0L,
+    )
+
+    // ---------- play entry points ----------
+
+    @Test
+    fun `playing a song hands it to the controller and starts it`() {
+        connect()
+
+        viewModel.play(song(1L, title = "Bohemian"))
+
+        verify { controller.setMediaItem(any()) }
+        verify { controller.prepare() }
+        verify { controller.playWhenReady = true }
+    }
+
+    /**
+     * A play tap before the controller has bound used to return silently,
+     * which is exactly what "I can't start any song" looked like in the car.
+     * It has to say something.
+     */
+    @Test
+    fun `playing before the player is ready reports it instead of doing nothing`() {
+        val vm = viewModelWithoutController()
+
+        vm.play(song(1L))
+
+        val error = vm.playbackError.value
+        assertEquals("PLAYER_NOT_READY", error?.errorCodeName)
+    }
+
+    @Test
+    fun `playing a playlist starts on the tapped track, in the original order`() {
+        connect()
+        val items = slot<List<MediaItem>>()
+        val index = slot<Int>()
+        every { controller.setMediaItems(capture(items), capture(index), any()) } returns Unit
+
+        viewModel.playPlaylist(
+            listOf(song(1L), song(2L), song(3L)),
+            startIndex = 2,
+        )
+
+        assertEquals(listOf("1", "2", "3"), items.captured.map { it.mediaId })
+        assertEquals(2, index.captured)
+    }
+
+    /** Shuffle is app-level, so shuffle-play turns the app's flag on. */
+    @Test
+    fun `shuffle-play turns shuffle on`() {
+        connect()
+
+        viewModel.playPlaylistShuffled(listOf(song(1L), song(2L)))
+
+        assertTrue(viewModel.shuffleEnabled.value)
+    }
+
+    @Test
+    fun `an empty playlist is not handed to the player at all`() {
+        connect()
+
+        viewModel.playPlaylist(emptyList())
+
+        verify(exactly = 0) { controller.setMediaItems(any(), any(), any()) }
+    }
+
+    @Test
+    fun `playing a playlist records where it came from`() {
+        connect()
+
+        viewModel.playPlaylist(listOf(song(1L)), sourceKey = "playlist:42")
+
+        assertEquals("playlist:42", viewModel.activeSourceKey.value)
+    }
+
+    /** A single song is not a collection, so it clears the source. */
+    @Test
+    fun `playing one song clears the active source`() {
+        connect()
+        viewModel.playPlaylist(listOf(song(1L)), sourceKey = "playlist:42")
+
+        viewModel.play(song(9L))
+
+        assertNull(viewModel.activeSourceKey.value)
+    }
+
+    // ---------- on-device tracks ----------
+
+    /**
+     * Local tracks are broadcast with a negated id so the playback layer can
+     * tell them from catalogue songs, whose ids are always positive.
+     */
+    @Test
+    fun `a local track is published under a negated id`() {
+        connect()
+        val item = slot<MediaItem>()
+        every { controller.setMediaItem(capture(item)) } returns Unit
+
+        viewModel.playLocal(localTrack(id = 7L))
+
+        assertEquals("-7", item.captured.mediaId)
+    }
+
+    @Test
+    fun `queueing a local track next inserts it after the current one`() {
+        connect(item("1"), item("2"))
+        every { controller.currentMediaItemIndex } returns 0
+        every { controller.mediaItemCount } returns 2
+        val index = slot<Int>()
+        every { controller.addMediaItem(capture(index), any()) } returns Unit
+
+        viewModel.playNextLocal(localTrack())
+
+        assertEquals(1, index.captured)
+    }
+
+    @Test
+    fun `playing a local library keeps the given order`() {
+        connect()
+        val items = slot<List<MediaItem>>()
+        every { controller.setMediaItems(capture(items), any(), any()) } returns Unit
+
+        viewModel.playLocalAll(
+            listOf(localTrack(1L, "Breed"), localTrack(2L, "Lithium")),
+            startIndex = 1,
+        )
+
+        assertEquals(listOf("-1", "-2"), items.captured.map { it.mediaId })
+    }
+
+    @Test
+    fun `an empty local library is not handed to the player`() {
+        connect()
+
+        viewModel.playLocalAll(emptyList())
+
+        verify(exactly = 0) { controller.setMediaItems(any(), any(), any()) }
+    }
+
+    // ---------- sleep timer ----------
+
+    @Test
+    fun `arming the sleep timer sets the remaining time`() {
+        connect()
+
+        viewModel.setSleepTimer(15)
+
+        assertTrue(viewModel.sleepTimerActive.value)
+        assertEquals(15 * 60_000L, viewModel.sleepTimerRemainingMs.value)
+        assertFalse(viewModel.sleepTimerEndOfTrack.value)
+    }
+
+    @Test
+    fun `the end-of-track timer has no countdown`() {
+        connect()
+
+        viewModel.setEndOfTrackSleepTimer()
+
+        assertTrue(viewModel.sleepTimerActive.value)
+        assertTrue(viewModel.sleepTimerEndOfTrack.value)
+        assertEquals(0L, viewModel.sleepTimerRemainingMs.value)
+    }
+
+    @Test
+    fun `cancelling the sleep timer clears every part of it`() {
+        connect()
+        viewModel.setSleepTimer(15)
+
+        viewModel.cancelSleepTimer()
+
+        assertFalse(viewModel.sleepTimerActive.value)
+        assertFalse(viewModel.sleepTimerEndOfTrack.value)
+        assertEquals(0L, viewModel.sleepTimerRemainingMs.value)
+    }
+
+    @Test
+    fun `arming an end-of-track timer replaces a minute timer`() {
+        connect()
+        viewModel.setSleepTimer(15)
+
+        viewModel.setEndOfTrackSleepTimer()
+
+        assertEquals(0L, viewModel.sleepTimerRemainingMs.value)
+        assertTrue(viewModel.sleepTimerEndOfTrack.value)
+    }
+
+    // ---------- playback errors ----------
+
+    /**
+     * A failure has to say which song and why. The older surface was a toast
+     * that said neither and then disappeared on its own.
+     */
+    @Test
+    fun `a playback failure names the track and the reason`() {
+        connect(item("42", title = "Breed"))
+
+        listener.onPlayerError(
+            PlaybackException(
+                "boom",
+                null,
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+            ),
+        )
+        shadowMainLooper().idle()
+
+        val error = viewModel.playbackError.value
+        assertEquals("Breed", error?.songTitle)
+        assertEquals(
+            "Nessuna connessione di rete o server irraggiungibile.",
+            error?.reason,
+        )
+    }
+
+    @Test
+    fun `a rejected stream is reported as a server problem`() {
+        connect(item("42", title = "Breed"))
+
+        listener.onPlayerError(
+            PlaybackException("boom", null, PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS),
+        )
+        shadowMainLooper().idle()
+
+        assertEquals(
+            "Il server ha rifiutato la richiesta dello stream (HTTP error).",
+            viewModel.playbackError.value?.reason,
+        )
+    }
+
+    @Test
+    fun `dismissing the error clears it`() {
+        connect(item("42"))
+        listener.onPlayerError(
+            PlaybackException("boom", null, PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS),
+        )
+        shadowMainLooper().idle()
+
+        viewModel.dismissPlaybackError()
+
+        assertNull(viewModel.playbackError.value)
+    }
+
+    // ---------- alarm export ----------
+
+    /** There is no backend copy of an on-device file to export. */
+    @Test
+    fun `a local track cannot be saved as an alarm sound`() {
+        connect(item("-7", title = "Breed"))
+
+        viewModel.saveCurrentAsAlarmSound()
+        shadowMainLooper().idle()
+
+        val state = viewModel.alarmExportState.value
+        assertTrue("was $state", state is PlaybackViewModel.AlarmExportState.Failure)
     }
 }
