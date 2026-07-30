@@ -35,12 +35,14 @@ class HomeScreenTest : ScreenTest() {
         onFindClick: () -> Unit = {},
         onSpotifyImport: () -> Unit = {},
         onLocalLibraryClick: () -> Unit = {},
+        onArtistClick: (String) -> Unit = {},
     ) {
         val vm = HomeViewModel()
         setScreen {
             HomeScreen(
                 onSongClick = onSongClick,
                 onPlaylistClick = onPlaylistClick,
+                onArtistClick = onArtistClick,
                 onLikedClick = onLikedClick,
                 onFindClick = onFindClick,
                 onSpotifyImport = onSpotifyImport,
@@ -145,5 +147,119 @@ class HomeScreenTest : ScreenTest() {
         compose.onAllNodesWithText("Brani che mi piacciono").onFirst().performClick()
 
         assertEquals(true, liked)
+    }
+
+    // ---------- the filter chips ----------
+
+    /**
+     * Home is four views over the same caches. Each filter has its own empty
+     * state, because "no playlists" and "nothing played yet" call for
+     * different things from the user.
+     */
+    @Test
+    fun `the music filter lists recently played songs`() {
+        stub(recents = listOf(song(1L, title = "Breed"), song(2L, title = "Lithium")))
+
+        screen()
+        awaitText("Musica")
+        compose.onNodeWithText("Musica").performClick()
+
+        awaitText("Brani recenti")
+        compose.onAllNodesWithText("Breed").onFirst().assertIsDisplayed()
+    }
+
+    @Test
+    fun `the music filter with nothing played says how to fill it`() {
+        stub()
+
+        screen()
+        compose.onNodeWithText("Musica").performClick()
+
+        awaitText("Nessun brano recente", substring = true)
+    }
+
+    @Test
+    fun `the playlists filter separates the generated ones from your own`() {
+        coEvery { api.recentSongs(any()) } returns emptyList()
+        coEvery { api.listPlaylists(kind = "auto") } returns
+            listOf(playlist(7L, name = "Discover Daily", kind = "auto"))
+        coEvery { api.listPlaylists(kind = null) } returns listOf(playlist(1L, name = "Corsa"))
+
+        screen()
+        compose.onNodeWithText("Playlist").performClick()
+
+        awaitText("Le tue playlist di oggi")
+        compose.onAllNodesWithText("Discover Daily").onFirst().assertIsDisplayed()
+        compose.onAllNodesWithText("Corsa").onFirst().assertIsDisplayed()
+    }
+
+    @Test
+    fun `the playlists filter with none says so`() {
+        stub()
+
+        screen()
+        compose.onNodeWithText("Playlist").performClick()
+
+        awaitText("Nessuna playlist", substring = true)
+    }
+
+    @Test
+    fun `tapping a playlist row reports it`() {
+        coEvery { api.recentSongs(any()) } returns emptyList()
+        coEvery { api.listPlaylists(kind = "auto") } returns emptyList()
+        coEvery { api.listPlaylists(kind = null) } returns listOf(playlist(1L, name = "Corsa"))
+        var opened: PlaylistDto? = null
+
+        screen(onPlaylistClick = { opened = it })
+        compose.onNodeWithText("Playlist").performClick()
+        awaitText("Le tue playlist")
+        compose.onAllNodesWithText("Corsa").onFirst().performClick()
+
+        assertEquals(1L, opened?.id)
+    }
+
+    /** The artist list is derived from what has been played, not fetched. */
+    @Test
+    fun `the artists filter lists who you have been listening to`() {
+        stub(recents = listOf(song(1L, artist = "Nirvana"), song(2L, artist = "Queen")))
+
+        screen()
+        compose.onNodeWithText("Artisti").performClick()
+
+        awaitText("Artisti", substring = true)
+        compose.onAllNodesWithText("Nirvana").onFirst().assertIsDisplayed()
+    }
+
+    @Test
+    fun `the artists filter with nothing played says how to fill it`() {
+        stub()
+
+        screen()
+        compose.onNodeWithText("Artisti").performClick()
+
+        awaitText("Nessun artista", substring = true)
+    }
+
+    @Test
+    fun `tapping an artist row reports the name`() {
+        stub(recents = listOf(song(1L, artist = "Nirvana")))
+        var opened: String? = null
+
+        screen(onArtistClick = { opened = it })
+        compose.onNodeWithText("Artisti").performClick()
+        awaitText("Nirvana")
+        compose.onAllNodesWithText("Nirvana").onFirst().performClick()
+
+        assertEquals("Nirvana", opened)
+    }
+
+    @Test
+    fun `the liked shortcut is offered under the music filter too`() {
+        stub()
+
+        screen()
+        compose.onNodeWithText("Musica").performClick()
+
+        awaitText("Brani che mi piacciono")
     }
 }

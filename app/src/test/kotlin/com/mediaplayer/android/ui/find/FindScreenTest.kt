@@ -155,4 +155,93 @@ class FindScreenTest : ScreenTest() {
 
         assertEquals(true, backed)
     }
+
+    // ---------- the terminal states ----------
+
+    /**
+     * The end of a request is the only screen that tells the user whether
+     * the track they asked for is now in their library, and the three
+     * outcomes need to read differently — one is done, one is half done,
+     * one needs another go.
+     */
+    /**
+     * Drive a request all the way to [status]. It is created in flight and
+     * reaches its terminal state through the poll, which is the only path a
+     * real one takes — a request that comes back already failed from the
+     * create call is a different branch (an error, not a terminal screen).
+     */
+    private fun terminal(status: RequestStatus, query: String = "nirvana") {
+        coEvery { api.listRequests() } returns emptyList()
+        coEvery { api.createRequest(any()) } returns request(status, query = query)
+        coEvery { api.getRequest(1L) } returns request(status, query = query)
+        screen()
+        searchFor(query)
+    }
+
+    @Test
+    fun `a finished import says the track is in the library`() {
+        terminal(RequestStatus.IMPORTED)
+
+        awaitText("Aggiunto alla libreria")
+        compose.onNodeWithText("Apri brano").assertIsDisplayed()
+        compose.onNodeWithText("Trova un altro").assertIsDisplayed()
+    }
+
+    /** Audio landed, video didn't — done enough to play, not silently. */
+    @Test
+    fun `a partial import says what is missing`() {
+        terminal(RequestStatus.IMPORTED_PARTIAL)
+
+        awaitText("Importato · parzialmente")
+        compose.onNodeWithText("Solo audio recuperato · video saltato").assertIsDisplayed()
+    }
+
+    /**
+     * A search the backend fails outright never becomes a terminal screen —
+     * it is an error with the backend's own reason on it, so the user knows
+     * whether to retype or to try later.
+     */
+    @Test
+    fun `a search the backend refuses reports its reason`() {
+        coEvery { api.listRequests() } returns emptyList()
+        coEvery { api.createRequest(any()) } returns
+            request(RequestStatus.FAILED, error = "nothing on YouTube for that")
+
+        screen()
+        searchFor("zzzz")
+
+        awaitText("nothing on YouTube for that", substring = true)
+    }
+
+    @Test
+    fun `the terminal screen quotes what was searched for`() {
+        terminal(RequestStatus.IMPORTED, query = "nirvana breed")
+
+        awaitText("Aggiunto alla libreria")
+        compose.onNodeWithText("\"nirvana breed\"").assertIsDisplayed()
+    }
+
+    @Test
+    fun `finding another clears the request and returns to the search`() {
+        terminal(RequestStatus.IMPORTED)
+        awaitText("Aggiunto alla libreria")
+        compose.onNodeWithText("Trova un altro").performClick()
+
+        awaitText("Trova nuovi brani")
+    }
+
+    @Test
+    fun `leaving a terminal screen hands back to the caller`() {
+        var backs = 0
+        coEvery { api.listRequests() } returns emptyList()
+        coEvery { api.createRequest(any()) } returns request(RequestStatus.IMPORTED)
+        coEvery { api.getRequest(1L) } returns request(RequestStatus.IMPORTED)
+        screen(onBack = { backs++ })
+        searchFor("nirvana")
+        awaitText("Aggiunto alla libreria")
+        compose.onNodeWithText("Trova un altro").performClick()
+        compose.waitForIdle()
+
+        assertEquals(1, backs)
+    }
 }
