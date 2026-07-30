@@ -26,6 +26,9 @@ object WidgetTargetLauncher {
 
     suspend fun launch(kind: QuickLaunchKind, playbackVm: PlaybackViewModel) {
         runCatching {
+            // A cold-start tap can beat the async MediaController binding; wait
+            // for it so playback actually starts instead of silently no-op'ing.
+            if (!playbackVm.awaitControllerReady()) return
             when (kind) {
                 QuickLaunchKind.LIKED -> launchLiked(playbackVm)
                 else -> launchAutoPlaylist(kind, playbackVm)

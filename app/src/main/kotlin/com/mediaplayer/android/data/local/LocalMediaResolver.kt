@@ -24,6 +24,12 @@ object LocalMediaResolver {
     }
 
     fun replaceAll(tracks: Collection<LocalTrack>) {
+        // Don't clobber a populated bridge with an empty scan: MediaStore
+        // returns zero rows transiently during a reindex (reboot, SD remount,
+        // permission re-grant), and wiping the map mid-playback makes a queued
+        // local track unresolvable → SongDto.toMediaItem throws. Mirrors the
+        // repository's own "don't clobber a good cache with an empty scan".
+        if (tracks.isEmpty() && map.isNotEmpty()) return
         map.clear()
         registerAll(tracks)
     }

@@ -229,6 +229,17 @@ object PlaylistsCache {
         return out
     }
 
+    /** Reset to empty so the next signed-in user starts clean after
+     *  "Cambia account". */
+    suspend fun clear() {
+        mutex.withLock {
+            _playlists.value = emptyList()
+            _details.value = emptyMap()
+            _listError.value = null
+            _initialLoading.value = true
+        }
+    }
+
     /** Caller must hold [mutex]. */
     private fun putDetail(detail: PlaylistDetailDto) {
         _details.value = _details.value + (detail.id to detail)

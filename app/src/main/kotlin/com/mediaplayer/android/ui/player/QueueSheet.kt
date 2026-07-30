@@ -149,7 +149,7 @@ fun QueueSheet(
                             item(key = "now-${current.index}-${current.song.id}") {
                                 QueueRow(
                                     entry = current,
-                                    onClick = { viewModel.skipToQueueItem(current.index) },
+                                    onClick = { viewModel.skipToQueueItem(current.song.id, current.index) },
                                     onMore = { kebab.open(current.song) },
                                     onRemove = null,
                                     highlight = true,
@@ -168,9 +168,9 @@ fun QueueSheet(
                             items(items = userAhead, key = { "uq-${it.index}-${it.song.id}" }) { entry ->
                                 QueueRow(
                                     entry = entry,
-                                    onClick = { viewModel.skipToQueueItem(entry.index) },
+                                    onClick = { viewModel.skipToQueueItem(entry.song.id, entry.index) },
                                     onMore = { kebab.open(entry.song) },
-                                    onRemove = { viewModel.removeFromQueue(entry.index) },
+                                    onRemove = { viewModel.removeFromQueue(entry.song.id, entry.index) },
                                     highlight = false,
                                 )
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -187,9 +187,9 @@ fun QueueSheet(
                             items(items = sourceAhead, key = { "src-${it.index}-${it.song.id}" }) { entry ->
                                 QueueRow(
                                     entry = entry,
-                                    onClick = { viewModel.skipToQueueItem(entry.index) },
+                                    onClick = { viewModel.skipToQueueItem(entry.song.id, entry.index) },
                                     onMore = { kebab.open(entry.song) },
-                                    onRemove = { viewModel.removeFromQueue(entry.index) },
+                                    onRemove = { viewModel.removeFromQueue(entry.song.id, entry.index) },
                                     highlight = false,
                                 )
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

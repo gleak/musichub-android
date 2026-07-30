@@ -87,6 +87,10 @@ fun AddToPlaylistSheet(
     songId: Long,
     songArtist: String = "",
     songHasCoverArt: Boolean = true,
+    // Backend-only affordances (like toggle + the "add to playlist" list) are
+    // meaningless for local, negative-id tracks and would hit the backend with
+    // an id it doesn't know. Callers set this false for local songs.
+    allowBackendActions: Boolean = true,
     onPlayNext: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
     onPlaySimilar: (() -> Unit)? = null,
@@ -181,30 +185,32 @@ fun AddToPlaylistSheet(
             // every kebab surface (artist/album/playlist/queue/liked/search)
             // can like-toggle the song without a separate plumbing per
             // screen. The other rows still gate on caller-supplied callbacks.
-            LaunchedEffect(songId) { LikedSongsCache.prime(listOf(songId)) }
-            val likedIds by LikedSongsCache.likedIds.collectAsStateWithLifecycle()
-            val isLiked = songId in likedIds
-            Spacer(Modifier.size(8.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            QueueActionRow(
-                label = if (isLiked) "Rimuovi dai preferiti" else "Aggiungi ai preferiti",
-                icon = {
-                    Icon(
-                        imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                        contentDescription = null,
-                        tint = if (isLiked) MaterialTheme.colorScheme.primary
-                               else MaterialTheme.colorScheme.onSurface,
-                    )
-                },
-                onClick = {
-                    val label = listOfNotNull(
-                        songTitle.takeIf { it.isNotBlank() },
-                        songArtist.takeIf { it.isNotBlank() },
-                    ).joinToString(" — ").ifBlank { null }
-                    LikedSongsCache.toggle(songId, label)
-                    onDismiss()
-                },
-            )
+            if (allowBackendActions) {
+                LaunchedEffect(songId) { LikedSongsCache.prime(listOf(songId)) }
+                val likedIds by LikedSongsCache.likedIds.collectAsStateWithLifecycle()
+                val isLiked = songId in likedIds
+                Spacer(Modifier.size(8.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                QueueActionRow(
+                    label = if (isLiked) "Rimuovi dai preferiti" else "Aggiungi ai preferiti",
+                    icon = {
+                        Icon(
+                            imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                            contentDescription = null,
+                            tint = if (isLiked) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurface,
+                        )
+                    },
+                    onClick = {
+                        val label = listOfNotNull(
+                            songTitle.takeIf { it.isNotBlank() },
+                            songArtist.takeIf { it.isNotBlank() },
+                        ).joinToString(" — ").ifBlank { null }
+                        LikedSongsCache.toggle(songId, label)
+                        onDismiss()
+                    },
+                )
+            }
             val anyAux = onPlayNext != null || onAddToQueue != null ||
                 onPlaySimilar != null || onDownload != null || onDislikeSong != null ||
                 onDislikeArtist != null || onFlagWrong != null
@@ -297,6 +303,7 @@ fun AddToPlaylistSheet(
                     )
                 }
             }
+            if (allowBackendActions) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Search-by-playlist-name field.
@@ -413,6 +420,7 @@ fun AddToPlaylistSheet(
                     )
                 }
             }
+            } // allowBackendActions
         }
     }
 

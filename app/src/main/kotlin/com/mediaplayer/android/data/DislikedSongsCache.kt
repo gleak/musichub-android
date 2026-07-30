@@ -37,6 +37,10 @@ object DislikedSongsCache {
     private val resolveMutex = Mutex()
     private var artistsResolved = false
 
+    /** Ids toggled since the last primeSongs started — held out of the prime
+     *  commit so a concurrent optimistic dislike isn't clobbered. */
+    private val dirtySongIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+
     fun isSongDisliked(songId: Long): Boolean = songId in _dislikedSongIds.value
 
     fun isArtistDisliked(artist: String): Boolean =
@@ -48,6 +52,7 @@ object DislikedSongsCache {
         if (isSongDisliked(songId)) return
         _dislikedSongIds.value = _dislikedSongIds.value + songId
         resolvedSongIds += songId
+        dirtySongIds += songId
         scope.launch {
             try {
                 repository.dislikeSong(songId, displayLabel = displayLabel)
@@ -63,6 +68,7 @@ object DislikedSongsCache {
         if (!isSongDisliked(songId)) return
         _dislikedSongIds.value = _dislikedSongIds.value - songId
         resolvedSongIds += songId
+        dirtySongIds += songId
         scope.launch {
             try {
                 repository.undislikeSong(songId, displayLabel = displayLabel)
@@ -109,6 +115,21 @@ object DislikedSongsCache {
             if (disliked) _dislikedSongIds.value + songId
             else _dislikedSongIds.value - songId
         resolvedSongIds += songId
+        dirtySongIds += songId
+    }
+
+    /** Reset on sign-out so the next user starts with a clean negative-signal
+     *  set (both songs and artists), re-resolved from their own account. */
+    fun clear() {
+        _dislikedSongIds.value = emptySet()
+        _dislikedArtists.value = emptySet()
+        dirtySongIds.clear()
+        scope.launch {
+            resolveMutex.withLock {
+                resolvedSongIds.clear()
+                artistsResolved = false
+            }
+        }
     }
 
     /**
@@ -127,6 +148,7 @@ object DislikedSongsCache {
             ids.filter { it !in resolvedSongIds && it > 0L }
         }
         if (unresolved.isEmpty()) return
+        unresolved.forEach { dirtySongIds.remove(it) }
         val merged = mutableSetOf<Long>()
         for (chunk in unresolved.chunked(STATUS_CHUNK_SIZE)) {
             val resolved = try {
@@ -137,9 +159,12 @@ object DislikedSongsCache {
             merged += resolved
         }
         resolveMutex.withLock {
-            _dislikedSongIds.value =
-                (_dislikedSongIds.value - unresolved.toSet()) + merged
-            resolvedSongIds += unresolved
+            // Hold out ids toggled while the status call was in flight so an
+            // optimistic dislike isn't reverted by a stale snapshot.
+            val apply = unresolved.filterNot { it in dirtySongIds }.toSet()
+            val add = merged.filter { it in apply }
+            _dislikedSongIds.value = (_dislikedSongIds.value - apply) + add
+            resolvedSongIds += apply
         }
     }
 

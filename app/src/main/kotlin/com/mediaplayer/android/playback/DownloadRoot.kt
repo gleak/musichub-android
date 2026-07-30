@@ -39,8 +39,7 @@ object DownloadRoot {
         _cache?.let { return it }
         val app = context.applicationContext
         val dir = File(app.filesDir, DOWNLOAD_DIR).apply { mkdirs() }
-        val db = StandaloneDatabaseProvider(app)
-        return SimpleCache(dir, NoOpCacheEvictor(), db).also { _cache = it }
+        return SimpleCache(dir, NoOpCacheEvictor(), ExoDatabase.get(app)).also { _cache = it }
     }
 
     @Synchronized
@@ -49,7 +48,7 @@ object DownloadRoot {
         val app = context.applicationContext
         return DownloadManager(
             app,
-            StandaloneDatabaseProvider(app),
+            ExoDatabase.get(app),
             getDownloadCache(app),
             OkHttpDataSource.Factory(Network.okHttp),
             Executors.newFixedThreadPool(DOWNLOAD_THREADS),

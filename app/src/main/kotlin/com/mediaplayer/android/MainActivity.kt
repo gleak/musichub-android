@@ -1003,9 +1003,11 @@ private fun NavHostBody(
                     playlistId = id,
                     onBack = { navController.popBackStack() },
                     onPlayFromIndex = { songs, index ->
-                        playbackVm.playPlaylist(songs, index)
+                        playbackVm.playPlaylist(songs, index, sourceKey = "playlist:$id")
                     },
-                    onShufflePlay = playbackVm::playPlaylistShuffled,
+                    onShufflePlay = { songs ->
+                        playbackVm.playPlaylistShuffled(songs, sourceKey = "playlist:$id")
+                    },
                     onOpenMembers = { pid, isOwner ->
                         navController.navigate(Routes.playlistMembers(pid, isOwner))
                     },
@@ -1036,6 +1038,7 @@ private fun NavHostBody(
                     albumArtist = artist,
                     onBack = { navController.popBackStack() },
                     onPlayFromIndex = { songs, index -> playbackVm.playPlaylist(songs, index) },
+                    onShufflePlay = playbackVm::playPlaylistShuffled,
                     onArtistClick = { artistName ->
                         navController.navigate(Routes.artistDetail(artistName))
                     },
@@ -1060,6 +1063,7 @@ private fun NavHostBody(
                     artistName = name,
                     onBack = { navController.popBackStack() },
                     onPlayFromIndex = { songs, index -> playbackVm.playPlaylist(songs, index) },
+                    onShufflePlay = playbackVm::playPlaylistShuffled,
                     onAlbumClick = { albumName, albumArtist ->
                         navController.navigate(Routes.albumDetail(albumName, albumArtist))
                     },

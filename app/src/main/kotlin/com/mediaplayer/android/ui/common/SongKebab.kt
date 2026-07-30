@@ -78,6 +78,10 @@ fun SongKebabSheet(
     onAdded: (playlistName: String, song: SongDto) -> Unit = { _, _ -> },
 ) {
     val song = state.current ?: return
+    // Local (negative-id) tracks have no backend record: radio, dislike,
+    // add-to-playlist and flag-wrong all key on positive ids and would 404 /
+    // pollute. Hide those affordances for them.
+    val isLocal = com.mediaplayer.android.data.local.LocalMediaResolver.isLocal(song.id)
     val songRadio = LocalSongRadio.current
     val dislike = rememberDislikeActions(song.id, song.artist)
     val standardFlagWrong = rememberFlagWrongAction(
@@ -94,13 +98,14 @@ fun SongKebabSheet(
         songId = song.id,
         songArtist = song.artist,
         songHasCoverArt = song.hasCoverArt,
+        allowBackendActions = !isLocal,
         onPlayNext = onPlayNext?.let { cb -> { cb(song); state.close() } },
         onAddToQueue = onAddToQueue?.let { cb -> { cb(song); state.close() } },
-        onPlaySimilar = { songRadio(song); state.close() },
+        onPlaySimilar = if (isLocal) null else ({ songRadio(song); state.close() }),
         onDownload = onDownload?.let { cb -> { cb(song); state.close() } },
-        onDislikeSong = dislike.song(),
-        onDislikeArtist = dislike.artist(),
-        onFlagWrong = flagWrong,
+        onDislikeSong = if (isLocal) null else dislike.song(),
+        onDislikeArtist = if (isLocal) null else dislike.artist(),
+        onFlagWrong = if (isLocal) null else flagWrong,
         onDismiss = { state.close() },
         onAdded = { name -> onAdded(name, song); state.close() },
     )

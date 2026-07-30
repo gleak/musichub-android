@@ -38,6 +38,11 @@ class LikedViewModel(
 
     private var nextPage: Int = 0
 
+    /** Fetch the entire liked collection for a "play/shuffle all" tap.
+     *  Returns null on failure so the caller can fall back to the loaded pages. */
+    suspend fun fetchAllLiked(): List<SongDto>? =
+        runCatching { repository.allLikedSongs() }.getOrNull()
+
     init { refresh() }
 
     fun refresh() {
@@ -84,7 +89,11 @@ class LikedViewModel(
         viewModelScope.launch {
             try {
                 val page = repository.likedSongs(page = pageToLoad, size = PAGE_SIZE)
-                val merged = current.songs + page.items
+                // De-dupe on id: offset pagination over a set that shifts
+                // between page fetches (a like added/removed server-side) can
+                // repeat a row, and the LazyColumn keys on song.id — a
+                // duplicate key throws and crashes the screen.
+                val merged = (current.songs + page.items).distinctBy { it.id }
                 nextPage = pageToLoad + 1
                 _state.value = LikedUiState.Success(
                     songs = merged,

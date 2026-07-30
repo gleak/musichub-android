@@ -79,6 +79,14 @@ interface MediaPlayerApi {
         @Query("size") size: Int = 20,
     ): PageResponse<SongDto>
 
+    /** Every song matching q/genre in one shot (server-capped) — backs the
+     *  genre "Riproduci tutti" / "Casuale" over the whole collection. */
+    @GET("api/songs/all")
+    suspend fun getAllSongs(
+        @Query("q") query: String? = null,
+        @Query("genre") genre: String? = null,
+    ): List<SongDto>
+
     /** Re-download a corrupted song from its YouTube source — id stays stable. */
     @POST("api/songs/{id}/redownload")
     suspend fun redownloadSong(@Path("id") id: Long): SongDto
@@ -301,6 +309,10 @@ interface MediaPlayerApi {
         @Query("page") page: Int = 0,
         @Query("size") size: Int = 20,
     ): PageResponse<SongDto>
+
+    /** Every liked song in one shot — backs "Shuffle all liked". */
+    @GET("api/liked/all")
+    suspend fun getAllLikedSongs(): List<SongDto>
 
     @POST("api/liked/{songId}")
     suspend fun likeSong(@Path("songId") songId: Long)

@@ -70,6 +70,16 @@ class QuickLaunchConfigActivity : ComponentActivity() {
             return
         }
 
+        // This activity is exported (APPWIDGET_CONFIGURE requires it), so a
+        // third-party app could launch it with an arbitrary id and overwrite
+        // another widget instance's tiles. Only proceed for an id that actually
+        // belongs to OUR QuickLaunch widget provider.
+        val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)
+        if (info?.provider?.className != QuickLaunchWidgetReceiver::class.java.name) {
+            finish()
+            return
+        }
+
         setContent {
             MediaPlayerTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {

@@ -41,7 +41,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -117,6 +119,7 @@ fun LikedScreen(
                     downloadedIds = downloadedIds,
                     onPlayFromIndex = onPlayFromIndex,
                     onShufflePlay = onShufflePlay,
+                    fetchAll = viewModel::fetchAllLiked,
                     onLongPress = { song -> kebab.open(song) },
                     onLoadMore = viewModel::loadMore,
                 )
@@ -140,9 +143,11 @@ private fun LikedBody(
     downloadedIds: Set<Long>,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
     onShufflePlay: (List<SongDto>) -> Unit,
+    fetchAll: suspend () -> List<SongDto>?,
     onLongPress: (SongDto) -> Unit,
     onLoadMore: () -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     // Mark every loaded song as liked in the shared cache so each row's heart
     // renders filled instantly (no per-row server round-trip via prime()).
     LaunchedEffect(songs) {
@@ -173,8 +178,22 @@ private fun LikedBody(
                 fallbackGradient = MHColors.LikedGradientStart to MHColors.LikedGradientEnd,
                 eyebrow = "LIBRERIA · MI PIACE",
                 subtitleStyle = com.mediaplayer.android.ui.common.SubtitleStyle.Mono,
-                onPlay = { if (visibleSongs.isNotEmpty()) onPlayFromIndex(visibleSongs, 0) },
-                onShuffle = { if (visibleSongs.isNotEmpty()) onShufflePlay(visibleSongs) },
+                // Play/Shuffle the WHOLE liked collection: if more pages remain
+                // unloaded, fetch the full set first (fall back to what's loaded
+                // on failure) so shuffle spans everything, not just the pages
+                // the user scrolled.
+                onPlay = {
+                    if (visibleSongs.isNotEmpty()) scope.launch {
+                        val full = if (endReached) visibleSongs else (fetchAll() ?: visibleSongs)
+                        if (full.isNotEmpty()) onPlayFromIndex(full, 0)
+                    }
+                },
+                onShuffle = {
+                    if (visibleSongs.isNotEmpty()) scope.launch {
+                        val full = if (endReached) visibleSongs else (fetchAll() ?: visibleSongs)
+                        if (full.isNotEmpty()) onShufflePlay(full)
+                    }
+                },
                 playEnabled = visibleSongs.isNotEmpty(),
                 extraActions = {
                     if (visibleSongs.isNotEmpty()) {

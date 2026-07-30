@@ -86,6 +86,11 @@ class GenreDetailViewModel(
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
     private var nextPage: Int = 0
 
+    /** Whole-genre fetch for "play/shuffle all"; null on failure (caller falls
+     *  back to the loaded pages). */
+    suspend fun fetchAllForGenre(): List<SongDto>? =
+        runCatching { repository.allSongsByGenre(tag) }.getOrNull()
+
     init { refresh() }
 
     fun refresh() {
@@ -126,7 +131,9 @@ class GenreDetailViewModel(
         viewModelScope.launch {
             try {
                 val page = repository.listSongs(query = null, genre = tag, page = pageToLoad, size = PAGE_SIZE)
-                val merged = cur.songs + page.items
+                // De-dupe on id — offset paging over a shifting set can repeat
+                // a row, and the LazyColumn keys on song.id (duplicate key = crash).
+                val merged = (cur.songs + page.items).distinctBy { it.id }
                 nextPage = pageToLoad + 1
                 _state.value = GenreDetailUiState.Success(
                     songs = merged,
@@ -159,6 +166,7 @@ fun GenreDetailScreen(
         factory = viewModelFactory { initializer { GenreDetailViewModel(tag) } },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val mono = LocalMHMono.current
 
@@ -196,8 +204,23 @@ fun GenreDetailScreen(
                                 totalItems = s.totalItems,
                                 mono = mono,
                                 onSongClick = onSongClick,
-                                onPlayAll = { onPlayAll(s.songs) },
-                                onShufflePlay = { onShufflePlay(s.songs) },
+                                // Play/Shuffle the WHOLE genre: fetch the full
+                                // set first when more pages remain (fall back to
+                                // loaded on failure) so shuffle spans everything.
+                                onPlayAll = {
+                                    scope.launch {
+                                        val full = if (s.endReached) s.songs
+                                                   else (viewModel.fetchAllForGenre() ?: s.songs)
+                                        if (full.isNotEmpty()) onPlayAll(full)
+                                    }
+                                },
+                                onShufflePlay = {
+                                    scope.launch {
+                                        val full = if (s.endReached) s.songs
+                                                   else (viewModel.fetchAllForGenre() ?: s.songs)
+                                        if (full.isNotEmpty()) onShufflePlay(full)
+                                    }
+                                },
                                 onLoadMore = viewModel::loadMore,
                             )
                         }

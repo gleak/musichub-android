@@ -158,6 +158,7 @@ fun ArtistScreen(
     artistName: String,
     onBack: () -> Unit,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
+    onShufflePlay: (List<SongDto>) -> Unit,
     onAlbumClick: (name: String, artist: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -218,6 +219,7 @@ fun ArtistScreen(
                     detail = s.detail,
                     downloadedIds = downloadedIds,
                     onPlayFromIndex = onPlayFromIndex,
+                    onShufflePlay = onShufflePlay,
                     onAlbumClick = onAlbumClick,
                     onMoreSong = { song -> kebab.open(song) },
                 )
@@ -236,6 +238,7 @@ private fun ArtistBody(
     detail: ArtistDetailDto,
     downloadedIds: Set<Long>,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
+    onShufflePlay: (List<SongDto>) -> Unit,
     onAlbumClick: (name: String, artist: String) -> Unit,
     onMoreSong: (SongDto) -> Unit,
 ) {
@@ -251,9 +254,7 @@ private fun ArtistBody(
                 coverModel = coverModel,
                 coverShape = CoverShape.Circle,
                 onPlay = { if (detail.songs.isNotEmpty()) onPlayFromIndex(detail.songs, 0) },
-                onShuffle = {
-                    if (detail.songs.isNotEmpty()) onPlayFromIndex(detail.songs.shuffled(), 0)
-                },
+                onShuffle = { if (detail.songs.isNotEmpty()) onShufflePlay(detail.songs) },
                 playEnabled = detail.songs.isNotEmpty(),
             )
         }

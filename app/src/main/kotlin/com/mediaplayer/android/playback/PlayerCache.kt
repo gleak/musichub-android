@@ -44,7 +44,6 @@ object PlayerCache {
         val appContext = context.applicationContext
         val dir = File(appContext.cacheDir, CACHE_DIR_NAME).apply { mkdirs() }
         val evictor = LeastRecentlyUsedCacheEvictor(MAX_BYTES)
-        val db = StandaloneDatabaseProvider(appContext)
-        return SimpleCache(dir, evictor, db).also { instance = it }
+        return SimpleCache(dir, evictor, ExoDatabase.get(appContext)).also { instance = it }
     }
 }

@@ -252,11 +252,12 @@ private fun PlaylistDetailBody(
     val playbackVm: PlaybackViewModel = viewModel()
     val playerIsPlaying by playbackVm.isPlaying.collectAsStateWithLifecycle()
     val playerCurrentSong by playbackVm.currentSong.collectAsStateWithLifecycle()
-    // "Playing this playlist" = player is in a play state AND its current
-    // track belongs to this playlist. Drives the hero's play→pause toggle
-    // so a tap visibly switches to the pause icon instead of relooping
-    // playback from track 0.
-    val playingFromHere = playerIsPlaying && (playerCurrentSong?.id in playlistSongIds)
+    val activeSourceKey by playbackVm.activeSourceKey.collectAsStateWithLifecycle()
+    // "Playing this playlist" = player is in a play state AND the active queue
+    // was actually started from THIS playlist. Keying on source identity (not
+    // song membership) avoids a false positive when a track that merely also
+    // appears here is playing from a different playlist/album.
+    val playingFromHere = playerIsPlaying && activeSourceKey == "playlist:${playlist.id}"
     val lazyListState = rememberLazyListState()
     // `entries` holds PlaylistSongEntryDto so each row carries its
     // playlist_songs.id — that's the stable per-occurrence key the

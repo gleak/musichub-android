@@ -101,4 +101,13 @@ object ReadCache {
             db.writableDatabase.delete(CACHE_TABLE, "key = ?", arrayOf(key))
         }
     }
+
+    /** Wipe every cached read response. Called on sign-out so user A's cached
+     *  playlists / liked / recents / disliked / follow never leak to user B. */
+    suspend fun clearAll() {
+        if (!this::db.isInitialized) return
+        withContext(Dispatchers.IO) {
+            writeLock.withLock { db.writableDatabase.delete(CACHE_TABLE, null, null) }
+        }
+    }
 }

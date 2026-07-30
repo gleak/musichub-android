@@ -3,6 +3,18 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+    <!-- Same fix as ic_shuffle_on: repeat-ALL differed from repeat-OFF only by
+         colour, which Android Auto strips. Shrink the glyph and add a shape
+         indicator dot so the on-state is distinguishable after AA re-tints.
+         (repeat-ONE stays distinct via its own "1" glyph.) -->
+    <group
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:pivotX="12"
+        android:pivotY="8">
+        <path android:fillColor="#FF1DB954"
+            android:pathData="M7,7h10v3l4,-4 -4,-4v3L5,5v6h2L7,7zM17,17L7,17v-3l-4,4 4,4v-3h12v-6h-2v4z"/>
+    </group>
     <path android:fillColor="#FF1DB954"
-        android:pathData="M7,7h10v3l4,-4 -4,-4v3L5,5v6h2L7,7zM17,17L7,17v-3l-4,4 4,4v-3h12v-6h-2v4z"/>
+        android:pathData="M10.1,20.9a1.9,1.9 0 1,0 3.8,0a1.9,1.9 0 1,0 -3.8,0Z"/>
 </vector>

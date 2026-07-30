@@ -45,9 +45,58 @@ internal class EndlessQueueController(private val player: Player) : Player.Liste
     private var sourceItems: List<MediaItem> = emptyList()
     private var sourceIds: Set<String> = emptySet()
 
+    /**
+     * App-level shuffle state. Shuffle is owned here (not by the native
+     * `Player.shuffleModeEnabled`, which is kept off) so it works headless
+     * (Android Auto / screen off) and always reorders the WHOLE [sourceItems]
+     * pool — not just the handful of items that happen to be ahead in the
+     * (pruned) live timeline. Driven by the shared shuffle pref via
+     * [MediaPlaybackService], which calls [applyShuffle] on the app looper.
+     */
+    @Volatile private var shuffleEnabled = false
+
     fun install() {
         player.addListener(this)
         captureSourceIfNew()
+    }
+
+    /** Current app-level shuffle state (mirrors the shared shuffle pref). */
+    fun isShuffleEnabled(): Boolean = shuffleEnabled
+
+    /**
+     * Drop [songId] from the source pool so a refill/wrap never re-appends it.
+     * Called after "brano sbagliato" (flagWrong) removes the item from the live
+     * timeline — the timeline removal alone wouldn't stop the endless engine
+     * from re-adding the flagged song on the next full-pool pass.
+     */
+    fun dropFromSource(songId: Long) {
+        if (sourceItems.isEmpty()) return
+        val target = songId.toString()
+        val kept = sourceItems.filterNot {
+            it.mediaId.removePrefix("song:").toLongOrNull()?.toString() == target
+        }
+        if (kept.size == sourceItems.size) return
+        sourceItems = kept
+        sourceIds = kept.mapTo(HashSet()) { it.mediaId }
+    }
+
+    /**
+     * Adopt a new shuffle state and reorder the queue accordingly. Called on
+     * the player's application looper by [MediaPlaybackService]'s shuffle-pref
+     * collector, so every mutation here is synchronous and index-consistent.
+     *
+     *  - repeat-OFF: rebuild the tail from a fresh full-pool pass (shuffled or
+     *    original order). This is what makes "shuffle" span the entire playlist.
+     *  - repeat-ALL: reorder the items already ahead in place — the whole pool
+     *    is already looping in the timeline, and this engine must not prune or
+     *    refill under repeat-ALL (see [ensureEndlessTail]/[pruneHistory]).
+     */
+    fun applyShuffle(enabled: Boolean) {
+        if (shuffleEnabled == enabled) return
+        shuffleEnabled = enabled
+        if (sourceItems.size < 2) return
+        if (player.repeatMode == Player.REPEAT_MODE_ALL) reorderFutureInPlace()
+        else rebuildTail()
     }
 
     fun release() {
@@ -80,6 +129,14 @@ internal class EndlessQueueController(private val player: Player) : Player.Liste
         sourceItems = emptyList()
         sourceIds = emptySet()
         captureSourceIfNew()
+        // Starting a brand-new source while shuffle is on must shuffle the whole
+        // thing (the freshly-set timeline arrives in original order). Under
+        // repeat-ALL reorder in place; otherwise rebuild the tail from a fresh
+        // full-pool shuffled pass.
+        if (shuffleEnabled && sourceItems.size >= 2) {
+            if (player.repeatMode == Player.REPEAT_MODE_ALL) reorderFutureInPlace()
+            else rebuildTail()
+        }
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -94,12 +151,28 @@ internal class EndlessQueueController(private val player: Player) : Player.Liste
         newPosition: Player.PositionInfo,
         reason: Int,
     ) {
+        val oldIdx = oldPosition.mediaItemIndex
+        val newIdx = newPosition.mediaItemIndex
+        if (oldIdx == newIdx) return
+
+        // Reshuffle-on-wrap (repeat-ALL, shuffle on): when the last item
+        // auto-advances back to index 0, reshuffle everything after the (new)
+        // current so each loop is a fresh order. Under repeat-ALL this engine
+        // does not prune/refill, so nothing else mutates the timeline here — no
+        // race. Owned here (not the ViewModel) so it also fires headless.
+        if (shuffleEnabled &&
+            player.repeatMode == Player.REPEAT_MODE_ALL &&
+            reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION &&
+            oldIdx == player.mediaItemCount - 1 && newIdx == 0
+        ) {
+            reorderFutureInPlace()
+            return
+        }
+
         // Consume a user-queued item the moment we leave it (auto-advance or
         // manual skip). Done here rather than in the ViewModel so it can't race
         // this engine's prune/refill — those shift indices, and a stale index
         // computed elsewhere would remove the wrong item.
-        val oldIdx = oldPosition.mediaItemIndex
-        if (oldIdx == newPosition.mediaItemIndex) return
         if (oldIdx < 0 || oldIdx >= player.mediaItemCount) return
         if (player.getMediaItemAt(oldIdx).isUserQueued()) {
             player.removeMediaItem(oldIdx)
@@ -120,12 +193,72 @@ internal class EndlessQueueController(private val player: Player) : Player.Liste
         if (player.currentMediaItemIndex != total - 1) return
         if (sourceItems.size < 2) return
         val currentId = player.getMediaItemAt(total - 1).mediaId
-        var batch = sourceItems.shuffled().map { it.buildUpon().build() }
-        if (batch.first().mediaId == currentId) {
-            // Rotate the duplicate to the back so the loop seam isn't a repeat.
-            batch = batch.drop(1) + batch.first()
+        player.addMediaItems(buildPass(currentId))
+    }
+
+    /**
+     * A fresh full-pool pass to append/queue as the future, honouring the
+     * app-level shuffle flag. Shuffle on → a random ordering of the whole pool;
+     * shuffle off → the original order rotated to resume right after
+     * [afterId] so the loop continues in sequence instead of restarting. Either
+     * way the seam never immediately repeats the current song.
+     */
+    private fun buildPass(afterId: String?): List<MediaItem> {
+        val ordered: List<MediaItem> = if (shuffleEnabled) {
+            var s = sourceItems.shuffled()
+            if (s.isNotEmpty() && s.first().mediaId == afterId) s = s.drop(1) + s.first()
+            s
+        } else {
+            val idx = sourceItems.indexOfFirst { it.mediaId == afterId }
+            if (idx >= 0) sourceItems.drop(idx + 1) + sourceItems.take(idx + 1)
+            else sourceItems
         }
-        player.addMediaItems(batch)
+        return ordered.map { it.buildUpon().build() }
+    }
+
+    /**
+     * repeat-OFF reorder: drop everything after the current item (past the
+     * pinned user-queue block) and append a fresh full-pool pass. This is what
+     * makes a shuffle toggle span the WHOLE playlist even after history has been
+     * pruned down to a small window.
+     */
+    private fun rebuildTail() {
+        val total = player.mediaItemCount
+        if (total == 0) return
+        val currentIdx = player.currentMediaItemIndex
+        if (currentIdx < 0) return
+        var keepEnd = currentIdx + 1
+        while (keepEnd < total && player.getMediaItemAt(keepEnd).isUserQueued()) keepEnd++
+        val currentId = player.getMediaItemAt(currentIdx).mediaId
+        val future = buildPass(currentId)
+        if (keepEnd < total) player.removeMediaItems(keepEnd, total)
+        player.addMediaItems(keepEnd, future)
+    }
+
+    /**
+     * repeat-ALL reorder: the whole pool is already looping in the timeline, so
+     * reorder only the items still ahead (past the pinned user-queue block).
+     * Shuffle on → random; shuffle off → restore original order for whatever's
+     * still ahead. Items already played stay in place as history.
+     */
+    private fun reorderFutureInPlace() {
+        val total = player.mediaItemCount
+        val currentIdx = player.currentMediaItemIndex
+        if (currentIdx < 0 || total <= currentIdx + 1) return
+        var keepEnd = currentIdx + 1
+        while (keepEnd < total && player.getMediaItemAt(keepEnd).isUserQueued()) keepEnd++
+        if (keepEnd >= total) return
+        val future = (keepEnd until total).map { player.getMediaItemAt(it) }
+        val byId = future.associateBy { it.mediaId }
+        val targetIds = if (shuffleEnabled) {
+            future.map { it.mediaId }.shuffled()
+        } else {
+            sourceItems.map { it.mediaId }.filter { byId.containsKey(it) }
+        }
+        val items = targetIds.mapNotNull { byId[it]?.buildUpon()?.build() }
+        if (items.isEmpty()) return
+        player.removeMediaItems(keepEnd, total)
+        player.addMediaItems(keepEnd, items)
     }
 
     /**

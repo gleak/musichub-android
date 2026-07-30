@@ -106,6 +106,7 @@ fun AlbumScreen(
     albumArtist: String,
     onBack: () -> Unit,
     onPlayFromIndex: (List<SongDto>, Int) -> Unit,
+    onShufflePlay: (List<SongDto>) -> Unit,
     onArtistClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -150,10 +151,10 @@ fun AlbumScreen(
                     detail = s.detail,
                     downloadedIds = downloadedIds,
                     onPlayFromIndex = onPlayFromIndex,
-                    onShufflePlay = { songs ->
-                        if (songs.isNotEmpty())
-                            onPlayFromIndex(songs.shuffled(), 0)
-                    },
+                    // Route through the real shuffle-play so the app-level
+                    // shuffle flag is set (service owns the ordering) — not a
+                    // one-off .shuffled() that left the toggle showing "off".
+                    onShufflePlay = { songs -> if (songs.isNotEmpty()) onShufflePlay(songs) },
                     onMoreSong = { song -> kebab.open(song) },
                 )
             }

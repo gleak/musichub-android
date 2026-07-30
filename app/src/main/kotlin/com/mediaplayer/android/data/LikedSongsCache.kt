@@ -33,11 +33,23 @@ object LikedSongsCache {
     private val resolvedIds = mutableSetOf<Long>()
     private val resolveMutex = Mutex()
 
+    /**
+     * Ids the user toggled (or a service mirror marked) since the last prime
+     * started. A concurrent optimistic like must not be clobbered by the
+     * server snapshot from a [prime] that was already in flight when the tap
+     * happened — those ids are held out of the prime commit.
+     */
+    private val dirtyIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+
     /** Optimistic toggle. Returns the new liked state (true = now liked). */
     fun toggle(songId: Long, displayLabel: String? = null): Boolean {
+        // Local tracks use negative ids; their likes live in LocalLikedStore,
+        // not the backend. Never route them through the server like/unlike.
+        if (songId <= 0L) return songId in _likedIds.value
         val wasLiked = songId in _likedIds.value
         _likedIds.value = if (wasLiked) _likedIds.value - songId else _likedIds.value + songId
         resolvedIds += songId
+        dirtyIds += songId
         scope.launch {
             try {
                 if (wasLiked) repository.unlike(songId, displayLabel = displayLabel)
@@ -53,6 +65,15 @@ object LikedSongsCache {
     fun markLiked(songId: Long, liked: Boolean) {
         _likedIds.value = if (liked) _likedIds.value + songId else _likedIds.value - songId
         resolvedIds += songId
+        dirtyIds += songId
+    }
+
+    /** Reset to empty on sign-out so user A's hearts never show for user B.
+     *  Clears resolvedIds too so B's real state gets re-fetched from scratch. */
+    fun clear() {
+        _likedIds.value = emptySet()
+        dirtyIds.clear()
+        scope.launch { resolveMutex.withLock { resolvedIds.clear() } }
     }
 
     /**
@@ -70,9 +91,15 @@ object LikedSongsCache {
     suspend fun prime(ids: Collection<Long>) {
         if (ids.isEmpty()) return
         val unresolved = resolveMutex.withLock {
-            ids.filter { it !in resolvedIds }
+            // Skip local (negative) ids — a `GET /api/liked/status?ids=-N`
+            // would 404/pollute; local hearts come from LocalLikedStore.
+            ids.filter { it > 0L && it !in resolvedIds }
         }
         if (unresolved.isEmpty()) return
+        // Only mid-flight toggles (after this point) should win over the
+        // server snapshot — clear any stale dirty marks for the ids we're
+        // about to resolve.
+        unresolved.forEach { dirtyIds.remove(it) }
         val liked = mutableSetOf<Long>()
         for (chunk in unresolved.chunked(STATUS_CHUNK_SIZE)) {
             val resolved = try {
@@ -83,8 +110,13 @@ object LikedSongsCache {
             liked += resolved
         }
         resolveMutex.withLock {
-            _likedIds.value = (_likedIds.value - unresolved.toSet()) + liked
-            resolvedIds += unresolved
+            // Hold out ids the user toggled while status() was in flight — an
+            // optimistic like must not be reverted by a snapshot that predates
+            // it. Those stay unresolved so a later prime settles them.
+            val apply = unresolved.filterNot { it in dirtyIds }.toSet()
+            val add = liked.filter { it in apply }
+            _likedIds.value = (_likedIds.value - apply) + add
+            resolvedIds += apply
         }
     }
 
