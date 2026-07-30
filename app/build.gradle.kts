@@ -165,6 +165,13 @@ android {
             // Robolectric needs the merged resources/manifest to boot an
             // Android runtime in the JVM.
             isIncludeAndroidResources = true
+            all {
+                // Robolectric boots a full Android runtime per test class and
+                // mockk's relaxed mocks of large Media3 types build a deep
+                // object graph on top of it. The default heap runs out part
+                // way through the playback tests.
+                it.maxHeapSize = "2g"
+            }
         }
     }
 
@@ -220,6 +227,7 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.media3.test.utils)
     testImplementation(libs.media3.test.utils.robolectric)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     // Compose screens are exercised in the same JVM suite, via Robolectric
     // rather than an emulator. Screens take their ViewModel as a parameter

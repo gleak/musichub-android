@@ -37,8 +37,10 @@ sealed interface SearchUiState {
  *   keystroke.
  * - `flatMapLatest` cancels an in-flight request when the query changes —
  *   avoids races where a slower earlier response overwrites a fresher one.
- * - Empty query returns the full catalog (same as the web `curl` flow), so
- *   the landing screen shows something useful.
+ * - An empty query with no genre filter stays [SearchUiState.Idle]; the
+ *   screen then shows the genre browser and the recently-played row. It
+ *   deliberately does not list the whole catalogue — that would be a large
+ *   fetch to land on a screen the user opened in order to narrow down.
  */
 @UnstableApi
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)

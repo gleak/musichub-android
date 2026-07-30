@@ -134,6 +134,9 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
 media3-test-utils = { module = "androidx.media3:media3-test-utils", version.ref = "media3" }
 media3-test-utils-robolectric = { module = "androidx.media3:media3-test-utils-robolectric", version.ref = "media3" }
+# Virtual-time test dispatcher — lets a ViewModel driven by coroutines be
+# advanced deterministically instead of slept on.
+kotlinx-coroutines-test              = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 # Compose UI tests. Run on the JVM under Robolectric (no emulator): the
 # BOM pins the version, so these carry no version.ref of their own.
 androidx-compose-ui-test-junit4      = { module = "androidx.compose.ui:ui-test-junit4" }

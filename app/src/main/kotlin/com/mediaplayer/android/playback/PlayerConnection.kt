@@ -96,4 +96,15 @@ object PlayerConnection {
         inFlight?.cancel(true)
         inFlight = null
     }
+
+    /**
+     * Test seam. Publishes [controller] without binding to the service, so
+     * the view model's controller-driven behaviour can be exercised without
+     * a live [MediaPlaybackService] and the MediaController handshake that
+     * comes with it. Never called from production code.
+     */
+    internal fun publishForTest(controller: MediaController?) {
+        _controller.value = controller
+        _bindError.value = null
+    }
 }
