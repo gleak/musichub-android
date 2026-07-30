@@ -221,8 +221,20 @@ class AuthRepository private constructor(private val context: Context) {
         /** JSON-serialized [UserDto] of the last successful `/api/auth/me`. */
         private val USER_SNAPSHOT = stringPreferencesKey("user_snapshot")
 
-        val instance: AuthRepository by lazy {
+        private val real: AuthRepository by lazy {
             AuthRepository(MediaPlayerApp.appContext)
         }
+
+        /**
+         * Test seam. Every sign-in path here goes through Credential Manager,
+         * which needs Play Services no JVM test has — so without a stand-in
+         * the app can never reach its signed-in state under test, and the
+         * whole navigation graph behind the auth gate stays unreachable.
+         * Never set from production code.
+         */
+        @Volatile
+        internal var overrideForTest: AuthRepository? = null
+
+        val instance: AuthRepository get() = overrideForTest ?: real
     }
 }

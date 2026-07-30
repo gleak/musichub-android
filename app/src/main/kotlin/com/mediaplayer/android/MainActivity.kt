@@ -180,9 +180,15 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Decides between the probe splash, the login screen and the signed-in app.
+ * Internal for the same reason as [NavHostBody]: a test can only reach the
+ * signed-in branch by standing in for the auth repository, and it has to be
+ * able to render this to see the result.
+ */
 @UnstableApi
 @Composable
-private fun AuthGate(
+internal fun AuthGate(
     pendingShareToken: String?,
     onShareConsumed: () -> Unit,
     pendingWidgetKind: QuickLaunchKind? = null,
@@ -753,9 +759,14 @@ private fun OfflineBadge(modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * The whole signed-in navigation graph. Internal rather than private so a
+ * test can drive it directly with its own [NavHostController], which is the
+ * only way to reach these routes without a real Google session.
+ */
 @UnstableApi
 @Composable
-private fun NavHostBody(
+internal fun NavHostBody(
     navController: NavHostController,
     playbackVm: PlaybackViewModel,
     onSignOut: () -> Unit,
