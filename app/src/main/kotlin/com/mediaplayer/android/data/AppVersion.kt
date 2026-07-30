@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.23.3"
+    const val VERSION = "0.23.4"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,21 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.23.4",
+            title = "Il ripeti resta, e gli ascolti si contano bene",
+            highlights = listOf(
+                "Il ripeti scelto in auto ora resta impostato: prima tornava com'era sul telefono appena la musica ripartiva.",
+                "In Android Auto la scheda del brano non mostra più una riga di testo rimasta dal passaggio precedente durante l'intro.",
+                "Un ascolto di pochi istanti non viene più contato come riproduzione completa: non finisce nella cronologia e non fa scaricare il brano da solo.",
+                "Se l'accesso automatico non riesce, la libreria in auto non resta più vuota e bloccata, e le modifiche fatte offline tornano a sincronizzarsi.",
+                "Gli aggiornamenti ritirati dal server non vengono più proposti.",
+                "Risolti due arresti anomali: nella griglia degli album e nell'elenco degli artisti.",
+                "La scheda Artisti dentro \"Non consigliati\" ora si riempie davvero.",
+                "Nell'editor di taglio il marcatore di fine non finisce più oltre la fine del brano sui brani molto corti.",
+                "Condividendo una playlist senza rete compare un messaggio comprensibile invece del testo tecnico dell'errore.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.23.3",
             title = "Avanti in auto, e l'app torna nel cruscotto",

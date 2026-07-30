@@ -258,6 +258,7 @@ class HomeScreenTest : ScreenTest() {
         stub()
 
         screen()
+        awaitText("Musica")
         compose.onNodeWithText("Musica").performClick()
 
         awaitText("Brani che mi piacciono")
