@@ -7,8 +7,11 @@ import kotlinx.serialization.builtins.serializer
 import java.io.IOException
 
 class FollowRepository(
-    private val api: MediaPlayerApi = Network.api,
+    private val injectedApi: MediaPlayerApi? = null,
 ) {
+    /** Resolved per call so the client can be swapped after construction. */
+    private val api: MediaPlayerApi get() = injectedApi ?: Network.api
+
     suspend fun list(): List<String> {
         return try {
             val fresh = api.listFollowedArtists()

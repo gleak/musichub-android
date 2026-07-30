@@ -8,8 +8,14 @@ import kotlinx.serialization.serializer
 import java.io.IOException
 
 class LikedRepository(
-    private val api: MediaPlayerApi = Network.api,
+    private val injectedApi: MediaPlayerApi? = null,
 ) {
+    // Resolved per call rather than captured at construction: the app builds
+    // these repositories eagerly (some inside object initialisers), so a
+    // capture froze whichever client existed first and left no way to point
+    // the repository at another one afterwards.
+    private val api: MediaPlayerApi get() = injectedApi ?: Network.api
+
     /**
      * Page 0 is cached because it's what the LikedScreen lands on.
      * Subsequent pages are pure pagination — never cached, never useful
@@ -25,6 +31,10 @@ class LikedRepository(
             ReadCache.getOrNull(ReadCache.Keys.LIKED_PAGE0, serializer<PageResponse<SongDto>>()) ?: throw e
         }
     }
+
+    /** Every liked song in one shot — for "Shuffle all". Not cached (only used
+     *  on an explicit play-all tap, which implies the user is online). */
+    suspend fun allLikedSongs(): List<SongDto> = api.getAllLikedSongs()
 
     /** Queued — toggles dedupe per songId (heart-on then heart-off cancels). */
     suspend fun like(songId: Long, displayLabel: String? = null) =

@@ -110,7 +110,18 @@ object Network {
             .build()
     }
 
-    val api: MediaPlayerApi by lazy { retrofit.create(MediaPlayerApi::class.java) }
+    private val realApi: MediaPlayerApi by lazy { retrofit.create(MediaPlayerApi::class.java) }
+
+    /**
+     * Test seam. Everything in the app reaches the backend through this single
+     * property, so swapping it is what lets the repositories, caches and the
+     * media-browse tree be exercised without a socket. Null in production —
+     * nothing outside tests ever sets it.
+     */
+    @Volatile
+    internal var apiOverride: MediaPlayerApi? = null
+
+    val api: MediaPlayerApi get() = apiOverride ?: realApi
 
     fun coverUrl(songId: Long): String = "${baseUrl}api/songs/$songId/cover"
     fun streamUrl(songId: Long): String = "${baseUrl}api/songs/$songId/stream"

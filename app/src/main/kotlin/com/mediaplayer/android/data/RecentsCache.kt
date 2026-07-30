@@ -4,6 +4,7 @@ import com.mediaplayer.android.data.dto.SongDto
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -55,9 +56,20 @@ object RecentsCache {
      */
     fun markPlayed(song: SongDto) {
         if (song.id <= 0L) return
-        val current = _recents.value
-        val without = current.filterNot { it.id == song.id }
-        _recents.value = (listOf(song) + without).take(LIMIT)
+        // Atomic: this runs on the playback thread while refresh() writes the
+        // same flow from a coroutine. Read-modify-write across two statements
+        // let one silently overwrite the other, and the loser was usually this
+        // optimistic prepend — the server list can't contain the just-played
+        // song until the play event drains.
+        _recents.update { current ->
+            (listOf(song) + current.filterNot { it.id == song.id }).take(LIMIT)
+        }
+    }
+
+    /** Drop everything so the next user doesn't inherit the previous one's
+     *  recents after "Cambia account". */
+    fun clear() {
+        _recents.value = emptyList()
     }
 
     private const val LIMIT = 20

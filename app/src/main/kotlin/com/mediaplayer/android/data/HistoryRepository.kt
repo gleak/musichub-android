@@ -8,8 +8,11 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.serializer
 
 class HistoryRepository(
-    private val api: MediaPlayerApi = Network.api,
+    private val injectedApi: MediaPlayerApi? = null,
 ) {
+    /** Resolved per call so the client can be swapped after construction. */
+    private val api: MediaPlayerApi get() = injectedApi ?: Network.api
+
     /**
      * Persists the play event to the offline queue and returns immediately.
      * The drainer coroutine ships it to `/api/history` once the network is

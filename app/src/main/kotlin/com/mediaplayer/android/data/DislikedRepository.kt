@@ -17,8 +17,11 @@ import java.io.IOException
  * network.
  */
 class DislikedRepository(
-    private val api: MediaPlayerApi = Network.api,
+    private val injectedApi: MediaPlayerApi? = null,
 ) {
+    /** Resolved per call so the client can be swapped after construction. */
+    private val api: MediaPlayerApi get() = injectedApi ?: Network.api
+
     suspend fun dislikedSongs(page: Int = 0, size: Int = 20): PageResponse<SongDto> {
         if (page != 0) return api.getDislikedSongs(page, size)
         return try {

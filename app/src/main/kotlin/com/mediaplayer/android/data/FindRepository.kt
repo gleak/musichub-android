@@ -12,8 +12,11 @@ import com.mediaplayer.android.data.dto.SelectCandidateBody
  * [PlaylistRepository].
  */
 class FindRepository(
-    private val api: MediaPlayerApi = Network.api,
+    private val injectedApi: MediaPlayerApi? = null,
 ) {
+    /** Resolved per call so the client can be swapped after construction. */
+    private val api: MediaPlayerApi get() = injectedApi ?: Network.api
+
 
     /** Search Prowlarr via the backend and persist the request row. */
     suspend fun create(query: String): RequestDto =

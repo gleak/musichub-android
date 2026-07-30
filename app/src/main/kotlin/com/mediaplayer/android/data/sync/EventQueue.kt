@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
+import com.mediaplayer.android.BuildConfig
 import com.mediaplayer.android.data.AuthBootstrap
 import com.mediaplayer.android.data.ConnectivityObserver
 import com.mediaplayer.android.data.MediaPlayerApi
@@ -25,7 +26,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlin.math.min
 
 /**
  * Persistent write-queue for fire-and-forget backend mutations
@@ -126,8 +126,14 @@ private data class Row(
 
 object EventQueue {
     private const val TAG = "EventQueue"
+    /**
+     * Incremented by [clear]. A drain batch captures it and stops as soon as it
+     * changes, which is the only way an in-flight batch can learn that the
+     * queue it came from no longer belongs to the signed-in user.
+     */
+    @Volatile private var generation = 0
+
     private const val BATCH_SIZE = 50
-    private const val MAX_BACKOFF_MS = 5 * 60_000L
     private const val IDLE_TICK_MS = 30_000L
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
@@ -300,27 +306,55 @@ object EventQueue {
                 withTimeoutOrNull(IDLE_TICK_MS) { wakeup.receive() }
                 continue
             }
+            // The batch is an in-memory snapshot; clear() can only empty the
+            // table, not this list. Without checking, up to 49 of the previous
+            // user's queued events kept dispatching after "Cambia account" —
+            // under whatever Bearer was current by then.
+            val batchGeneration = generation
             for (row in rows) {
-                Log.w(TAG, "dispatch ${row.type} id=${row.id} payload=${row.payload}")
+                if (batchGeneration != generation) {
+                    Log.i(TAG, "queue cleared mid-batch — abandoning ${rows.size} rows")
+                    break
+                }
+                if (BuildConfig.DEBUG) Log.d(TAG, "dispatch ${row.type} id=${row.id}")
                 val outcome = runCatching { dispatch(api, row) }
                 val exc = outcome.exceptionOrNull()
-                when {
-                    outcome.isSuccess -> {
-                        Log.w(TAG, "dispatch ${row.type} id=${row.id} OK")
+                val httpCode = (exc as? retrofit2.HttpException)?.code()
+                if (outcome.isSuccess) {
+                    delete(row.id)
+                    continue
+                }
+                val action = EventDispatchPolicy.actionFor(
+                    httpCode = httpCode,
+                    isPoisonPill = exc is PoisonPillException,
+                )
+                when (action) {
+                    EventDispatchAction.DROP -> {
+                        Log.w(
+                            TAG,
+                            "dispatch ${row.type} id=${row.id} dropped " +
+                                "(${httpCode ?: exc?.message}) — it can never succeed",
+                        )
                         delete(row.id)
                     }
-                    exc is PoisonPillException -> {
-                        Log.w(TAG, "poison-pill ${row.type} id=${row.id}: ${exc.message}")
-                        delete(row.id)
-                    }
-                    else -> {
+                    EventDispatchAction.RETRY_LATER -> {
+                        // The backoff is what bounds this. An auth failure
+                        // leaves connectivity looking healthy, so the outer
+                        // loop will not block on it — only a future
+                        // next_attempt_at stops the row being re-read and
+                        // re-sent on the very next iteration.
                         val attempts = row.attempts + 1
-                        val backoff = min(MAX_BACKOFF_MS, 1_000L * (1L shl min(attempts, 8)))
-                        bumpFailure(row.id, attempts, exc?.message, backoff)
-                        Log.w(TAG, "dispatch ${row.type} id=${row.id} FAILED: ${exc?.message}")
-                        // Network just proved bad — bail out, the interceptor
-                        // already flipped ConnectivityObserver, outer loop
-                        // re-blocks until it flips back.
+                        bumpFailure(
+                            row.id,
+                            attempts,
+                            exc?.message,
+                            EventDispatchPolicy.backoffMsFor(attempts),
+                        )
+                        Log.w(
+                            TAG,
+                            "dispatch ${row.type} id=${row.id} deferred " +
+                                "(${httpCode ?: exc?.message}), attempt $attempts",
+                        )
                         break
                     }
                 }
@@ -334,7 +368,14 @@ object EventQueue {
                 ?: throw PoisonPillException("non-numeric song id: ${row.payload}")
         }
         when (row.type) {
-            EventType.PLAY -> api.recordPlay(json.decodeFromString(row.payload))
+            EventType.PLAY -> {
+                // Malformed PLAY payload can never dispatch — poison-pill it
+                // instead of throwing SerializationException (retryable) and
+                // wedging the row forever.
+                val req = runCatching { json.decodeFromString<RecordPlayRequest>(row.payload) }
+                    .getOrElse { throw PoisonPillException("bad PLAY payload: ${row.payload}") }
+                api.recordPlay(req)
+            }
             EventType.LIKE -> api.likeSong(songId())
             EventType.UNLIKE -> api.unlikeSong(songId())
             EventType.FOLLOW -> api.followArtist(row.payload)
@@ -413,6 +454,21 @@ object EventQueue {
             }
             db.writableDatabase.update(TABLE, cv, "id = ?", arrayOf(id.toString()))
         }
+    }
+
+    /**
+     * Purge every pending row. Called on sign-out so a queued like/play from
+     * user A never drains under user B's Bearer after "Cambia account".
+     */
+    suspend fun clear() {
+        if (!this::db.isInitialized) return
+        // Bumped first so a batch already in flight abandons its remaining rows
+        // instead of finishing them under the next user's credentials.
+        generation++
+        withContext(Dispatchers.IO) {
+            writeLock.withLock { db.writableDatabase.delete(TABLE, null, null) }
+        }
+        refreshPendingCount()
     }
 
     /** One-shot count — prefer collecting [pending] for live updates. */
