@@ -346,9 +346,9 @@ class LibraryTreeTest {
 
     // --- il DJ in auto ------------------------------------------------------
 
-    private fun djProposal() = PlaylistDto(
-        id = 42L,
-        name = "Cantautori di Casa",
+    private fun djProposal(id: Long = 42L, name: String = "Cantautori di Casa") = PlaylistDto(
+        id = id,
+        name = name,
         songCount = 18,
         createdAt = "2026-08-22T05:00:00Z",
         updatedAt = "2026-08-22T05:00:00Z",
@@ -374,21 +374,73 @@ class LibraryTreeTest {
     }
 
     /**
-     * E nient'altro del DJ deve arrivarci. La chat, le preferenze e il
-     * pulsante "genera adesso" sono superfici del telefono: in macchina una
-     * conversazione a testo e' inutile e pericolosa, e un comando che spende
-     * denaro dietro un tocco alla guida lo e' di piu'.
+     * `madeForYou()` must map the auto-kind playlists one-to-one. Nothing may
+     * ride along with them: a synthetic "chat with the DJ" or "generate now"
+     * tile slipped in alongside the real proposals would pass a mere
+     * `contains` check, so this compares the full set of rows against the
+     * full set of playlists the (mocked) backend returned — an extra row of
+     * any name, or a missing one, fails it.
      */
     @Test
-    fun `no DJ conversation, preferences or generate command exists in the browse tree`() =
-        runBlocking {
-            val roots = LibraryTree.children(LibraryTree.ROOT_ID, page = 0, pageSize = 50).orEmpty()
-            val ids = roots.map { it.mediaId }
-            val titles = roots.mapNotNull { it.mediaMetadata.title?.toString()?.lowercase() }
+    fun `made-for-you contains exactly the auto-kind playlists, nothing synthetic`() = runBlocking {
+        coEvery { api.listPlaylists(kind = "auto") } returns listOf(
+            djProposal(id = 42L, name = "Cantautori di Casa"),
+            djProposal(id = 43L, name = "Sere Lente"),
+        )
 
-            assertFalse(ids.any { it.contains("dj-chat") || it.contains("dj-prefs") })
-            assertFalse(titles.any {
-                it.contains("chat") || it.contains("preferenze") || it.contains("genera")
-            })
-        }
+        val children = LibraryTree.children(
+            LibraryTree.MADE_FOR_YOU_ID, page = 0, pageSize = 50).orEmpty()
+
+        assertEquals(
+            "the made-for-you folder must contain exactly one row per " +
+                "auto-kind playlist and nothing else",
+            setOf("playlist:42", "playlist:43"),
+            children.map { it.mediaId }.toSet(),
+        )
+    }
+
+    /**
+     * The root of the Android Auto browse tree is a closed set. Comparing
+     * the full set of ids — not scanning for words like "chat" or
+     * "preferenze" — is deliberate: a keyword search only catches names we
+     * already thought of, and a node called e.g. "Parla col DJ" or "Il tuo
+     * DJ" would walk straight past one. Comparing the complete set means
+     * *any* addition or removal fails this test regardless of what the new
+     * node is called, which is what actually enforces "in macchina il DJ
+     * esiste solo attraverso le playlist che produce": nobody can add
+     * anything to this tree — DJ-related or not — without editing the
+     * allowlist below and reading why it's here.
+     */
+    @Test
+    fun `the browse root exposes exactly the known folders, nothing more`() = runBlocking {
+        val expectedRootIds = setOf(
+            LibraryTree.QUEUE_ID,
+            LibraryTree.MADE_FOR_YOU_ID,
+            LibraryTree.RECENTS_ID,
+            LibraryTree.LIKED_ID,
+            LibraryTree.PLAYLISTS_ID,
+            LibraryTree.ALBUMS_ID,
+            LibraryTree.ARTISTS_ID,
+            LibraryTree.GENRES_ID,
+            LibraryTree.ALL_SONGS_ID,
+        )
+
+        val actualRootIds = LibraryTree.children(LibraryTree.ROOT_ID, page = 0, pageSize = 50)
+            .orEmpty()
+            .map { it.mediaId }
+            .toSet()
+
+        assertEquals(
+            "A node was added to (or removed from) the Android Auto browse " +
+                "root. In macchina il DJ esiste solo attraverso le playlist " +
+                "che produce: una conversazione a testo e' inutile e " +
+                "pericolosa alla guida. If this new node belongs to the DJ " +
+                "(chat, preferences, a \"generate now\" command), it must not " +
+                "reach the car — take it back out. If it's unrelated to the " +
+                "DJ and the addition is deliberate, update expectedRootIds " +
+                "above and say why in the commit.",
+            expectedRootIds,
+            actualRootIds,
+        )
+    }
 }
