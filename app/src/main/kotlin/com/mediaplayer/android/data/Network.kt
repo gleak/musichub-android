@@ -123,6 +123,50 @@ object Network {
 
     val api: MediaPlayerApi get() = apiOverride ?: realApi
 
+    /**
+     * Quanto aspettare una risposta del DJ. Il client generale taglia a 30
+     * secondi (vedi `okHttp` sopra), ma `dj.chat.timeout-seconds` sul
+     * backend vale 60: con il timeout generale una risposta di chat lenta
+     * verrebbe abbandonata dal telefono MENTRE il server la sta ancora
+     * generando, e l'utente vedrebbe un errore su un messaggio che il
+     * backend ha comunque salvato e a cui il DJ sta rispondendo. 120s da'
+     * margine anche a un backend riconfigurato con un timeout piu' alto.
+     *
+     * NON riguarda il giro di generazione: quello e' asincrono di proposito
+     * (202 + polling su GET /api/dj/runs/{id}), proprio perche' 300 secondi
+     * non stanno dentro nessun timeout ragionevole.
+     */
+    const val DJ_READ_TIMEOUT_SECONDS = 120L
+
+    /**
+     * Derivato da [okHttp] con `newBuilder()`, non costruito da zero:
+     * condivide ConnectionPool, Dispatcher, Cache e — soprattutto —
+     * l'interceptor che aggiunge X-Api-Key e Authorization. Un client nuovo
+     * costringerebbe a riattaccare tutto a mano, e la prossima modifica
+     * all'autenticazione si dimenticherebbe di uno dei due.
+     */
+    private val djOkHttp: OkHttpClient by lazy {
+        okHttp.newBuilder()
+            .readTimeout(DJ_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build()
+    }
+
+    private val djRetrofit: Retrofit by lazy {
+        Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(djOkHttp)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+    }
+
+    private val realDjApi: DjApi by lazy { djRetrofit.create(DjApi::class.java) }
+
+    /** Test seam, gemello di [apiOverride]. Null in produzione. */
+    @Volatile
+    internal var djApiOverride: DjApi? = null
+
+    val djApi: DjApi get() = djApiOverride ?: realDjApi
+
     fun coverUrl(songId: Long): String = "${baseUrl}api/songs/$songId/cover"
     fun streamUrl(songId: Long): String = "${baseUrl}api/songs/$songId/stream"
     fun videoStreamUrl(songId: Long): String = "${baseUrl}api/songs/$songId/stream/video"

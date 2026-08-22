@@ -14,6 +14,7 @@ import coil3.test.FakeImageLoaderEngine
 import coil3.ImageLoader
 import androidx.test.core.app.ApplicationProvider
 import com.mediaplayer.android.MediaPlayerApp
+import com.mediaplayer.android.data.DjApi
 import com.mediaplayer.android.data.MediaPlayerApi
 import com.mediaplayer.android.data.DislikedSongsCache
 import com.mediaplayer.android.data.LikedSongsCache
@@ -82,6 +83,16 @@ abstract class ScreenTest {
         private set
 
     /**
+     * Le rotte del DJ passano da una seconda interfaccia Retrofit, legata al
+     * client con il read timeout lungo (vedi il Javadoc di
+     * `Network.DJ_READ_TIMEOUT_SECONDS`): overridarne una sola lascerebbe
+     * l'altra a parlare con la rete vera, che in un test Robolectric
+     * significa un fallimento lento e incomprensibile.
+     */
+    lateinit var djApi: DjApi
+        private set
+
+    /**
      * The app-wide preference singletons resolve their Context through
      * `MediaPlayerApp`. Point that at Robolectric's plain Application
      * instead, and swap the backend for a mock while we're here.
@@ -106,11 +117,14 @@ abstract class ScreenTest {
         RecentsCache.clear()
         api = mockk(relaxed = true)
         Network.apiOverride = api
+        djApi = mockk(relaxed = true)
+        Network.djApiOverride = djApi
     }
 
     @After
     fun clearOverrides() {
         Network.apiOverride = null
+        Network.djApiOverride = null
         MediaPlayerApp.contextOverride = null
     }
 
