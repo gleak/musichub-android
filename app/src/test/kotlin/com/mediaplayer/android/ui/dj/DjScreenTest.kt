@@ -1,14 +1,18 @@
 package com.mediaplayer.android.ui.dj
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import com.mediaplayer.android.data.dto.DjChatMessageDto
 import com.mediaplayer.android.data.dto.DjChatReplyDto
 import com.mediaplayer.android.data.dto.DjPreferencesDto
+import com.mediaplayer.android.data.dto.DjRunDto
 import com.mediaplayer.android.data.dto.DjStatusDto
 import com.mediaplayer.android.data.dto.DjTasteProfile
 import com.mediaplayer.android.data.dto.DjTasteProfileDto
@@ -146,9 +150,13 @@ class DjScreenTest : ScreenTest() {
 
         screen()
 
-        compose.onNodeWithText("voci calde").assertIsDisplayed()
-        compose.onNodeWithText("archi invadenti").assertIsDisplayed()
-        compose.onNodeWithText("che musica ascolti in auto?").assertIsDisplayed()
+        // Task 10 ha inserito generazione forzata, preferenze e cronologia
+        // fra il composer e il profilo: la LazyColumn e' piu' lunga di uno
+        // schermo, quindi il profilo va scrollato in vista prima di
+        // verificarlo.
+        compose.onNodeWithText("voci calde").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("archi invadenti").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("che musica ascolti in auto?").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -166,14 +174,17 @@ class DjScreenTest : ScreenTest() {
         coEvery { djApi.eraseChat() } returns Response.success(null)
 
         screen()
-        compose.onNodeWithText("Cancella conversazione e profilo").performClick()
+        // Sotto lo schermo: Task 10 ha allungato la LazyColumn prima del
+        // profilo, quindi il blocco di cancellazione non e' piu' nella
+        // prima schermata.
+        compose.onNodeWithText("Cancella conversazione e profilo").performScrollTo().performClick()
         compose.waitForIdle()
 
         // Una sola pressione non deve poter cancellare quello che una persona
         // ha raccontato di se' nell'arco di settimane.
         coVerify(exactly = 0) { djApi.eraseChat() }
 
-        compose.onNodeWithText("Sì, cancella tutto").performClick()
+        compose.onNodeWithText("Sì, cancella tutto").performScrollTo().performClick()
         compose.waitForIdle()
 
         coVerify(exactly = 1) { djApi.eraseChat() }
@@ -189,5 +200,150 @@ class DjScreenTest : ScreenTest() {
         screen()
 
         awaitText("Il DJ non e", substring = true)
+    }
+
+    private fun run(status: String, written: Int = 0, error: String? = null) = DjRunDto(
+        id = 7L,
+        startedAt = "2026-08-22T10:00:00Z",
+        finishedAt = if (status == "RUNNING") null else "2026-08-22T10:02:00Z",
+        status = status,
+        model = "gemini-2.5-flash",
+        playlistsWritten = written,
+        error = error,
+    )
+
+    @Test
+    fun `default preferences are labelled as defaults`() {
+        stubEverything()
+        coEvery { djApi.preferences() } returns DjPreferencesDto(explicit = false)
+
+        screen()
+
+        // Senza questa riga l'app direbbe che l'utente ha scelto quattro
+        // proposte ogni sette giorni, e non e' vero: non ha scelto niente.
+        awaitText("Non le hai ancora impostate", substring = true)
+    }
+
+    @Test
+    fun `turning the cycle off sends only that field`() {
+        stubEverything()
+        coEvery { djApi.preferences() } returns DjPreferencesDto(cycleEnabled = true, explicit = true)
+        coEvery { djApi.updatePreferences(any()) } returns
+            DjPreferencesDto(cycleEnabled = false, explicit = true)
+
+        screen()
+        awaitText("Il DJ propone da solo")
+        // Il click va sullo Switch, non sull'etichetta: SettingsToggleRow non
+        // rende cliccabile l'intera riga (solo lo Switch lo e'), quindi il
+        // testo da solo non intercetta il tocco.
+        compose.onNode(isToggleable()).performScrollTo().performClick()
+        compose.waitForIdle()
+
+        coVerify {
+            djApi.updatePreferences(match {
+                it.cycleEnabled == false && it.slots == null && it.cadenceDays == null
+            })
+        }
+    }
+
+    @Test
+    fun `stepping the number of proposals saves it`() {
+        stubEverything()
+        coEvery { djApi.preferences() } returns DjPreferencesDto(slots = 4, explicit = true)
+        coEvery { djApi.updatePreferences(any()) } returns
+            DjPreferencesDto(slots = 5, explicit = true)
+
+        screen()
+        compose.onNodeWithContentDescription("Aumenta Proposte").performClick()
+        compose.waitForIdle()
+
+        coVerify { djApi.updatePreferences(match { it.slots == 5 }) }
+    }
+
+    @Test
+    fun `the bounds come from the server, not from the app`() {
+        stubEverything()
+        coEvery { djApi.preferences() } returns
+            DjPreferencesDto(slots = 8, maxSlots = 8, explicit = true)
+
+        screen()
+
+        compose.onNodeWithContentDescription("Aumenta Proposte").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Diminuisci Proposte").assertIsEnabled()
+    }
+
+    @Test
+    fun `forcing a run polls until it is terminal and reports a PARTIAL honestly`() {
+        stubEverything()
+        coEvery { djApi.startRun() } returns run("RUNNING")
+        coEvery { djApi.run(7L) } returns run("PARTIAL", written = 2, error = "queueWanted")
+
+        screen()
+        compose.onNodeWithText("Genera adesso").performClick()
+
+        // Se la schermata aspettasse "OK oppure FAILED" resterebbe qui per
+        // sempre, su un giro che ha scritto due playlist davvero.
+        awaitText("2 playlist", substring = true)
+    }
+
+    @Test
+    fun `the cooldown refusal shows how long is left`() {
+        stubEverything()
+        coEvery { djApi.startRun() } throws httpError(
+            429,
+            """{"error":"Troppo presto per un altro giro forzato.","retryAfterSeconds":240}""")
+
+        screen()
+        compose.onNodeWithText("Genera adesso").performClick()
+
+        awaitText("4 min", substring = true)
+    }
+
+    @Test
+    fun `a run already in progress is explained, not swallowed`() {
+        stubEverything()
+        coEvery { djApi.startRun() } throws httpError(
+            409, """{"error":"Un giro e' gia' in corso per questo utente."}""")
+
+        screen()
+        compose.onNodeWithText("Genera adesso").performClick()
+
+        awaitText("gia' in corso", substring = true)
+    }
+
+    @Test
+    fun `the button is already disabled when the server reports an open run`() {
+        stubEverything(status = DjStatusDto(
+            agentAvailable = true, apiKeyConfigured = true, cycleEnabled = true,
+            chatEnabled = true, runInProgress = true, cooldownSeconds = 0L,
+        ))
+
+        screen()
+
+        compose.onNodeWithText("Genera adesso").assertIsNotEnabled()
+    }
+
+    @Test
+    fun `the recent runs are listed with their outcome`() {
+        stubEverything()
+        coEvery { djApi.recentRuns() } returns listOf(
+            run("OK", written = 2),
+            run("FAILED", error = "budget esaurito"),
+        )
+
+        screen()
+
+        awaitText("2 playlist scritte")
+        compose.onNodeWithText("Non riuscito").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `an empty history says so instead of showing an empty box`() {
+        stubEverything()
+        coEvery { djApi.recentRuns() } returns emptyList()
+
+        screen()
+
+        awaitText("Il DJ non ha ancora fatto nessun giro", substring = true)
     }
 }
