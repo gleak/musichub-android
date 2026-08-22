@@ -27,6 +27,7 @@ object PlaylistsCache {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val repository = PlaylistRepository()
+    private val djRepository = DjRepository()
 
     private val _playlists = MutableStateFlow<List<PlaylistDto>>(emptyList())
     val playlists: StateFlow<List<PlaylistDto>> = _playlists.asStateFlow()
@@ -131,6 +132,33 @@ object PlaylistsCache {
             }
         }
         return renamed
+    }
+
+    /**
+     * Promuove uno slot del DJ a playlist dell'utente.
+     *
+     * La conversione avviene sul posto lato server — stessa riga, kind da
+     * DJ_SET a USER — quindi qui non si aggiunge una riga: si sostituisce
+     * quella che c'e' gia', cosi' ogni schermata che legge questa cache
+     * smette di mostrarla come una proposta senza dover rifare una fetch.
+     *
+     * Nessun aggiornamento ottimistico: a differenza di rinomina e
+     * cancellazione, questa e' un'operazione che il server puo' rifiutare
+     * legittimamente (400 se la playlist non e' piu' un DJ_SET, ad esempio
+     * perche' e' gia' stata promossa da un altro dispositivo), e mostrarla
+     * come riuscita prima della conferma sarebbe una bugia difficile da
+     * disfare.
+     */
+    suspend fun promote(id: Long): PlaylistDetailDto {
+        val promotedDetail = djRepository.promotePlaylist(id)
+        mutex.withLock {
+            putDetail(promotedDetail)
+            _playlists.value = _playlists.value.map {
+                if (it.id == id) it.copy(kind = promotedDetail.kind, name = promotedDetail.name)
+                else it
+            }
+        }
+        return promotedDetail
     }
 
     suspend fun setAutoSync(id: Long, enabled: Boolean): PlaylistDto {

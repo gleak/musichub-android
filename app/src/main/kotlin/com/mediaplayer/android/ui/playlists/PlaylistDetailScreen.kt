@@ -355,6 +355,7 @@ private fun PlaylistDetailBody(
             val heroCoverSongId = if (playlist.isAuto) null
                 else playlist.songs.firstOrNull { it.song.hasCoverArt }?.song?.id
             val heroEyebrow = when {
+                playlist.kind == "DJ_SET" -> "PROPOSTA DEL DJ"
                 playlist.isAuto -> "PER TE · GENERATA"
                 playlist.isShared -> "PLAYLIST · COLLABORATIVA"
                 else -> null
@@ -406,6 +407,12 @@ private fun PlaylistDetailBody(
                     }
                 },
             )
+        }
+
+        if (playlist.kind == "DJ_SET") {
+            item(key = "dj_proposal") {
+                DjProposalCard(playlistId = playlist.id)
+            }
         }
 
         if (playlist.isAuto) {

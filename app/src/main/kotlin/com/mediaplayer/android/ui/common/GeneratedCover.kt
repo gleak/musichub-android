@@ -46,6 +46,14 @@ enum class AutoPlaylistFamily(val label: String) {
     Radar("Radar"),
     Mood("Mood del momento"),
     Next("In poi"),
+
+    /**
+     * Proposta del DJ. Ha una famiglia propria e non il ripiego Daily
+     * perche' e' l'unica superficie auto che l'utente puo' promuovere: se si
+     * presentasse come un mix giornaliero, la riga non direbbe cosa e' e la
+     * prima sovrascrittura si leggerebbe come una perdita di dati.
+     */
+    Dj("Proposta del DJ"),
 }
 
 /** Map a backend `kind` string (e.g. `ON_REPEAT`) to a family. */
@@ -59,6 +67,7 @@ fun familyOf(kind: String?): AutoPlaylistFamily = when (kind?.uppercase()) {
     "RADAR" -> AutoPlaylistFamily.Radar
     "MOOD" -> AutoPlaylistFamily.Mood
     "NEXT", "CONTINUE" -> AutoPlaylistFamily.Next
+    "DJ_SET" -> AutoPlaylistFamily.Dj
     else -> AutoPlaylistFamily.Daily
 }
 
@@ -76,6 +85,7 @@ fun badgeFor(kind: String?): String = when (kind?.uppercase()) {
     "RADAR" -> "LUN"
     "MOOD" -> "NOW"
     "NEXT", "CONTINUE" -> "→"
+    "DJ_SET" -> "DJ"
     else -> ""
 }
 
@@ -103,6 +113,7 @@ fun GeneratedCover(
                 AutoPlaylistFamily.Radar -> drawRadar(paletteA, paletteB)
                 AutoPlaylistFamily.Mood -> drawMood(paletteA, paletteB)
                 AutoPlaylistFamily.Next -> drawNext(paletteA, paletteB)
+                AutoPlaylistFamily.Dj -> drawDj(paletteA, paletteB)
             }
         }
         // Eyebrow label top-left
@@ -152,6 +163,7 @@ private fun familyEyebrow(f: AutoPlaylistFamily): String = when (f) {
     AutoPlaylistFamily.Radar -> "RADAR"
     AutoPlaylistFamily.Mood -> "MOOD"
     AutoPlaylistFamily.Next -> "NEXT"
+    AutoPlaylistFamily.Dj -> "DJ"
 }
 
 /**
@@ -168,6 +180,7 @@ fun paletteFor(f: AutoPlaylistFamily): Pair<Color, Color> = when (f) {
     AutoPlaylistFamily.Radar -> Color(0xFF06B6D4) to Color(0xFF1E3A8A)
     AutoPlaylistFamily.Mood -> Color(0xFF3A0CA3) to Color(0xFFF72585)
     AutoPlaylistFamily.Next -> Color(0xFFFFC857) to Color(0xFF3A1F8A)
+    AutoPlaylistFamily.Dj -> Color(0xFF2A1147) to MHColors.Lime
 }
 
 /** Convenience: linear-gradient brush sized for icon-on-tile use, derived from the family palette. */
@@ -246,6 +259,20 @@ private fun DrawScope.drawMood(a: Color, b: Color) {
 
 private fun DrawScope.drawNext(a: Color, b: Color) {
     drawRect(Brush.linearGradient(0f to a, 1f to b))
+}
+
+private fun DrawScope.drawDj(a: Color, b: Color) {
+    drawRect(a)
+    val center = Offset(size.width / 2, size.height / 2)
+    drawCircle(color = b, radius = size.minDimension * 0.36f, center = center, style = Stroke(width = 3f))
+    drawCircle(color = b, radius = size.minDimension * 0.20f, center = center, style = Stroke(width = 2f))
+    drawCircle(color = b, radius = size.minDimension * 0.05f, center = center)
+    drawLine(
+        color = b,
+        start = Offset(size.width * 0.80f, size.height * 0.16f),
+        end = center,
+        strokeWidth = 3f,
+    )
 }
 
 /**
@@ -360,4 +387,5 @@ private fun familyEyebrowFor(kind: String?): String = when (familyOf(kind)) {
     AutoPlaylistFamily.Radar -> "RADAR"
     AutoPlaylistFamily.Mood -> "MOOD"
     AutoPlaylistFamily.Next -> "NEXT"
+    AutoPlaylistFamily.Dj -> "DJ"
 }
