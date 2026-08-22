@@ -28,6 +28,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Home
@@ -272,6 +273,7 @@ internal object Routes {
     const val HOME = "home"
     const val SEARCH = "search"
     const val FOR_YOU = "for-you"
+    const val DJ = "dj"
     const val PROFILE = "profile"
     const val SETTINGS_CROSSFADE = "profile/crossfade"
     const val SETTINGS_DOWNLOAD = "profile/download"
@@ -900,6 +902,9 @@ internal fun NavHostBody(
                     onProfileClick = { navController.navigate(Routes.PROFILE) },
                 )
             }
+            composable(Routes.DJ) {
+                com.mediaplayer.android.ui.dj.DjScreen()
+            }
             composable(Routes.PROFILE) {
                 com.mediaplayer.android.ui.profile.ProfileScreen(
                     onBack = { navController.popBackStack() },
@@ -1194,6 +1199,13 @@ private fun BottomNav(navController: NavHostController) {
             label = "Per te",
             icon = {
                 Icon(Icons.Filled.AutoAwesome, contentDescription = "Per te")
+            },
+        ),
+        BottomDestination(
+            route = Routes.DJ,
+            label = "DJ",
+            icon = {
+                Icon(Icons.Filled.Album, contentDescription = "DJ")
             },
         ),
         BottomDestination(

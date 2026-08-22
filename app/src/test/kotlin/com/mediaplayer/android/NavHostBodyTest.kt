@@ -42,6 +42,14 @@ class NavHostBodyTest : PlayerSheetTest() {
             com.mediaplayer.android.ui.onePage(emptyList())
         coEvery { api.getLikedSongs(any(), any()) } returns
             com.mediaplayer.android.ui.onePage(emptyList())
+        coEvery { djApi.status() } returns
+            com.mediaplayer.android.data.dto.DjStatusDto()
+        coEvery { djApi.chat(any()) } returns emptyList()
+        coEvery { djApi.profile() } returns
+            com.mediaplayer.android.data.dto.DjTasteProfileDto()
+        coEvery { djApi.preferences() } returns
+            com.mediaplayer.android.data.dto.DjPreferencesDto()
+        coEvery { djApi.recentRuns() } returns emptyList()
     }
 
     private fun graph(onSignOut: () -> Unit = {}) {
@@ -237,5 +245,17 @@ class NavHostBodyTest : PlayerSheetTest() {
         navigateTo(Routes.LIKED)
 
         compose.onNodeWithText("Brani che ti piacciono").assertIsDisplayed()
+    }
+
+    @Test
+    fun `the DJ section is a destination of its own, not a child of the library`() {
+        graph()
+
+        navigateTo(Routes.DJ)
+
+        assertEquals(Routes.DJ, currentRoute)
+        // Se `dj` finisse in libraryPrefixes, aprire il DJ accenderebbe
+        // "Libreria" nella barra in basso.
+        org.junit.Assert.assertFalse(Routes.belongsToLibrary(currentRoute))
     }
 }
