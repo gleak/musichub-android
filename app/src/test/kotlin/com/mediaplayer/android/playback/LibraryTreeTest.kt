@@ -7,6 +7,7 @@ import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.MediaPlayerApi
 import com.mediaplayer.android.data.Network
 import com.mediaplayer.android.data.dto.PageResponse
+import com.mediaplayer.android.data.dto.PlaylistDto
 import com.mediaplayer.android.data.dto.SongDto
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -342,4 +343,52 @@ class LibraryTreeTest {
         totalItems = items.size.toLong(),
         totalPages = 1,
     )
+
+    // --- il DJ in auto ------------------------------------------------------
+
+    private fun djProposal() = PlaylistDto(
+        id = 42L,
+        name = "Cantautori di Casa",
+        songCount = 18,
+        createdAt = "2026-08-22T05:00:00Z",
+        updatedAt = "2026-08-22T05:00:00Z",
+        kind = "DJ_SET",
+    )
+
+    /**
+     * In macchina il DJ esiste solo attraverso le playlist che produce.
+     * Nessuna modifica al codice serve a farlo: `madeForYou()` chiede
+     * `kind=auto`, e il filtro `auto` del backend significa "ogni kind
+     * diverso da USER". Questo test blocca quel comportamento, cosi' un
+     * eventuale restringimento del filtro non farebbe sparire in silenzio le
+     * proposte del DJ dall'auto.
+     */
+    @Test
+    fun `DJ proposals reach Android Auto through the made-for-you folder`() = runBlocking {
+        coEvery { api.listPlaylists(kind = "auto") } returns listOf(djProposal())
+
+        val children = LibraryTree.children(
+            LibraryTree.MADE_FOR_YOU_ID, page = 0, pageSize = 50).orEmpty()
+
+        assertTrue(children.any { it.mediaMetadata.title == "Cantautori di Casa" })
+    }
+
+    /**
+     * E nient'altro del DJ deve arrivarci. La chat, le preferenze e il
+     * pulsante "genera adesso" sono superfici del telefono: in macchina una
+     * conversazione a testo e' inutile e pericolosa, e un comando che spende
+     * denaro dietro un tocco alla guida lo e' di piu'.
+     */
+    @Test
+    fun `no DJ conversation, preferences or generate command exists in the browse tree`() =
+        runBlocking {
+            val roots = LibraryTree.children(LibraryTree.ROOT_ID, page = 0, pageSize = 50).orEmpty()
+            val ids = roots.map { it.mediaId }
+            val titles = roots.mapNotNull { it.mediaMetadata.title?.toString()?.lowercase() }
+
+            assertFalse(ids.any { it.contains("dj-chat") || it.contains("dj-prefs") })
+            assertFalse(titles.any {
+                it.contains("chat") || it.contains("preferenze") || it.contains("genera")
+            })
+        }
 }

@@ -10,7 +10,7 @@ package com.mediaplayer.android.data
  * this constant drives the in-app changelog gate.
  */
 object AppVersion {
-    const val VERSION = "0.23.4"
+    const val VERSION = "0.24.0"
 }
 
 data class ChangelogEntry(
@@ -21,6 +21,19 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.24.0",
+            title = "Il DJ ha una sezione tutta sua",
+            highlights = listOf(
+                "C'è una nuova scheda «DJ» in fondo alla schermata: lì ci parli, e gli spieghi che musica ti va e quando.",
+                "Il DJ ti mostra cosa ha capito di te, in chiaro. Se ha frainteso qualcosa lo vedi, e puoi cancellare tutto — conversazione e profilo insieme — quando vuoi.",
+                "Puoi decidere se il DJ propone da solo, quante playlist tenerti pronte e ogni quanti giorni rinnovarle.",
+                "Se non vuoi aspettare, gli chiedi di preparare qualcosa adesso. Se hai appena fatto un giro te lo dice, e ti dice anche quanto manca al prossimo.",
+                "Vedi cosa ha fatto di recente, giro per giro.",
+                "Le playlist che il DJ ti propone si riconoscono a colpo d'occhio nella libreria: si rinnovano da sole, nome compreso, e se una ti piace la promuovi e resta tua.",
+                "In macchina non cambia niente: le proposte del DJ compaiono fra le playlist per te, e la chat resta sul telefono.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.23.4",
             title = "Il ripeti resta, e gli ascolti si contano bene",
