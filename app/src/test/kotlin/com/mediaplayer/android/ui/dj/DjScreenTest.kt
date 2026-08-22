@@ -1,8 +1,10 @@
 package com.mediaplayer.android.ui.dj
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -19,10 +21,12 @@ import com.mediaplayer.android.data.dto.DjTasteProfileDto
 import com.mediaplayer.android.ui.ScreenTest
 import io.mockk.coEvery
 import io.mockk.coVerify
+import kotlinx.coroutines.CompletableDeferred
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.ResponseBody.Companion.toResponseBody
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import retrofit2.HttpException
 import retrofit2.Response
@@ -51,9 +55,18 @@ class DjScreenTest : ScreenTest() {
         coEvery { djApi.recentRuns() } returns emptyList()
     }
 
-    private fun screen() {
-        setScreen { DjScreen(viewModel = DjViewModel()) }
+    /**
+     * L'orologio di default e' fisso: la maggior parte dei test non deve
+     * ragionare sul tempo, e un `System.currentTimeMillis()` vero sarebbe
+     * comunque non deterministico. I test sul countdown passano il proprio
+     * orologio finto e usano il [DjViewModel] restituito per farlo scorrere
+     * senza un `delay()` reale.
+     */
+    private fun screen(clock: () -> Long = { 0L }): DjViewModel {
+        val viewModel = DjViewModel(clock = clock)
+        setScreen { DjScreen(viewModel = viewModel) }
         compose.waitForIdle()
+        return viewModel
     }
 
     private fun httpError(code: Int, body: String): HttpException {
@@ -107,6 +120,23 @@ class DjScreenTest : ScreenTest() {
     }
 
     @Test
+    fun `a second tap while sending sends nothing`() {
+        // Vera moneta spesa in token: senza la guardia in DjViewModel.send,
+        // due tap ravvicinati mandano due messaggi (e due chiamate al
+        // modello) invece di uno.
+        stubEverything()
+        val pending = CompletableDeferred<DjChatReplyDto>()
+        coEvery { djApi.sendMessage(any()) } coAnswers { pending.await() }
+
+        val viewModel = screen()
+        viewModel.send("uno")
+        viewModel.send("due")
+        compose.waitForIdle()
+
+        coVerify(exactly = 1) { djApi.sendMessage(any()) }
+    }
+
+    @Test
     fun `the daily cap is explained in the server's own words`() {
         stubEverything()
         coEvery { djApi.sendMessage(any()) } throws httpError(
@@ -118,6 +148,33 @@ class DjScreenTest : ScreenTest() {
 
         // "HTTP 429" non e' una risposta a chi ha appena scritto un messaggio.
         awaitText("Hai raggiunto il limite di messaggi di oggi. Riprova domani.")
+    }
+
+    @Test
+    fun `the chat cooldown counts down and re-enables Invia`() {
+        stubEverything()
+        coEvery { djApi.sendMessage(any()) } throws httpError(
+            429, """{"error":"Troppi messaggi, rallenta.","retryAfterSeconds":90}""")
+
+        var now = 0L
+        val viewModel = screen(clock = { now })
+        compose.onNodeWithText("Scrivi al DJ…").performTextInput("uno")
+        compose.onNodeWithContentDescription("Invia").performClick()
+        compose.waitForIdle()
+
+        awaitText("1 min 30 s", substring = true)
+        compose.onNodeWithText("Scrivi al DJ…").performTextInput("due")
+        compose.onNodeWithContentDescription("Invia").assertIsNotEnabled()
+
+        // Il `Retry-After` letto e buttato via era il bug: il pulsante
+        // restava disabilitato (o abilitato) per sempre, mai coerente con
+        // l'orologio. Si sposta l'orologio finto e si chiama lo stesso giro
+        // che il ticker reale farebbe da solo ogni secondo.
+        now += 90_000L
+        viewModel.tick()
+        compose.waitForIdle()
+
+        compose.onNodeWithContentDescription("Invia").assertIsEnabled()
     }
 
     @Test
@@ -225,6 +282,37 @@ class DjScreenTest : ScreenTest() {
     }
 
     @Test
+    fun `a globally switched-off cycle is explained even with the user's own toggle on`() {
+        // status.cycleEnabled e' `dj.enabled`, l'interruttore del cron — non
+        // quello per-utente. Spento com'e' in produzione, un utente col
+        // proprio interruttore acceso deve saperlo: altrimenti aspetta
+        // proposte che il ciclo non generera' mai da solo.
+        stubEverything(status = DjStatusDto(
+            agentAvailable = true, apiKeyConfigured = true, cycleEnabled = false,
+            chatEnabled = true, runInProgress = false, cooldownSeconds = 0L,
+        ))
+        coEvery { djApi.preferences() } returns DjPreferencesDto(cycleEnabled = true, explicit = true)
+
+        screen()
+
+        awaitText("Il ciclo automatico e", substring = true)
+    }
+
+    @Test
+    fun `the user's own toggle switched off needs no global-cycle notice`() {
+        stubEverything(status = DjStatusDto(
+            agentAvailable = true, apiKeyConfigured = true, cycleEnabled = false,
+            chatEnabled = true, runInProgress = false, cooldownSeconds = 0L,
+        ))
+        coEvery { djApi.preferences() } returns DjPreferencesDto(cycleEnabled = false, explicit = true)
+
+        screen()
+
+        compose.onAllNodes(hasText("Il ciclo automatico e", substring = true))
+            .assertCountEquals(0)
+    }
+
+    @Test
     fun `turning the cycle off sends only that field`() {
         stubEverything()
         coEvery { djApi.preferences() } returns DjPreferencesDto(cycleEnabled = true, explicit = true)
@@ -262,9 +350,14 @@ class DjScreenTest : ScreenTest() {
 
     @Test
     fun `the bounds come from the server, not from the app`() {
+        // maxSlots = 8 e' anche il default del DTO: uno stepper con `max`
+        // scritto a mano nella schermata (`= 8`) passerebbe questo test
+        // esattamente allo stesso modo. Un tetto che il server non manda
+        // mai in produzione (6, non 8) e' l'unico modo che il test dipenda
+        // davvero dal numero che arriva dalla rete.
         stubEverything()
         coEvery { djApi.preferences() } returns
-            DjPreferencesDto(slots = 8, maxSlots = 8, explicit = true)
+            DjPreferencesDto(slots = 6, maxSlots = 6, explicit = true)
 
         screen()
 
@@ -284,6 +377,14 @@ class DjScreenTest : ScreenTest() {
         // Se la schermata aspettasse "OK oppure FAILED" resterebbe qui per
         // sempre, su un giro che ha scritto due playlist davvero.
         awaitText("2 playlist", substring = true)
+        // "2 playlist" da solo lo direbbe anche un giro OK: l'etichetta
+        // "Riuscito in parte" e' cio' che distingue davvero un PARTIAL.
+        awaitText("Riuscito in parte", substring = true)
+    }
+
+    @Test
+    fun `PARTIAL gets its own label, never the one OK uses`() {
+        assertEquals("Riuscito in parte", runStatusLabel("PARTIAL"))
     }
 
     @Test
@@ -300,6 +401,33 @@ class DjScreenTest : ScreenTest() {
     }
 
     @Test
+    fun `the cooldown counts down and re-enables the button`() {
+        // Il bug: `refusedWaitSeconds` veniva scritto una volta al rifiuto e
+        // mai piu' toccato, quindi "4 min" restava scritto per sempre e il
+        // pulsante restava disabilitato ben oltre la fine vera dell'attesa.
+        stubEverything()
+        coEvery { djApi.startRun() } throws httpError(
+            429, """{"error":"Troppo presto.","retryAfterSeconds":90}""")
+
+        var now = 0L
+        val viewModel = screen(clock = { now })
+        compose.onNodeWithText("Genera adesso").performClick()
+        compose.waitForIdle()
+
+        awaitText("1 min 30 s", substring = true)
+        compose.onNodeWithText("Genera adesso").assertIsNotEnabled()
+
+        // Stesso principio del test sul tetto della chat: si sposta
+        // l'orologio finto invece di aspettare novanta secondi veri, e si
+        // chiama lo stesso giro che il ticker reale farebbe da solo.
+        now += 90_000L
+        viewModel.tick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Genera adesso").assertIsEnabled()
+    }
+
+    @Test
     fun `a run already in progress is explained, not swallowed`() {
         stubEverything()
         coEvery { djApi.startRun() } throws httpError(
@@ -309,6 +437,48 @@ class DjScreenTest : ScreenTest() {
         compose.onNodeWithText("Genera adesso").performClick()
 
         awaitText("gia' in corso", substring = true)
+    }
+
+    @Test
+    fun `a 409 disables the button without a manual refresh`() {
+        // Il bug mirror: un 409 non toccava affatto lo stato locale, quindi
+        // `canForce` restava vero e il pulsante invitava un secondo tap che
+        // poteva solo ottenere un altro 409 identico.
+        coEvery { djApi.status() } returnsMany listOf(
+            DjStatusDto(agentAvailable = true, apiKeyConfigured = true, cycleEnabled = true,
+                chatEnabled = true, runInProgress = false, cooldownSeconds = 0L),
+            DjStatusDto(agentAvailable = true, apiKeyConfigured = true, cycleEnabled = true,
+                chatEnabled = true, runInProgress = true, cooldownSeconds = 0L),
+        )
+        coEvery { djApi.chat(any()) } returns emptyList()
+        coEvery { djApi.profile() } returns DjTasteProfileDto()
+        coEvery { djApi.preferences() } returns DjPreferencesDto()
+        coEvery { djApi.recentRuns() } returns emptyList()
+        coEvery { djApi.startRun() } throws httpError(
+            409, """{"error":"Un giro e' gia' in corso per questo utente."}""")
+
+        screen()
+        compose.onNodeWithText("Genera adesso").assertIsEnabled()
+        compose.onNodeWithText("Genera adesso").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Genera adesso").assertIsNotEnabled()
+    }
+
+    @Test
+    fun `a second tap while forcing sends nothing`() {
+        // Anche questa e' moneta vera: senza la guardia in
+        // DjViewModel.forceRun, due tap ravvicinati aprono due giri.
+        stubEverything()
+        val pending = CompletableDeferred<DjRunDto>()
+        coEvery { djApi.startRun() } coAnswers { pending.await() }
+
+        val viewModel = screen()
+        viewModel.forceRun()
+        viewModel.forceRun()
+        compose.waitForIdle()
+
+        coVerify(exactly = 1) { djApi.startRun() }
     }
 
     @Test
@@ -335,6 +505,20 @@ class DjScreenTest : ScreenTest() {
 
         awaitText("2 playlist scritte")
         compose.onNodeWithText("Non riuscito").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `the run history formats the date instead of printing the raw instant`() {
+        stubEverything()
+        coEvery { djApi.recentRuns() } returns listOf(run("OK", written = 1))
+
+        screen()
+
+        awaitText("1 playlist scritta")
+        // "2026-08-22T10:00:00Z" con una T e una Z non e' per un essere
+        // umano: deve sparire, non solo comparire un formato migliore
+        // altrove.
+        compose.onAllNodes(hasText("2026-08-22T10:00:00Z", substring = true)).assertCountEquals(0)
     }
 
     @Test

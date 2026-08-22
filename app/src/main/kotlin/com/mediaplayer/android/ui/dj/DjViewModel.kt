@@ -11,10 +11,12 @@ import com.mediaplayer.android.data.dto.DjRunDto
 import com.mediaplayer.android.data.dto.DjStatusDto
 import com.mediaplayer.android.data.dto.DjTasteProfileDto
 import com.mediaplayer.android.ui.common.friendlyMessage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /** "4 min", "2 min 5 s", "45 s". Mai un numero nudo di secondi. */
@@ -75,16 +77,26 @@ data class DjUiState(
     val forceError: String? = null,
     val lastRun: DjRunDto? = null,
     /**
-     * L'attesa che il server ha appena rifiutato. Tenuta a parte da
-     * `status.cooldownSeconds` perche' quello si aggiorna solo al prossimo
-     * `refresh()`, e chi ha appena premuto il pulsante deve sapere subito
-     * quanto manca.
+     * L'attesa residua per il pulsante di generazione, gia' scesa a zero
+     * quando e' il momento — [DjViewModel] la ricalcola ogni secondo da un
+     * orologio iniettabile, non e' un numero congelato al momento del
+     * rifiuto o dell'ultimo `refresh()`. Copre sia un 429 appena ricevuto
+     * sia il `cooldownSeconds` che lo stato porta gia' al primo caricamento.
      */
     val refusedWaitSeconds: Long? = null,
+    /**
+     * Lo stesso conto alla rovescia, ma per l'invio in chat: il tetto
+     * giornaliero risponde 429 con un `Retry-After`, e senza questo campo
+     * quel numero veniva letto e buttato via — il pulsante "Invia" restava
+     * disabilitato a vita o abilitato subito, mai coerente con l'attesa
+     * vera.
+     */
+    val chatWaitSeconds: Long? = null,
 ) {
     val agentAvailable: Boolean get() = status?.agentAvailable == true
     val chatEnabled: Boolean get() = status?.chatEnabled == true
-    val waitSeconds: Long get() = refusedWaitSeconds ?: status?.cooldownSeconds ?: 0L
+    val waitSeconds: Long get() = refusedWaitSeconds ?: 0L
+    val canSend: Boolean get() = chatEnabled && !sending && (chatWaitSeconds ?: 0L) <= 0L
     val canForce: Boolean
         get() = agentAvailable && !forcing && status?.runInProgress != true && waitSeconds <= 0L
 }
@@ -92,18 +104,43 @@ data class DjUiState(
 /**
  * Costruttore senza argomenti obbligatori: in questo progetto la DI e'
  * manuale e i ViewModel nascono da `viewModel()`, che sa creare solo
- * un'istanza no-arg. Il parametro esiste perche' i test possano passare un
- * repository con una `DjApi` finta.
+ * un'istanza no-arg. Il parametro `repository` esiste perche' i test
+ * possano passare un repository con una `DjApi` finta; [clock] esiste
+ * perche' possano far scorrere il tempo del conto alla rovescia senza
+ * un `delay()` vero — un test che aspettasse sul serio quattro minuti
+ * di cooldown non e' un test che qualcuno lascerebbe nella suite.
  */
 class DjViewModel(
     private val repository: DjRepository = DjRepository(),
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DjUiState())
     val state: StateFlow<DjUiState> = _state.asStateFlow()
 
+    /**
+     * Istante (epoch ms, secondo [clock]) in cui il pulsante di generazione
+     * torna disponibile, o null se non c'e' nessuna attesa in corso. Non e'
+     * nello stato pubblico: cio' che la schermata legge e' sempre il
+     * risultato gia' ricalcolato, [DjUiState.refusedWaitSeconds].
+     */
+    private var forceWaitUntilMs: Long? = null
+
+    /** Lo stesso, per il tetto giornaliero di messaggi in chat. */
+    private var chatWaitUntilMs: Long? = null
+
     init {
         refresh()
+        // Un solo ticker per tutta la vita del ViewModel invece di uno per
+        // rifiuto: costa un `delay` al secondo solo quando c'e' davvero
+        // un'attesa da scontare (il controllo e' dentro il loop, non fuori),
+        // e si ferma da solo quando `viewModelScope` viene cancellato.
+        viewModelScope.launch {
+            while (isActive) {
+                delay(1_000L)
+                if (forceWaitUntilMs != null || chatWaitUntilMs != null) recomputeWaits()
+            }
+        }
     }
 
     fun refresh() {
@@ -123,6 +160,7 @@ class DjViewModel(
             val profile = runCatching { repository.profile() }.getOrNull()
             val preferences = runCatching { repository.preferences() }.getOrNull()
             val runs = runCatching { repository.recentRuns() }.getOrDefault(emptyList())
+            applyStatusCooldown(status.getOrNull())
             _state.update {
                 it.copy(
                     loading = false,
@@ -134,8 +172,50 @@ class DjViewModel(
                     runs = runs,
                 )
             }
+            recomputeWaits()
         }
     }
+
+    /**
+     * Traduce `status.cooldownSeconds` in una scadenza assoluta, cosi' il
+     * ticker puo' scontarla come farebbe con un rifiuto appena ricevuto.
+     * Letto una volta sola al caricamento, altrimenti resterebbe congelato
+     * al valore del primo `refresh()` per tutta la vita dello schermo — il
+     * bug che questo giro di correzioni chiude.
+     */
+    private fun applyStatusCooldown(status: DjStatusDto?) {
+        val seconds = status?.cooldownSeconds ?: return
+        if (seconds > 0L) forceWaitUntilMs = clock() + seconds * 1_000L
+    }
+
+    /**
+     * Ricalcola i due conti alla rovescia dalla scadenza assoluta invece di
+     * decrementare un contatore: un `delay(1000)` non e' mai esattamente un
+     * secondo, e sommare l'errore ogni giro avrebbe fatto scivolare il
+     * numero mostrato rispetto al momento vero in cui il server torna
+     * disponibile.
+     */
+    private fun recomputeWaits() {
+        val now = clock()
+        val force = forceWaitUntilMs?.let { until -> ((until - now + 999L) / 1_000L).coerceAtLeast(0L) }
+        val chat = chatWaitUntilMs?.let { until -> ((until - now + 999L) / 1_000L).coerceAtLeast(0L) }
+        if (force != null && force <= 0L) forceWaitUntilMs = null
+        if (chat != null && chat <= 0L) chatWaitUntilMs = null
+        _state.update {
+            it.copy(
+                refusedWaitSeconds = force?.takeIf { s -> s > 0L },
+                chatWaitSeconds = chat?.takeIf { s -> s > 0L },
+            )
+        }
+    }
+
+    /**
+     * Un giro del ticker, chiamabile direttamente. Il ticker vero gira su
+     * `delay(1000)` reale: nei test si fa avanzare [clock] e si chiama
+     * questo, che e' la stessa funzione che il ticker userebbe, senza
+     * aspettare sul serio.
+     */
+    internal fun tick() = recomputeWaits()
 
     /**
      * Manda un messaggio e ricarica conversazione e profilo.
@@ -146,19 +226,27 @@ class DjViewModel(
      */
     fun send(message: String) {
         val text = message.trim()
-        if (text.isEmpty() || _state.value.sending) return
+        if (text.isEmpty() || !_state.value.canSend) return
         viewModelScope.launch {
             _state.update { it.copy(sending = true, sendError = null) }
             val result = runCatching { repository.sendMessage(text) }
             if (result.isFailure) {
                 val cause = result.exceptionOrNull()
+                val refusal = DjRefusal.of(cause!!)
+                // Il 429 del tetto giornaliero porta un `Retry-After`: senza
+                // tradurlo in una scadenza il pulsante "Invia" restava
+                // com'era prima del tentativo, pronto a incassare lo stesso
+                // rifiuto un'altra volta.
+                chatWaitUntilMs = refusal?.retryAfterSeconds?.takeIf { it > 0L }
+                    ?.let { clock() + it * 1_000L }
                 _state.update {
                     it.copy(sending = false,
                         // La frase del server quando c'e' (429 del tetto
                         // giornaliero, 503 a chat spenta), altrimenti il
                         // messaggio generico gia' usato altrove nell'app.
-                        sendError = DjRefusal.of(cause!!)?.message ?: friendlyMessage(cause))
+                        sendError = refusal?.message ?: friendlyMessage(cause))
                 }
+                recomputeWaits()
                 return@launch
             }
             val messages = runCatching { repository.chat() }.getOrDefault(_state.value.messages)
@@ -225,6 +313,7 @@ class DjViewModel(
     fun forceRun() {
         if (!_state.value.canForce) return
         viewModelScope.launch {
+            forceWaitUntilMs = null
             _state.update {
                 it.copy(forcing = true, forceError = null, lastRun = null, refusedWaitSeconds = null)
             }
@@ -243,12 +332,24 @@ class DjViewModel(
                 return@launch
             }
             val refusal = DjRefusal.of(failure)
+            // 429: il rifiuto porta l'attesa residua, che diventa una
+            // scadenza assoluta cosi' il ticker la puo' scontare.
+            forceWaitUntilMs = refusal?.retryAfterSeconds?.takeIf { it > 0L }
+                ?.let { clock() + it * 1_000L }
             _state.update {
                 it.copy(
                     forcing = false,
-                    refusedWaitSeconds = refusal?.retryAfterSeconds,
                     forceError = refusal?.message ?: friendlyMessage(failure),
                 )
+            }
+            recomputeWaits()
+            if (refusal?.status == 409) {
+                // 409: un giro e' gia' in corso, ma lo stato locale e'
+                // ancora quello di prima del tentativo (altrimenti
+                // `canForce` non avrebbe lasciato passare il tap). Senza
+                // aggiornarlo il pulsante resterebbe pronto a incassare lo
+                // stesso 409 un'altra volta.
+                refreshStatusAndRuns()
             }
         }
     }
@@ -256,6 +357,8 @@ class DjViewModel(
     private suspend fun refreshStatusAndRuns() {
         val status = runCatching { repository.status() }.getOrNull()
         val runs = runCatching { repository.recentRuns() }.getOrDefault(_state.value.runs)
+        applyStatusCooldown(status)
         _state.update { it.copy(status = status ?: it.status, runs = runs) }
+        recomputeWaits()
     }
 }

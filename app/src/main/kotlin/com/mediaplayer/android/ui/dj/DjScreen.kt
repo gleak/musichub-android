@@ -54,6 +54,7 @@ import com.mediaplayer.android.data.dto.DjTasteProfileDto
 import com.mediaplayer.android.ui.common.CenteredSpinner
 import com.mediaplayer.android.ui.common.ErrorWithRetry
 import com.mediaplayer.android.ui.common.EyebrowText
+import com.mediaplayer.android.ui.common.formatRefreshedAt
 import com.mediaplayer.android.ui.profile.settings.SettingsCard
 import com.mediaplayer.android.ui.profile.settings.SettingsToggleRow
 import com.mediaplayer.android.ui.theme.LocalMHMono
@@ -135,6 +136,17 @@ fun DjScreen(viewModel: DjViewModel = viewModel()) {
                 state.sendError?.let { error ->
                     item(key = "send-error") { DjNotice(error) }
                 }
+                // Il tetto giornaliero risponde 429 con l'attesa residua: se
+                // non la si mostra, il pulsante disabilitato sembra rotto
+                // invece che in attesa di qualcosa di preciso. Conta alla
+                // rovescia da sola, come quella di "Genera adesso", perche'
+                // la ricalcola lo stesso ticker del ViewModel.
+                if ((state.chatWaitSeconds ?: 0L) > 0L) {
+                    item(key = "chat-wait") {
+                        DjBody("Puoi scrivere di nuovo fra " +
+                            formatWait(state.chatWaitSeconds ?: 0L) + ".")
+                    }
+                }
 
                 item(key = "composer") {
                     Row(
@@ -147,6 +159,10 @@ fun DjScreen(viewModel: DjViewModel = viewModel()) {
                             value = draft,
                             onValueChange = { if (it.length <= 2000) draft = it },
                             placeholder = { Text("Scrivi al DJ…") },
+                            // Solo l'invio si ferma durante il tetto
+                            // giornaliero: poter scrivere nel frattempo (senza
+                            // poter premere Invia) e' piu' clemente che
+                            // bloccare anche la tastiera per l'intera attesa.
                             enabled = state.chatEnabled && !state.sending,
                             maxLines = 4,
                             shape = RoundedCornerShape(16.dp),
@@ -165,7 +181,7 @@ fun DjScreen(viewModel: DjViewModel = viewModel()) {
                                 viewModel.send(draft)
                                 draft = ""
                             },
-                            enabled = state.chatEnabled && !state.sending && draft.isNotBlank(),
+                            enabled = state.canSend && draft.isNotBlank(),
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(CircleShape)
@@ -240,6 +256,20 @@ fun DjScreen(viewModel: DjViewModel = viewModel()) {
                 }
 
                 item(key = "prefs-header") { DjSectionTitle("Preferenze", "Come vuoi il DJ") }
+                // `status.cycleEnabled` e' `dj.enabled`, l'interruttore globale
+                // del cron — non quello per-utente qui sotto. Spento com'e' in
+                // produzione, un utente col proprio interruttore acceso
+                // vedrebbe un toggle acceso che pero' non produce mai niente
+                // da solo, e senza questo avviso non lo saprebbe: lo stesso
+                // silenzio che l'avviso su `agentAvailable` esiste per evitare.
+                if (state.status?.cycleEnabled == false && state.preferences?.cycleEnabled == true) {
+                    item(key = "cycle-off-globally") {
+                        DjNotice("Il ciclo automatico e’ spento su questo server: nessuna " +
+                            "proposta arrivera’ da sola finche’ non lo riaccende chi gestisce " +
+                            "il server. Il tuo interruttore qui sotto resta acceso e conta per " +
+                            "quando il ciclo tornera’ attivo; puoi comunque generare a mano.")
+                    }
+                }
                 state.preferences?.let { prefs ->
                     item(key = "prefs") {
                         Column(modifier = Modifier.padding(horizontal = MediaPlayerSpacing.M)) {
@@ -600,7 +630,12 @@ private fun RunRow(run: DjRunDto) {
                 color = MHColors.TextHi,
             )
             Text(
-                text = run.startedAt + (run.model?.let { " · $it" } ?: ""),
+                // L'istante grezzo ("2026-08-22T10:00:00Z") non e' per un
+                // essere umano: stesso formattatore gia' usato per "For You"
+                // ("oggi alle 04:03"), cosi' la cronologia parla la lingua
+                // del resto dell'app invece di quella del JSON.
+                text = (formatRefreshedAt(run.startedAt) ?: run.startedAt) +
+                    (run.model?.let { " · $it" } ?: ""),
                 style = LocalMHMono.current.badge.copy(color = MHColors.TextLo2),
                 modifier = Modifier.padding(top = 2.dp),
             )
