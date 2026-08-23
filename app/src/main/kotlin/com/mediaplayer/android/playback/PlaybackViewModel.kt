@@ -563,6 +563,11 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun play(song: SongDto) {
+        // Segnaposto del DJ (playable=false, download ancora in corso) o file
+        // sparito: in entrambi i casi non c'e' audio da avviare. La riga che
+        // genera questa chiamata dovrebbe gia' essere non toccabile, ma un
+        // no-op qui costa nulla ed evita un player che parte a vuoto.
+        if (!song.playable) return
         val c = controller
         if (c == null) {
             raiseControllerNotReady("Player non ancora pronto.")
@@ -666,14 +671,32 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             raiseControllerNotReady("Player non ancora pronto.")
             return
         }
+        // Punto unico attraversato da ogni schermata di dettaglio (playlist,
+        // album, artista, liked, generi) per costruire la coda: i segnaposto
+        // del DJ (playable=false, download non ancora finito) o i brani col
+        // file sparito non devono mai finire nel player. Su Android Auto un
+        // elemento che non parte si comporta esattamente come uno skip
+        // fantasma, e questa app ha gia' pagato due incidenti di quella
+        // famiglia — non li riapriamo qui.
+        //
+        // L'indice si ricalcola per POSIZIONE, non per id: una playlist puo'
+        // avere lo stesso brano due volte (duplicati stile Spotify), quindi
+        // un confronto per id rischierebbe di puntare all'occorrenza
+        // sbagliata. Si cerca il primo brano riproducibile alla posizione
+        // toccata o subito dopo, cosi' un segnaposto proprio nella posizione
+        // toccata scivola al brano riproducibile successivo invece di
+        // bloccare tutto.
+        val indexed = songs.withIndex().filter { it.value.playable }
+        if (indexed.isEmpty()) return
         _activeSourceKey.value = sourceKey
         // Always hand the player the ORIGINAL order + the tapped start index.
         // Shuffle is owned by the service (EndlessQueueController): if shuffle
         // is on it keeps the tapped song current and reshuffles the tail, and
         // it keeps the true order for un-shuffle. Pre-shuffling here poisoned
         // the engine's "original order" pool.
-        val items = songs.map { it.toMediaItem() }
-        val playIndex = startIndex.coerceIn(0, songs.lastIndex)
+        val items = indexed.map { it.value.toMediaItem() }
+        val playIndex = indexed.indexOfFirst { it.index >= startIndex }
+            .let { if (it >= 0) it else indexed.lastIndex }
         c.shuffleModeEnabled = false
         c.setMediaItems(items, playIndex, 0L)
         c.prepare()
@@ -681,7 +704,12 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun playPlaylistShuffled(songs: List<SongDto>, sourceKey: String? = null) {
-        if (songs.isEmpty()) return
+        // Stesso filtro di [playPlaylist] — vedi commento li' per il perche'.
+        // Qui l'indice di partenza e' comunque casuale, quindi non serve
+        // ricalcolare nessuna posizione: basta togliere i non riproducibili
+        // prima di scegliere il punto di partenza.
+        val playable = songs.filter { it.playable }
+        if (playable.isEmpty()) return
         val c = controller
         if (c == null) {
             raiseControllerNotReady("Player non ancora pronto.")
@@ -693,9 +721,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         // authoritative; start on a random track for an immediate shuffled feel.
         _shuffleEnabled.value = true
         persistShuffle(true)
-        val items = songs.map { it.toMediaItem() }
+        val items = playable.map { it.toMediaItem() }
         c.shuffleModeEnabled = false
-        c.setMediaItems(items, songs.indices.random(), 0L)
+        c.setMediaItems(items, playable.indices.random(), 0L)
         c.prepare()
         c.playWhenReady = true
     }
@@ -775,6 +803,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
      * gets consumed once played. Spotify-style "Play next".
      */
     fun playNext(song: SongDto) {
+        // Vale lo stesso ragionamento di [play]: un segnaposto del DJ non ha
+        // ancora un file da mettere in coda.
+        if (!song.playable) return
         val c = controller
         if (c == null) {
             raiseControllerNotReady("Player non ancora pronto.")
@@ -790,6 +821,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
      * Spotify-style "Add to queue".
      */
     fun addToQueue(song: SongDto) {
+        // Vale lo stesso ragionamento di [play]: un segnaposto del DJ non ha
+        // ancora un file da mettere in coda.
+        if (!song.playable) return
         val c = controller
         if (c == null) {
             raiseControllerNotReady("Player non ancora pronto.")

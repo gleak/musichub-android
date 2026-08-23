@@ -7,9 +7,11 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import com.mediaplayer.android.data.dto.DjChatMessageDto
 import com.mediaplayer.android.data.dto.DjChatReplyDto
@@ -67,6 +69,20 @@ class DjScreenTest : ScreenTest() {
         setScreen { DjScreen(viewModel = viewModel) }
         compose.waitForIdle()
         return viewModel
+    }
+
+    /**
+     * `performScrollTo()` da solo funziona solo su un nodo gia' composto: in
+     * una `LazyColumn` di Robolectric (finestra fissa, vedi `ScreenTest`) un
+     * testo diversi elementi sotto il bordo visibile non e' mai stato
+     * composto, quindi il match fallisce prima ancora di poter scrollare.
+     * `performScrollToNode` sul contenitore (con `testTag`) scrolla e
+     * ricompone finche' il nodo non compare, qualunque sia la distanza —
+     * la sezione preferenze e' cresciuta piu' volte (Task 10, poi la
+     * dimensione delle playlist) e continuera' a crescere.
+     */
+    private fun scrollToText(text: String) {
+        compose.onNodeWithTag("dj-screen-list").performScrollToNode(hasText(text, substring = true))
     }
 
     private fun httpError(code: Int, body: String): HttpException {
@@ -211,9 +227,12 @@ class DjScreenTest : ScreenTest() {
         // fra il composer e il profilo: la LazyColumn e' piu' lunga di uno
         // schermo, quindi il profilo va scrollato in vista prima di
         // verificarlo.
-        compose.onNodeWithText("voci calde").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("archi invadenti").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("che musica ascolti in auto?").performScrollTo().assertIsDisplayed()
+        scrollToText("voci calde")
+        compose.onNodeWithText("voci calde").assertIsDisplayed()
+        scrollToText("archi invadenti")
+        compose.onNodeWithText("archi invadenti").assertIsDisplayed()
+        scrollToText("che musica ascolti in auto?")
+        compose.onNodeWithText("che musica ascolti in auto?").assertIsDisplayed()
     }
 
     @Test
@@ -222,7 +241,8 @@ class DjScreenTest : ScreenTest() {
 
         screen()
 
-        awaitText("Il DJ non sa ancora niente di te", substring = true)
+        scrollToText("Il DJ non sa ancora niente di te")
+        compose.onNodeWithText("Il DJ non sa ancora niente di te", substring = true).assertIsDisplayed()
     }
 
     @Test
@@ -234,7 +254,8 @@ class DjScreenTest : ScreenTest() {
         // Sotto lo schermo: Task 10 ha allungato la LazyColumn prima del
         // profilo, quindi il blocco di cancellazione non e' piu' nella
         // prima schermata.
-        compose.onNodeWithText("Cancella conversazione e profilo").performScrollTo().performClick()
+        scrollToText("Cancella conversazione e profilo")
+        compose.onNodeWithText("Cancella conversazione e profilo").performClick()
         compose.waitForIdle()
 
         // Una sola pressione non deve poter cancellare quello che una persona
@@ -363,6 +384,58 @@ class DjScreenTest : ScreenTest() {
 
         compose.onNodeWithContentDescription("Aumenta Proposte").assertIsNotEnabled()
         compose.onNodeWithContentDescription("Diminuisci Proposte").assertIsEnabled()
+    }
+
+    @Test
+    fun `stepping the playlist minimum size saves it`() {
+        stubEverything()
+        coEvery { djApi.preferences() } returns
+            DjPreferencesDto(playlistMinSize = 15, playlistMaxSize = 28, explicit = true)
+        coEvery { djApi.updatePreferences(any()) } returns
+            DjPreferencesDto(playlistMinSize = 16, playlistMaxSize = 28, explicit = true)
+
+        screen()
+        compose.onNodeWithContentDescription("Aumenta Dimensione minima").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        coVerify {
+            djApi.updatePreferences(match { it.playlistMinSize == 16 && it.playlistMaxSize == null })
+        }
+    }
+
+    /**
+     * Il bound del "+" del minimo e' `prefs.playlistMaxSize`, non
+     * `maxPlaylistSize` (il tetto assoluto, 50): se lo stepper usasse quel
+     * tetto invece del massimo scelto dalla persona, questo pulsante
+     * sarebbe ancora abilitato a 20 e l'interfaccia permetterebbe min > max.
+     */
+    @Test
+    fun `the minimum size stepper cannot be pushed past the chosen maximum`() {
+        stubEverything()
+        coEvery { djApi.preferences() } returns DjPreferencesDto(
+            playlistMinSize = 20, playlistMaxSize = 20,
+            minPlaylistSize = 5, maxPlaylistSize = 50, explicit = true,
+        )
+
+        screen()
+
+        compose.onNodeWithContentDescription("Aumenta Dimensione minima")
+            .performScrollTo().assertIsNotEnabled()
+    }
+
+    /** Simmetrico al test sopra, sul "-" del massimo. */
+    @Test
+    fun `the maximum size stepper cannot be pushed below the chosen minimum`() {
+        stubEverything()
+        coEvery { djApi.preferences() } returns DjPreferencesDto(
+            playlistMinSize = 20, playlistMaxSize = 20,
+            minPlaylistSize = 5, maxPlaylistSize = 50, explicit = true,
+        )
+
+        screen()
+
+        compose.onNodeWithContentDescription("Diminuisci Dimensione massima")
+            .performScrollTo().assertIsNotEnabled()
     }
 
     @Test
@@ -504,7 +577,8 @@ class DjScreenTest : ScreenTest() {
         screen()
 
         awaitText("2 playlist scritte")
-        compose.onNodeWithText("Non riuscito").performScrollTo().assertIsDisplayed()
+        scrollToText("Non riuscito")
+        compose.onNodeWithText("Non riuscito").assertIsDisplayed()
     }
 
     @Test

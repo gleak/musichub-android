@@ -6,8 +6,12 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
 import com.mediaplayer.android.data.MediaPlayerApi
 import com.mediaplayer.android.data.Network
+import com.mediaplayer.android.data.dto.AlbumDetailDto
+import com.mediaplayer.android.data.dto.ArtistDetailDto
 import com.mediaplayer.android.data.dto.PageResponse
+import com.mediaplayer.android.data.dto.PlaylistDetailDto
 import com.mediaplayer.android.data.dto.PlaylistDto
+import com.mediaplayer.android.data.dto.PlaylistSongEntryDto
 import com.mediaplayer.android.data.dto.SongDto
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -316,6 +320,118 @@ class LibraryTreeTest {
         assertEquals(77L, item.mediaId.removePrefix("song:").toLong())
     }
 
+    // --- placeholder songs must never enter a playback queue ---------------
+    //
+    // Un segnaposto del DJ (playable=false — richiesta non ancora scaricata,
+    // o file sparito) che finisse in una di queste code si comporterebbe in
+    // auto come uno skip fantasma: l'elemento non parte, esattamente la
+    // classe di guasto per cui l'app ha gia' avuto due incidenti. Ogni
+    // resolver sotto "queue resolvers (called by onSetMediaItems)" deve
+    // togliere questi brani PRIMA di consegnare la lista al player — questi
+    // test diventano rossi se quel filtro sparisce da uno qualsiasi di loro.
+
+    @Test
+    fun `playlist queue drops unplayable songs`() = runBlocking {
+        coEvery { api.getPlaylist(1L) } returns playlistDetail(
+            song(1L, playable = true),
+            song(2L, playable = false),
+            song(3L, playable = true),
+        )
+
+        val queue = LibraryTree.playlistQueue(1L)
+
+        assertEquals(listOf(1L, 3L), queue.map { it.mediaId.removePrefix("song:").toLong() })
+    }
+
+    @Test
+    fun `album queue drops unplayable songs`() = runBlocking {
+        coEvery { api.getAlbum("Album", "Artista") } returns AlbumDetailDto(
+            name = "Album",
+            artist = "Artista",
+            songs = listOf(song(1L, playable = true), song(2L, playable = false)),
+        )
+
+        val queue = LibraryTree.albumQueue("Album", "Artista")
+
+        assertEquals(listOf(1L), queue.map { it.mediaId.removePrefix("song:").toLong() })
+    }
+
+    @Test
+    fun `artist queue drops unplayable songs`() = runBlocking {
+        coEvery { api.getArtist("Artista") } returns ArtistDetailDto(
+            name = "Artista",
+            albums = emptyList(),
+            songs = listOf(song(1L, playable = false), song(2L, playable = true)),
+        )
+
+        val queue = LibraryTree.artistQueue("Artista")
+
+        assertEquals(listOf(2L), queue.map { it.mediaId.removePrefix("song:").toLong() })
+    }
+
+    @Test
+    fun `genre queue drops unplayable songs`() = runBlocking {
+        coEvery { api.listSongs(any(), any(), any(), any()) } returns
+            page(listOf(song(1L, playable = true), song(2L, playable = false)))
+
+        val queue = LibraryTree.genreQueue("indie")
+
+        assertEquals(listOf(1L), queue.map { it.mediaId.removePrefix("song:").toLong() })
+    }
+
+    @Test
+    fun `all-songs queue drops unplayable songs`() = runBlocking {
+        coEvery { api.listSongs(any(), any(), any(), any()) } returns
+            page(listOf(song(1L, playable = false), song(2L, playable = true)))
+
+        val queue = LibraryTree.allSongsQueue()
+
+        assertEquals(listOf(2L), queue.map { it.mediaId.removePrefix("song:").toLong() })
+    }
+
+    @Test
+    fun `liked queue drops unplayable songs`() = runBlocking {
+        coEvery { api.getLikedSongs(any(), any()) } returns
+            page(listOf(song(1L, playable = true), song(2L, playable = false)))
+
+        val queue = LibraryTree.likedQueue()
+
+        assertEquals(listOf(1L), queue.map { it.mediaId.removePrefix("song:").toLong() })
+    }
+
+    @Test
+    fun `recents queue drops unplayable songs`() = runBlocking {
+        coEvery { api.recentSongs(any()) } returns
+            listOf(song(1L, playable = false), song(2L, playable = true))
+
+        val queue = LibraryTree.recentsQueue()
+
+        assertEquals(listOf(2L), queue.map { it.mediaId.removePrefix("song:").toLong() })
+    }
+
+    /**
+     * Contrario del blocco sopra: nella lista SFOGLIABILE di una playlist il
+     * segnaposto deve restare visibile (solo marcato non riproducibile), non
+     * sparire come nelle code. E' la stessa distinzione che vale sul lato
+     * Compose (`PlaylistDetailScreen` mostra la riga spenta invece di
+     * toglierla) — qui si fissa la meta' Android-Auto della stessa regola.
+     */
+    @Test
+    fun `the browsable playlist list keeps an unplayable song, just marked not playable`() = runBlocking {
+        coEvery { api.getPlaylist(1L) } returns playlistDetail(
+            song(1L, playable = true),
+            song(2L, playable = false),
+        )
+
+        val rows = LibraryTree.children("playlist:1", page = 0, pageSize = 20).orEmpty()
+
+        assertEquals(2, rows.size)
+        assertEquals(
+            listOf(true, false),
+            rows.map { it.mediaMetadata.isPlayable == true },
+        )
+    }
+
     // --- helpers ----------------------------------------------------------
 
     private fun songItem(id: Long): MediaItem =
@@ -325,16 +441,25 @@ class LibraryTreeTest {
             .setMediaMetadata(MediaMetadata.Builder().setTitle("Brano $id").setArtist("Artista").build())
             .build()
 
-    private fun song(id: Long) = SongDto(
+    private fun song(id: Long, playable: Boolean = true) = SongDto(
         id = id,
         title = "Brano $id",
         artist = "Artista",
         album = "Album",
         durationMs = 180_000L,
         hasCoverArt = true,
+        playable = playable,
     )
 
     private fun songs(vararg ids: Long) = ids.map { song(it) }
+
+    private fun playlistDetail(vararg entrySongs: SongDto) = PlaylistDetailDto(
+        id = 1L,
+        name = "Playlist",
+        createdAt = "2026-08-22T05:00:00Z",
+        updatedAt = "2026-08-22T05:00:00Z",
+        songs = entrySongs.mapIndexed { i, s -> PlaylistSongEntryDto(playlistSongId = i.toLong(), song = s) },
+    )
 
     private fun page(items: List<SongDto>, page: Int = 0, size: Int = 50) = PageResponse(
         items = items,

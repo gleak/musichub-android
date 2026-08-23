@@ -92,6 +92,22 @@ data class DjUiState(
      * vera.
      */
     val chatWaitSeconds: Long? = null,
+    /**
+     * Il messaggio la cui playlist si sta componendo, o null se nessuna.
+     *
+     * Un id e non un booleano: la conversazione puo' contenere piu' turni con
+     * una proposta, e lo spinner deve stare sotto QUELLO su cui si e' premuto.
+     * Con un booleano girerebbero tutti.
+     */
+    val composingMessageId: Long? = null,
+    val composeError: String? = null,
+    /**
+     * La playlist appena composta. L'interfaccia la usa per offrire di
+     * aprirla: dire "fatto" e lasciare la persona a cercarla in libreria
+     * sarebbe il modo piu' rapido di rendere inutile la funzione.
+     */
+    val composedPlaylistId: Long? = null,
+    val composedPlaylistName: String? = null,
 ) {
     val agentAvailable: Boolean get() = status?.agentAvailable == true
     val chatEnabled: Boolean get() = status?.chatEnabled == true
@@ -99,6 +115,15 @@ data class DjUiState(
     val canSend: Boolean get() = chatEnabled && !sending && (chatWaitSeconds ?: 0L) <= 0L
     val canForce: Boolean
         get() = agentAvailable && !forcing && status?.runInProgress != true && waitSeconds <= 0L
+
+    /**
+     * Comporre dalla chat passa dallo stesso giro del pulsante "genera ora":
+     * stesso executor a un thread sul server, stessa guardia "un giro alla
+     * volta". Quindi le condizioni sono le stesse — se non si puo' generare,
+     * non si puo' nemmeno comporre, e mostrare il pulsante attivo
+     * significherebbe promettere un 409.
+     */
+    val canCompose: Boolean get() = canForce && composingMessageId == null
 }
 
 /**
@@ -281,12 +306,14 @@ class DjViewModel(
         cycleEnabled: Boolean? = null,
         slots: Int? = null,
         cadenceDays: Int? = null,
+        playlistMinSize: Int? = null,
+        playlistMaxSize: Int? = null,
     ) {
         if (_state.value.savingPreferences) return
         viewModelScope.launch {
             _state.update { it.copy(savingPreferences = true, preferencesError = null) }
             val result = runCatching {
-                repository.updatePreferences(cycleEnabled, slots, cadenceDays)
+                repository.updatePreferences(cycleEnabled, slots, cadenceDays, playlistMinSize, playlistMaxSize)
             }
             _state.update {
                 it.copy(
@@ -351,6 +378,70 @@ class DjViewModel(
                 // stesso 409 un'altra volta.
                 refreshStatusAndRuns()
             }
+        }
+    }
+
+    /**
+     * Fa comporre la playlist concordata in quel turno di chat.
+     *
+     * <p>Non manda nessun testo: il briefing sta sulla riga del messaggio,
+     * lato server. Da qui parte solo l'id di CHE turno.
+     */
+    fun composePlaylistFromChat(messageId: Long) {
+        if (!_state.value.canCompose) return
+        viewModelScope.launch {
+            forceWaitUntilMs = null
+            _state.update {
+                it.copy(
+                    composingMessageId = messageId,
+                    composeError = null,
+                    composedPlaylistId = null,
+                    composedPlaylistName = null,
+                    refusedWaitSeconds = null,
+                )
+            }
+            val result = runCatching { repository.composePlaylistFromChat(messageId) }
+            val failure = result.exceptionOrNull()
+            if (failure == null) {
+                val run = result.getOrNull()
+                // Un giro terminale non e' per forza un giro riuscito: la
+                // scaletta puo' essere stata scartata dalla validazione. In
+                // quel caso created_playlist_id resta nullo, e dire "fatto"
+                // manderebbe la persona a cercare qualcosa che non esiste.
+                val playlistId = run?.createdPlaylistId
+                _state.update {
+                    it.copy(
+                        composingMessageId = null,
+                        composedPlaylistId = playlistId,
+                        composedPlaylistName = it.messages
+                            .firstOrNull { m -> m.id == messageId }?.playlistName,
+                        composeError = if (playlistId != null) null
+                        else run?.error ?: "Il DJ non e' riuscito a comporla. Riprova.",
+                    )
+                }
+                runCatching { PlaylistsCache.refresh() }
+                refreshStatusAndRuns()
+                return@launch
+            }
+            val refusal = DjRefusal.of(failure)
+            forceWaitUntilMs = refusal?.retryAfterSeconds?.takeIf { it > 0L }
+                ?.let { clock() + it * 1_000L }
+            _state.update {
+                it.copy(
+                    composingMessageId = null,
+                    composeError = refusal?.message ?: friendlyMessage(failure),
+                )
+            }
+            recomputeWaits()
+            if (refusal?.status == 409) {
+                refreshStatusAndRuns()
+            }
+        }
+    }
+
+    fun dismissComposeResult() {
+        _state.update {
+            it.copy(composeError = null, composedPlaylistId = null, composedPlaylistName = null)
         }
     }
 

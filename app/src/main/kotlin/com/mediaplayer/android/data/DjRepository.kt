@@ -65,8 +65,12 @@ class DjRepository(private val injectedApi: DjApi? = null) {
         cycleEnabled: Boolean? = null,
         slots: Int? = null,
         cadenceDays: Int? = null,
+        playlistMinSize: Int? = null,
+        playlistMaxSize: Int? = null,
     ): DjPreferencesDto =
-        api.updatePreferences(DjUpdatePreferencesRequest(cycleEnabled, slots, cadenceDays))
+        api.updatePreferences(
+            DjUpdatePreferencesRequest(cycleEnabled, slots, cadenceDays, playlistMinSize, playlistMaxSize),
+        )
 
     suspend fun profile(): DjTasteProfileDto = api.profile()
 
@@ -94,6 +98,28 @@ class DjRepository(private val injectedApi: DjApi? = null) {
      */
     suspend fun forceRun(onProgress: (DjRunDto) -> Unit = {}): DjRunDto {
         val opened = api.startRun()
+        onProgress(opened)
+        return DjRunPolling.awaitTerminal(
+            runId = opened.id,
+            fetch = { api.run(it) },
+            onUpdate = onProgress,
+        )
+    }
+
+    /**
+     * Fa comporre la playlist concordata in chat e aspetta l'esito.
+     *
+     * Stessa forma di [forceRun] — apre, poi interroga fino allo stato
+     * terminale — perche' e' lo stesso giro: stesso executor sul server,
+     * stessa riga `dj_runs`, stesso polling. Cambia solo da dove viene il
+     * briefing, e quello non passa da qui: il server lo rilegge dalla riga
+     * del messaggio.
+     */
+    suspend fun composePlaylistFromChat(
+        messageId: Long,
+        onProgress: (DjRunDto) -> Unit = {},
+    ): DjRunDto {
+        val opened = api.composePlaylistFromChat(messageId)
         onProgress(opened)
         return DjRunPolling.awaitTerminal(
             runId = opened.id,

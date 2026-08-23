@@ -315,14 +315,14 @@ private fun MixTile(pl: PlaylistDto, onClick: () -> Unit, modifier: Modifier = M
                 .aspectRatio(1f),
             cornerRadius = 10.dp,
         )
-        Text(
+        // Anche i mix giornalieri possono avere nomi generati lunghi;
+        // marquee al posto del troncamento secco con ellissi.
+        com.mediaplayer.android.ui.common.MarqueeText(
             text = pl.name,
             color = MHColors.TextHi,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 8.dp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = "${pl.songCount} brani",
@@ -348,14 +348,15 @@ private fun WeeklyCard(pl: PlaylistDto, onClick: () -> Unit) {
                 .size(170.dp),
             cornerRadius = 10.dp,
         )
-        Text(
+        // Card larga 170dp fissa: gli aggiornamenti settimanali (Release
+        // Radar, Time Capsule...) hanno titoli composti che ci finiscono
+        // dentro raramente — marquee invece dell'ellissi.
+        com.mediaplayer.android.ui.common.MarqueeText(
             text = pl.name,
             color = MHColors.TextHi,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 8.dp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = "${pl.songCount} brani",

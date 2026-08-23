@@ -903,7 +903,12 @@ internal fun NavHostBody(
                 )
             }
             composable(Routes.DJ) {
-                com.mediaplayer.android.ui.dj.DjScreen()
+                com.mediaplayer.android.ui.dj.DjScreen(
+                    // La playlist composta parlando col DJ nasce in libreria,
+                    // non nella sezione DJ: senza questo salto la persona
+                    // resterebbe con un "fatto" e nessun posto dove andare.
+                    onOpenPlaylist = { id -> navController.navigate(Routes.playlistDetail(id)) },
+                )
             }
             composable(Routes.PROFILE) {
                 com.mediaplayer.android.ui.profile.ProfileScreen(

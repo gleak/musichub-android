@@ -80,6 +80,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.ui.graphics.Color
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,6 +113,29 @@ fun PlaylistDetailScreen(
         val msg = snackMessage ?: return@LaunchedEffect
         snackbar.showSnackbar(msg)
         snackMessage = null
+    }
+
+    // Un segnaposto diventa riproducibile sul SERVER, e questa schermata carica
+    // una volta sola (`init { refresh() }` nel view model). Chi resta a guardare
+    // la scaletta continua a leggere "IN ARRIVO" anche molto dopo che il brano e'
+    // arrivato, e ne conclude che il download non parte: e' il sospetto che il
+    // 2026-08-23 ha fatto cercare un bug nella pipeline di import mentre la
+    // pipeline funzionava e a essere ferma era la schermata.
+    //
+    // La chiave dell'effetto e' il *numero* di brani spenti: cala -> il ciclo
+    // riparte col conteggio nuovo, arriva a zero -> il corpo non gira e non si
+    // interroga piu' il server. Il tetto sui giri serve al caso opposto, quello
+    // che nessuno guarda: un import che non arrivera' mai (ci pensa
+    // PlaceholderSweepJob, giorni dopo) non deve tenere un telefono a
+    // interrogare il backend per ore.
+    val pendingCount = (state as? PlaylistDetailUiState.Success)
+        ?.playlist?.songs?.count { !it.song.playable } ?: 0
+    LaunchedEffect(pendingCount) {
+        if (pendingCount == 0) return@LaunchedEffect
+        repeat(PLACEHOLDER_POLL_MAX_ROUNDS) {
+            delay(PLACEHOLDER_POLL_INTERVAL_MS)
+            viewModel.refresh()
+        }
     }
 
     val successState = state as? PlaylistDetailUiState.Success
@@ -199,6 +223,9 @@ fun PlaylistDetailScreen(
                                 if (ok) onBack() else snackMessage = "Impossibile rimuovere la playlist"
                             }
                         },
+                        onPlayUnavailable = {
+                            snackMessage = "Nessun brano di questa playlist è ancora pronto per l'ascolto"
+                        },
                     )
                 }
             }
@@ -248,6 +275,7 @@ private fun PlaylistDetailBody(
     onToggleAutoSync: () -> Unit,
     onManageMembers: () -> Unit,
     onLeavePlaylist: () -> Unit,
+    onPlayUnavailable: () -> Unit,
 ) {
     val playbackVm: PlaybackViewModel = viewModel()
     val playerIsPlaying by playbackVm.isPlaying.collectAsStateWithLifecycle()
@@ -265,6 +293,12 @@ private fun PlaylistDetailBody(
     // (song.id alone collides on duplicate songs).
     var entries by remember { mutableStateOf(playlist.songs) }
     val songsForPlayback: List<SongDto> = entries.map { it.song }
+    // I brani segnaposto (playable=false — richiesta al DJ non ancora
+    // scaricata, o file sparito) restano nella lista ma non vanno mai in
+    // coda: `playbackVm.playPlaylist`/`playPlaylistShuffled` li filtrano
+    // comunque, questo serve solo a capire se il tasto play ha davvero
+    // qualcosa da avviare (punto 4: "playlist tutta non riproducibile").
+    val hasPlayableSong = songsForPlayback.any { it.playable }
     // Key the prime + sync effects on a stable id-list hash. The previous
     // List<*> key triggered on every cache refresh because each refresh
     // produces a fresh list instance — re-priming hundreds of liked rows
@@ -355,7 +389,12 @@ private fun PlaylistDetailBody(
             val heroCoverSongId = if (playlist.isAuto) null
                 else playlist.songs.firstOrNull { it.song.hasCoverArt }?.song?.id
             val heroEyebrow = when {
-                playlist.kind == "DJ_SET" -> "PROPOSTA DEL DJ"
+                playlist.isDjSet -> "PROPOSTA DEL DJ"
+                // Promossa: kind dice USER e nessuna delle righe sotto la
+                // riconoscerebbe piu'. E' pero' il caso in cui il ricordo
+                // serve di piu' — l'utente l'ha tenuta settimane fa e non
+                // ricorda di non averla scritta lui.
+                playlist.createdByDj -> "COMPOSTA DAL DJ"
                 playlist.isAuto -> "PER TE · GENERATA"
                 playlist.isShared -> "PLAYLIST · COLLABORATIVA"
                 else -> null
@@ -377,9 +416,16 @@ private fun PlaylistDetailBody(
                 eyebrow = heroEyebrow,
                 onPlay = {
                     if (playingFromHere) playbackVm.togglePlayPause()
-                    else if (entries.isNotEmpty()) onPlayFromIndex(songsForPlayback, 0)
+                    else if (hasPlayableSong) onPlayFromIndex(songsForPlayback, 0)
+                    else onPlayUnavailable()
                 },
-                onShuffle = { onShufflePlay(songsForPlayback) },
+                onShuffle = {
+                    if (hasPlayableSong) onShufflePlay(songsForPlayback)
+                    else onPlayUnavailable()
+                },
+                // Il tasto resta tappabile anche a zero brani pronti: e' quello
+                // che permette al ramo `else onPlayUnavailable()` sopra di
+                // dirlo invece di apparire semplicemente rotto/disabilitato.
                 playEnabled = entries.isNotEmpty(),
                 isPlaying = playingFromHere,
                 customCover = if (playlist.isAuto) {
@@ -519,24 +565,42 @@ private fun PlaylistDetailBody(
                             }
                         },
                     ) {
-                        // Contributor pill only when collaborative AND the
-                        // adder isn't the playlist owner — owner attribution
-                        // would clutter every row on a single-author playlist.
-                        val contributorTag = entry.addedByName
-                            ?.takeIf { playlist.isShared && entry.addedByUserId != playlist.ownerId }
-                        SongRow(
-                            song = song,
-                            isDownloaded = song.id in downloadedIds,
-                            onClick = { onPlayFromIndex(songsForPlayback, idx) },
-                            onMore = { onLongPressSong(song) },
-                            contributorTag = contributorTag,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surface),
-                            rowGestureModifier = if (!playlist.isAuto)
-                                Modifier.longPressDraggableHandle()
-                            else Modifier,
-                        )
+                        if (song.playable) {
+                            // Contributor pill only when collaborative AND the
+                            // adder isn't the playlist owner — owner attribution
+                            // would clutter every row on a single-author playlist.
+                            val contributorTag = entry.addedByName
+                                ?.takeIf { playlist.isShared && entry.addedByUserId != playlist.ownerId }
+                            SongRow(
+                                song = song,
+                                isDownloaded = song.id in downloadedIds,
+                                onClick = { onPlayFromIndex(songsForPlayback, idx) },
+                                onMore = { onLongPressSong(song) },
+                                contributorTag = contributorTag,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surface),
+                                rowGestureModifier = if (!playlist.isAuto)
+                                    Modifier.longPressDraggableHandle()
+                                else Modifier,
+                            )
+                        } else {
+                            // Segnaposto del DJ (o file sparito): spento, con
+                            // etichetta "In arrivo", non tappabile per la
+                            // riproduzione. Il drag handle resta comunque
+                            // disponibile — riordinare non richiede che il
+                            // brano sia gia' scaricato.
+                            UnavailableSongRow(
+                                song = song,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .then(
+                                        if (!playlist.isAuto) Modifier.longPressDraggableHandle()
+                                        else Modifier
+                                    ),
+                            )
+                        }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
@@ -747,3 +811,27 @@ private fun LeavePlaylistButton(
         )
     }
 }
+
+/**
+ * Ogni quanto richiedere la scaletta finche' contiene brani in arrivo.
+ *
+ * Venti secondi e' un compromesso fra due errori. Piu' corto trasforma una
+ * schermata aperta in un ping continuo verso un backend che sta gia' scaricando;
+ * piu' lungo e l'utente vede "IN ARRIVO" su un brano che potrebbe gia' suonare, e
+ * la prima cosa che fa e' toccarlo — cioe' proprio l'attesa che questa lista
+ * doveva evitare. Il drain lato server gira ogni 5 minuti a lotti di 20, quindi
+ * i brani arrivano a raffiche: venti secondi bastano a mostrarne una quasi
+ * subito.
+ */
+private const val PLACEHOLDER_POLL_INTERVAL_MS = 20_000L
+
+/**
+ * Quanti giri al massimo, cioe' circa dieci minuti.
+ *
+ * Non e' un tetto sull'attesa dell'utente — riaprire la scaletta fa ripartire il
+ * conteggio. E' un tetto sul caso in cui il brano non arrivera' mai: un import
+ * che fallisce definitivamente lascia il segnaposto in scaletta finche'
+ * PlaceholderSweepJob non lo toglie, e senza questo limite un telefono
+ * dimenticato aperto su quella schermata interrogherebbe il backend per giorni.
+ */
+private const val PLACEHOLDER_POLL_MAX_ROUNDS = 30

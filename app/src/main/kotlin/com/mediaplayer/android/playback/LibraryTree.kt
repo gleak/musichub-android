@@ -454,20 +454,28 @@ internal object LibraryTree {
     }
 
     // --- queue resolvers (called by onSetMediaItems) -------------------------
+    //
+    // Ogni resolver qui sotto alimenta direttamente `c.setMediaItems(...)`:
+    // un brano segnaposto (playable=false — richiesta al DJ non ancora
+    // scaricata, o file sparito) che ci finisse dentro si comporterebbe in
+    // auto come uno skip fantasma (non parte, e l'app ha gia' avuto due
+    // incidenti di quella famiglia). Le liste sfogliabili (`playlistSongs`,
+    // `albumSongs`, ...) restano invece invariate: li' il brano deve
+    // comparire — solo spento — cosi' l'utente vede cosa il DJ ha scelto.
 
     suspend fun playlistQueue(playlistId: Long): List<MediaItem> {
         val detail = Network.api.getPlaylist(playlistId)
-        return detail.songs.map { playableSong(it.song) }
+        return detail.songs.map { it.song }.filter { it.playable }.map { playableSong(it) }
     }
 
     suspend fun albumQueue(name: String, artist: String): List<MediaItem> {
         val detail = Network.api.getAlbum(name, artist)
-        return detail.songs.map { playableSong(it) }
+        return detail.songs.filter { it.playable }.map { playableSong(it) }
     }
 
     suspend fun artistQueue(name: String): List<MediaItem> {
         val detail = Network.api.getArtist(name)
-        return detail.songs.map { playableSong(it) }
+        return detail.songs.filter { it.playable }.map { playableSong(it) }
     }
 
     /**
@@ -477,7 +485,7 @@ internal object LibraryTree {
      */
     suspend fun genreQueue(tag: String): List<MediaItem> =
         Network.api.listSongs(query = null, genre = tag, page = 0, size = LIKED_LIMIT)
-            .items.map { playableSong(it) }
+            .items.filter { it.playable }.map { playableSong(it) }
 
     /**
      * Catalog page used as the backing pool for a bare `song:` leaf (search
@@ -494,13 +502,14 @@ internal object LibraryTree {
      */
     suspend fun allSongsQueue(): List<MediaItem> =
         Network.api.listSongs(query = null, genre = null, page = 0, size = LIKED_LIMIT)
-            .items.map { playableSong(it) }
+            .items.filter { it.playable }.map { playableSong(it) }
 
     suspend fun likedQueue(): List<MediaItem> =
-        Network.api.getLikedSongs(page = 0, size = LIKED_LIMIT).items.map { playableSong(it) }
+        Network.api.getLikedSongs(page = 0, size = LIKED_LIMIT).items
+            .filter { it.playable }.map { playableSong(it) }
 
     suspend fun recentsQueue(): List<MediaItem> =
-        Network.api.recentSongs(limit = RECENT_LIMIT).map { playableSong(it) }
+        Network.api.recentSongs(limit = RECENT_LIMIT).filter { it.playable }.map { playableSong(it) }
 
     // --- info placeholder ----------------------------------------------------
 

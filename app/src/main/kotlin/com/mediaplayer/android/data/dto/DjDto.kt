@@ -28,6 +28,15 @@ data class DjRunDto(
     val playlistsWritten: Int = 0,
     val playlistsRejected: Int = 0,
     val error: String? = null,
+    /**
+     * La playlist che il giro ha creato, quando ne ha creata una nuova.
+     *
+     * Nullo per il ciclo settimanale, che riscrive slot gia' esistenti invece
+     * di crearne. Valorizzato dai giri nati dalla chat: e' l'unico modo che
+     * l'app ha per portare la persona sulla playlist che ha appena chiesto,
+     * invece di dirle "fatto" e lasciarla cercare.
+     */
+    val createdPlaylistId: Long? = null,
 )
 
 @Serializable
@@ -41,6 +50,11 @@ data class DjPreferencesDto(
     val maxSlots: Int = 8,
     val minCadenceDays: Int = 1,
     val maxCadenceDays: Int = 30,
+    /** Gia' risolti sul default globale quando la persona non ha scelto: mai un segnaposto. */
+    val playlistMinSize: Int = 15,
+    val playlistMaxSize: Int = 28,
+    val minPlaylistSize: Int = 5,
+    val maxPlaylistSize: Int = 50,
 )
 
 /**
@@ -53,6 +67,8 @@ data class DjUpdatePreferencesRequest(
     val cycleEnabled: Boolean? = null,
     val slots: Int? = null,
     val cadenceDays: Int? = null,
+    val playlistMinSize: Int? = null,
+    val playlistMaxSize: Int? = null,
 )
 
 @Serializable
@@ -87,6 +103,18 @@ data class DjTasteProfileDto(
     val profile: DjTasteProfile = DjTasteProfile(),
 )
 
+/**
+ * Un turno della conversazione.
+ *
+ * [playlistName] e [playlistBrief] sono valorizzati solo sui turni in cui il
+ * DJ e la persona hanno definito una scaletta concreta — quasi mai, ed e' il
+ * caso normale. Quando ci sono, sotto il messaggio compare il pulsante che la
+ * fa comporre davvero: in chat il DJ non ha il catalogo in mano, quindi puo'
+ * decidere che playlist fare ma non farla.
+ *
+ * [id] serve proprio a quello: il pulsante si riferisce a QUEL messaggio, non
+ * all'ultimo. La conversazione intanto va avanti.
+ */
 @Serializable
 data class DjChatMessageDto(
     val role: String,
@@ -94,12 +122,24 @@ data class DjChatMessageDto(
     /** Vero quando il DJ ha rifiutato di rispondere perche' fuori tema. */
     val refused: Boolean = false,
     val createdAt: String,
-)
+    // In coda e non in testa: le chiamate posizionali che gia' esistono
+    // (i test di schermata) continuano a dire cio' che intendevano.
+    val id: Long? = null,
+    val playlistName: String? = null,
+    val playlistBrief: String? = null,
+) {
+    /** Vero quando da questo turno si puo' far comporre una playlist. */
+    val hasPlaylistIntent: Boolean
+        get() = id != null && !playlistName.isNullOrBlank()
+}
 
 @Serializable
 data class DjChatReplyDto(
     val reply: String,
     val offTopic: Boolean = false,
+    val id: Long? = null,
+    val playlistName: String? = null,
+    val playlistBrief: String? = null,
 )
 
 @Serializable

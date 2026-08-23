@@ -272,7 +272,21 @@ private fun LibraryList(
     ) {
         when (filter) {
             LibraryFilter.Playlists -> {
-                val userPlaylists = playlists.filterNot { it.isAuto }
+                // Le proposte del DJ restano, tutto il resto delle auto no.
+                //
+                // Misurato il 2026-08-23: con `filterNot { it.isAuto }` le
+                // proposte del DJ non comparivano in NESSUNA schermata — qui
+                // filtrate come auto, in "Per te" scartate perche'
+                // AutoPlaylistFamily.Dj non appartiene a nessuno dei gruppi
+                // renderizzati, e la sezione DJ non le elenca affatto. Il ciclo
+                // scriveva quattro scalette che l'utente non poteva vedere.
+                //
+                // Stanno qui e non fra le auto di "Per te" perche' sono cio' che
+                // si PROMUOVE: il pulsante vive nel dettaglio della playlist, e
+                // la libreria e' il posto da cui ci si arriva. Restano comunque
+                // non cancellabili (il long-press e' gia' disattivato per le
+                // auto) perche' il prossimo giro le riscriverebbe.
+                val userPlaylists = playlists.filter { !it.isAuto || it.fromDj }
                 item(key = "liked", span = { GridItemSpan(maxLineSpan) }) {
                     LikedSongsRow(onClick = onLikedSongsClick)
                 }
@@ -484,8 +498,14 @@ private fun PlaylistTile(
                 .size(52.dp)
                 .clip(CoverShapes.SongRow)
                 .background(
-                    if (playlist.isAuto) {
-                        com.mediaplayer.android.ui.common.autoPlaylistGradient(playlist.kind)
+                    if (playlist.isAuto || playlist.fromDj) {
+                        // Una proposta promossa ha kind USER: senza fromDj
+                        // ricadrebbe sul grigio delle playlist dell'utente e
+                        // il gradiente del DJ sparirebbe proprio quando
+                        // l'utente ha deciso di tenerla.
+                        com.mediaplayer.android.ui.common.autoPlaylistGradient(
+                            if (playlist.fromDj) "DJ_SET" else playlist.kind
+                        )
                     } else {
                         Brush.linearGradient(
                             listOf(
@@ -497,7 +517,7 @@ private fun PlaylistTile(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            if (cover != null && !playlist.isAuto) {
+            if (cover != null && !playlist.isAuto && !playlist.fromDj) {
                 coil3.compose.AsyncImage(
                     model = com.mediaplayer.android.data.Network.coverUrl(cover),
                     contentDescription = null,
@@ -505,25 +525,38 @@ private fun PlaylistTile(
                 )
             } else {
                 Icon(
-                    imageVector = if (playlist.isAuto) Icons.Filled.AutoAwesome
+                    imageVector = if (playlist.isAuto || playlist.fromDj) Icons.Filled.AutoAwesome
                     else Icons.AutoMirrored.Filled.QueueMusic,
                     contentDescription = null,
-                    tint = if (playlist.isAuto) Color.White
+                    tint = if (playlist.isAuto || playlist.fromDj) Color.White
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            // I titoli generati dal DJ sono lunghi ("Rock Alternativo:
+            // Malinconia e Atmosfera") e con l'ellissi da soli in libreria
+            // erano illeggibili senza aprire la playlist — marquee al posto
+            // del semplice troncamento.
+            com.mediaplayer.android.ui.common.MarqueeText(
                 text = playlist.name,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             val subtitle = buildString {
-                append(if (playlist.isAuto) "Per te" else "Playlist")
+                // "Per te" copriva ogni playlist generata, DJ compreso: in
+                // libreria una proposta del DJ era indistinguibile dalle
+                // playlist scritte a mano, e dopo la promozione (kind DJ_SET
+                // -> USER) diceva addirittura "Playlist". Il DJ ha una riga
+                // sua, e la conserva anche da promossa grazie a createdByDj.
+                append(
+                    when {
+                        playlist.fromDj -> "Proposta del DJ"
+                        playlist.isAuto -> "Per te"
+                        else -> "Playlist"
+                    }
+                )
                 append(" · ")
                 append(pluralizeSongs(playlist.songCount))
                 if (!playlist.isAuto) {

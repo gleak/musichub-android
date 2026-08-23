@@ -62,6 +62,21 @@ interface DjApi {
     @POST("api/dj/chat")
     suspend fun sendMessage(@Body body: DjSendMessageRequest): DjChatReplyDto
 
+    /**
+     * Fa comporre davvero la playlist concordata in quel turno di chat.
+     *
+     * Non manda nessun testo: il briefing con cui si compone vive sulla riga
+     * del messaggio lato server. Se lo mandasse il client, chiunque potrebbe
+     * far comporre al DJ qualunque cosa chiamando l'endpoint da solo.
+     *
+     * Risponde 202 con la riga appena aperta (status RUNNING), non con
+     * l'esito: e' un giro da minuti, e si segue con [run]. 404 se quel
+     * messaggio non esiste, non e' tuo, o non portava nessuna proposta;
+     * 409/429 con le stesse regole di [startRun].
+     */
+    @POST("api/dj/chat/messages/{messageId}/playlist")
+    suspend fun composePlaylistFromChat(@Path("messageId") messageId: Long): DjRunDto
+
     /** Cancella conversazione, profilo e storico del profilo. 204. */
     @DELETE("api/dj/chat")
     suspend fun eraseChat(): Response<Unit>

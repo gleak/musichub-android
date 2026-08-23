@@ -379,6 +379,79 @@ class PlaybackViewModelTest {
         verify(exactly = 0) { controller.setMediaItems(any(), any(), any()) }
     }
 
+    /**
+     * DJ placeholder songs (`playable = false` — a request the DJ hasn't
+     * finished downloading yet, or a song whose file went missing) must
+     * never reach the player: on Android Auto an item that won't start
+     * behaves exactly like the phantom-skip incidents this app already had.
+     * Red if the filter in [PlaybackViewModel.playPlaylist] is removed.
+     */
+    @Test
+    fun `playing a playlist drops unplayable songs from the queue`() {
+        connect()
+        val items = slot<List<MediaItem>>()
+        val index = slot<Int>()
+        every { controller.setMediaItems(capture(items), capture(index), any()) } returns Unit
+
+        viewModel.playPlaylist(
+            listOf(song(1L), song(2L, playable = false), song(3L)),
+        )
+
+        assertEquals(listOf("1", "3"), items.captured.map { it.mediaId })
+    }
+
+    /**
+     * The tapped song's POSITION, not its id, drives the start index —
+     * playlists can contain the same song twice — so a placeholder sitting
+     * before the tapped track must not shift playback onto the wrong song.
+     */
+    @Test
+    fun `tapping a track past a placeholder still starts on the right song`() {
+        connect()
+        val items = slot<List<MediaItem>>()
+        val index = slot<Int>()
+        every { controller.setMediaItems(capture(items), capture(index), any()) } returns Unit
+
+        viewModel.playPlaylist(
+            listOf(song(1L), song(2L, playable = false), song(3L)),
+            startIndex = 2,
+        )
+
+        assertEquals(listOf("1", "3"), items.captured.map { it.mediaId })
+        assertEquals("3", items.captured[index.captured].mediaId)
+    }
+
+    /** A playlist made entirely of placeholders must not reach the player either. */
+    @Test
+    fun `a playlist with nothing playable is not handed to the player`() {
+        connect()
+
+        viewModel.playPlaylist(listOf(song(1L, playable = false), song(2L, playable = false)))
+
+        verify(exactly = 0) { controller.setMediaItems(any(), any(), any()) }
+    }
+
+    @Test
+    fun `shuffle-play also drops unplayable songs from the queue`() {
+        connect()
+        val items = slot<List<MediaItem>>()
+        every { controller.setMediaItems(capture(items), any(), any()) } returns Unit
+
+        viewModel.playPlaylistShuffled(listOf(song(1L), song(2L, playable = false), song(3L)))
+
+        assertEquals(setOf("1", "3"), items.captured.map { it.mediaId }.toSet())
+    }
+
+    /** A single unplayable song is not a valid `play()` target either. */
+    @Test
+    fun `playing a single unplayable song is a no-op`() {
+        connect()
+
+        viewModel.play(song(1L, playable = false))
+
+        verify(exactly = 0) { controller.setMediaItem(any()) }
+    }
+
     @Test
     fun `playing a playlist records where it came from`() {
         connect()

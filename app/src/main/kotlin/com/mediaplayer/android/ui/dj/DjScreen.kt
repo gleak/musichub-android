@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -76,7 +77,10 @@ import com.mediaplayer.android.ui.theme.MediaPlayerSpacing
  * vive solo attraverso le playlist che produce.
  */
 @Composable
-fun DjScreen(viewModel: DjViewModel = viewModel()) {
+fun DjScreen(
+    onOpenPlaylist: (Long) -> Unit = {},
+    viewModel: DjViewModel = viewModel(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var draft by remember { mutableStateOf("") }
     var confirmErase by remember { mutableStateOf(false) }
@@ -89,7 +93,7 @@ fun DjScreen(viewModel: DjViewModel = viewModel()) {
         when {
             state.loading -> CenteredSpinner()
             state.loadError != null -> ErrorWithRetry(state.loadError!!, viewModel::refresh)
-            else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+            else -> LazyColumn(modifier = Modifier.fillMaxSize().testTag("dj-screen-list")) {
                 item(key = "header") {
                     Column(modifier = Modifier.padding(
                         start = MediaPlayerSpacing.M, end = MediaPlayerSpacing.M,
@@ -128,7 +132,43 @@ fun DjScreen(viewModel: DjViewModel = viewModel()) {
                             "sera» dice al DJ piu’ di mille ascolti.")
                     }
                 }
-                items(state.messages, key = { it.createdAt + it.role }) { ChatBubble(it) }
+                items(state.messages, key = { it.createdAt + it.role }) { message ->
+                    ChatBubble(
+                        message = message,
+                        composing = state.composingMessageId == message.id,
+                        canCompose = state.canCompose,
+                        onCompose = { viewModel.composePlaylistFromChat(it) },
+                    )
+                }
+                // Esito della composizione, sotto la conversazione e non dentro
+                // una bolla: riguarda cio' che e' successo dopo lo scambio, non
+                // uno dei due che parlano.
+                state.composedPlaylistId?.let { playlistId ->
+                    item(key = "composed-ok") {
+                        Column(modifier = Modifier.padding(horizontal = MediaPlayerSpacing.M)) {
+                            DjBody(
+                                (state.composedPlaylistName?.let { "«" + it + "» e' pronta." }
+                                    ?: "La playlist e' pronta.") +
+                                    " La trovi in libreria: e' tua, il ciclo non la tocca."
+                            )
+                            Button(
+                                onClick = {
+                                    viewModel.dismissComposeResult()
+                                    onOpenPlaylist(playlistId)
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MHColors.Lime,
+                                    contentColor = Color(0xFF0A0A0A),
+                                ),
+                            ) {
+                                Text("Aprila", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+                state.composeError?.let { error ->
+                    item(key = "composed-error") { DjNotice(error) }
+                }
 
                 if (!state.chatEnabled) {
                     item(key = "chat-off") { DjNotice("La chat col DJ e’ spenta su questo server.") }
@@ -312,6 +352,34 @@ fun DjScreen(viewModel: DjViewModel = viewModel()) {
                                     unit = "giorni",
                                     enabled = !state.savingPreferences,
                                     onChange = { viewModel.savePreferences(cadenceDays = it) },
+                                    showDivider = true,
+                                )
+                                // I bound non sono minPlaylistSize/maxPlaylistSize (i limiti
+                                // assoluti, 5 e 50) ma il valore corrente dell'altro stepper:
+                                // cosi' il pulsante "+" del minimo si disabilita quando
+                                // raggiunge il massimo scelto, e il "-" del massimo quando
+                                // raggiunge il minimo scelto. Impostare min > max dall'interfaccia
+                                // e' semplicemente un pulsante che non risponde piu'.
+                                DjStepperRow(
+                                    label = "Dimensione minima",
+                                    detail = "Il DJ non propone playlist piu’ corte di cosi’.",
+                                    value = prefs.playlistMinSize,
+                                    min = prefs.minPlaylistSize,
+                                    max = prefs.playlistMaxSize,
+                                    unit = "brani",
+                                    enabled = !state.savingPreferences,
+                                    onChange = { viewModel.savePreferences(playlistMinSize = it) },
+                                    showDivider = true,
+                                )
+                                DjStepperRow(
+                                    label = "Dimensione massima",
+                                    detail = "Ne’ piu’ lunghe di cosi’.",
+                                    value = prefs.playlistMaxSize,
+                                    min = prefs.playlistMinSize,
+                                    max = prefs.maxPlaylistSize,
+                                    unit = "brani",
+                                    enabled = !state.savingPreferences,
+                                    onChange = { viewModel.savePreferences(playlistMaxSize = it) },
                                 )
                             }
                         }
@@ -411,7 +479,12 @@ internal fun DjNotice(text: String) {
 }
 
 @Composable
-private fun ChatBubble(message: DjChatMessageDto) {
+private fun ChatBubble(
+    message: DjChatMessageDto,
+    composing: Boolean = false,
+    canCompose: Boolean = false,
+    onCompose: (Long) -> Unit = {},
+) {
     val mine = message.role == "USER"
     Row(
         modifier = Modifier
@@ -441,6 +514,64 @@ private fun ChatBubble(message: DjChatMessageDto) {
                     style = LocalMHMono.current.badge.copy(color = MHColors.TextLo2),
                     modifier = Modifier.padding(top = 5.dp),
                 )
+            }
+            // Il ponte fra il parlare e il fare. In chat il DJ non ha il
+            // catalogo in mano, quindi puo' concordare CHE playlist fare ma
+            // non farla: questo pulsante apre il giro che la compone davvero,
+            // partendo dal briefing che il DJ ha scritto su questo messaggio.
+            //
+            // Dentro la bolla e non in fondo alla schermata: la conversazione
+            // va avanti, e un pulsante staccato dal turno che l'ha prodotto
+            // comporrebbe cio' di cui si e' parlato tre messaggi fa senza che
+            // si veda quale.
+            if (message.hasPlaylistIntent) {
+                val id = message.id ?: return@Column
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = message.playlistName.orEmpty(),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MHColors.TextHi,
+                )
+                message.playlistBrief?.takeIf { it.isNotBlank() }?.let { brief ->
+                    Text(
+                        text = brief,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MHColors.TextLo,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = { onCompose(id) },
+                    // Composto e generato passano dallo stesso giro sul
+                    // server: se non si puo' generare non si puo' comporre, e
+                    // lasciare il pulsante attivo prometterebbe un 409.
+                    enabled = canCompose,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MHColors.Lime,
+                        contentColor = Color(0xFF0A0A0A),
+                    ),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = if (composing) "Sto componendo…" else "Crea questa playlist",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                if (composing) {
+                    Text(
+                        text = "Puo' volerci qualche minuto. Puoi lasciare questa schermata.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MHColors.TextLo,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
             }
         }
     }

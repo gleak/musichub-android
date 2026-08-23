@@ -859,12 +859,13 @@ private fun PlaylistCardSquare(playlist: PlaylistDto, onClick: () -> Unit) {
                 )
             }
         }
-        Text(
+        // Titoli DJ lunghi ("Nu-Metal & Alternative Rock Essentials") in una
+        // card larga 140dp finivano quasi sempre troncati: marquee al posto
+        // del semplice troncamento con ellissi.
+        com.mediaplayer.android.ui.common.MarqueeText(
             text = playlist.name,
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = if (playlist.isAuto) "Generata per te"
@@ -1030,12 +1031,12 @@ private fun PlaylistListRow(playlist: PlaylistDto, onClick: () -> Unit) {
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            // Stessa ragione della card square sopra: nomi DJ lunghi,
+            // marquee invece del troncamento con ellissi.
+            com.mediaplayer.android.ui.common.MarqueeText(
                 text = playlist.name,
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = if (playlist.isAuto) "Per te · ${playlist.songCount} brani"

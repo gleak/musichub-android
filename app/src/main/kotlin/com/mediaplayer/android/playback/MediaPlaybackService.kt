@@ -1535,11 +1535,20 @@ class MediaPlaybackService : MediaLibraryService() {
                     val id = mediaItems[0].mediaId
 
                     // Playlist leaf → expand the whole playlist starting at pos.
-                    LibraryTree.parsePlaylistLeaf(id)?.let { (pid, pos, _) ->
+                    // `pos` era la posizione assoluta nella lista sfogliata, ma
+                    // playlistQueue() ora toglie i segnaposto non riproducibili:
+                    // se ce n'era anche uno solo prima del brano toccato, `pos`
+                    // punterebbe al brano sbagliato nella coda filtrata. L'id
+                    // del brano toccato e' pero' sempre affidabile — la riga di
+                    // un segnaposto non e' selezionabile in AA (isPlayable=false
+                    // in `asBrowseMetadata`) — quindi si cerca prima per identita'
+                    // e si ripiega su `pos` solo se la ricerca fallisce (stesso
+                    // pattern gia' usato sotto per la leaf `qu:`).
+                    LibraryTree.parsePlaylistLeaf(id)?.let { (pid, pos, sid) ->
                         val q = runCatching { LibraryTree.playlistQueue(pid) }
                             .getOrDefault(emptyList())
                         if (q.isNotEmpty()) return@future MediaSession.MediaItemsWithStartPosition(
-                            q, pos.coerceAtMost(q.lastIndex.coerceAtLeast(0)), C.TIME_UNSET
+                            q, q.startIndexFor(sid, pos), C.TIME_UNSET
                         )
                     }
 
@@ -1548,25 +1557,25 @@ class MediaPlaybackService : MediaLibraryService() {
                         val q = runCatching { LibraryTree.albumQueue(quad.a, quad.b) }
                             .getOrDefault(emptyList())
                         if (q.isNotEmpty()) return@future MediaSession.MediaItemsWithStartPosition(
-                            q, quad.c.coerceAtMost(q.lastIndex.coerceAtLeast(0)), C.TIME_UNSET
+                            q, q.startIndexFor(quad.fourth(), quad.c), C.TIME_UNSET
                         )
                     }
 
                     // Artist leaf → expand artist's full song list from pos.
-                    LibraryTree.parseArtistLeaf(id)?.let { (name, pos, _) ->
+                    LibraryTree.parseArtistLeaf(id)?.let { (name, pos, sid) ->
                         val q = runCatching { LibraryTree.artistQueue(name) }
                             .getOrDefault(emptyList())
                         if (q.isNotEmpty()) return@future MediaSession.MediaItemsWithStartPosition(
-                            q, pos.coerceAtMost(q.lastIndex.coerceAtLeast(0)), C.TIME_UNSET
+                            q, q.startIndexFor(sid, pos), C.TIME_UNSET
                         )
                     }
 
                     // Genre leaf → expand genre's song list from pos.
-                    LibraryTree.parseGenreLeaf(id)?.let { (tag, pos, _) ->
+                    LibraryTree.parseGenreLeaf(id)?.let { (tag, pos, sid) ->
                         val q = runCatching { LibraryTree.genreQueue(tag) }
                             .getOrDefault(emptyList())
                         if (q.isNotEmpty()) return@future MediaSession.MediaItemsWithStartPosition(
-                            q, pos.coerceAtMost(q.lastIndex.coerceAtLeast(0)), C.TIME_UNSET
+                            q, q.startIndexFor(sid, pos), C.TIME_UNSET
                         )
                     }
 
@@ -1602,20 +1611,20 @@ class MediaPlaybackService : MediaLibraryService() {
                     }
 
                     // Liked leaf → expand liked collection from pos.
-                    LibraryTree.parseSimpleLeaf(id, "lk:")?.let { (pos, _) ->
+                    LibraryTree.parseSimpleLeaf(id, "lk:")?.let { (pos, sid) ->
                         val q = runCatching { LibraryTree.likedQueue() }
                             .getOrDefault(emptyList())
                         if (q.isNotEmpty()) return@future MediaSession.MediaItemsWithStartPosition(
-                            q, pos.coerceAtMost(q.lastIndex.coerceAtLeast(0)), C.TIME_UNSET
+                            q, q.startIndexFor(sid, pos), C.TIME_UNSET
                         )
                     }
 
                     // Recents leaf → expand recents queue from pos.
-                    LibraryTree.parseSimpleLeaf(id, "rc:")?.let { (pos, _) ->
+                    LibraryTree.parseSimpleLeaf(id, "rc:")?.let { (pos, sid) ->
                         val q = runCatching { LibraryTree.recentsQueue() }
                             .getOrDefault(emptyList())
                         if (q.isNotEmpty()) return@future MediaSession.MediaItemsWithStartPosition(
-                            q, pos.coerceAtMost(q.lastIndex.coerceAtLeast(0)), C.TIME_UNSET
+                            q, q.startIndexFor(sid, pos), C.TIME_UNSET
                         )
                     }
 
@@ -1646,4 +1655,22 @@ class MediaPlaybackService : MediaLibraryService() {
                 MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
             }
     }
+}
+
+/**
+ * Resolves the start index for a leaf tap by song identity first, baked
+ * position second. `fallbackPos` was computed when the folder was browsed —
+ * against the full, unfiltered list. The queue resolvers in [LibraryTree]
+ * (`playlistQueue`, `albumQueue`, ...) now drop non-`playable` placeholder
+ * songs, so a filtered queue's positions no longer line up with the browsed
+ * list's: if any placeholder sat before the tapped song, `fallbackPos` would
+ * point at the wrong track. The tapped song's id stays reliable — its row
+ * couldn't have been tapped if it weren't playable (AA marks segnaposto rows
+ * `isPlayable = false`) — so look it up directly and only fall back to the
+ * baked position if, for some reason, it isn't present (mirrors the `qu:`
+ * leaf's identity-first lookup above).
+ */
+private fun List<MediaItem>.startIndexFor(songId: Long, fallbackPos: Int): Int {
+    val bySongId = indexOfFirst { it.mediaId.removePrefix("song:").toLongOrNull() == songId }
+    return if (bySongId >= 0) bySongId else fallbackPos.coerceAtMost(lastIndex.coerceAtLeast(0))
 }

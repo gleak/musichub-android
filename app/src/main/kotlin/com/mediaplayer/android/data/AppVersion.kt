@@ -1,16 +1,27 @@
 package com.mediaplayer.android.data
 
+import com.mediaplayer.android.BuildConfig
+
 /**
  * App-wide version + changelog source of truth.
  *
- * INVARIANT: every new user-visible feature MUST bump [VERSION] and prepend a
- * matching [ChangelogEntry] at the top of [Changelog.entries]. Bug-fix-only
- * commits do not require a bump. Keep [VERSION] aligned with `versionName`
- * in `app/build.gradle.kts` — the Gradle value drives Play Store metadata,
- * this constant drives the in-app changelog gate.
+ * INVARIANT: every new user-visible feature MUST prepend a matching
+ * [ChangelogEntry] at the top of [Changelog.entries], e la versione si alza in
+ * `app/build.gradle.kts`.
+ *
+ * [VERSION] **deriva** da `versionName`, non lo duplica. Prima era una
+ * costante scritta a mano con l'istruzione "tienila allineata a
+ * `versionName`", e il 2026-08-23 e' successo cio' che quel tipo di
+ * istruzione garantisce: pubblicate 0.24.1 e 0.24.2, la schermata
+ * Impostazioni continuava a dire **v0.24.0**, perche' legge di qui mentre
+ * l'APK si chiamava con l'altro numero. Non era un difetto cosmetico: e' il
+ * dato con cui si risponde a "che versione stai usando?" quando qualcosa non
+ * va, e mentiva. La stessa app usava gia' `BuildConfig.VERSION_NAME` in
+ * `AppUpdateBanner` — due fonti di verita' per lo stesso numero, e la piu'
+ * visibile era quella sbagliata.
  */
 object AppVersion {
-    const val VERSION = "0.24.0"
+    val VERSION: String = BuildConfig.VERSION_NAME
 }
 
 data class ChangelogEntry(
@@ -21,6 +32,54 @@ data class ChangelogEntry(
 
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
+        ChangelogEntry(
+            version = "0.25.0",
+            title = "Decidila parlando, poi creala",
+            highlights = listOf(
+                "Quando parlando col DJ arrivate a una playlist precisa, sotto la sua risposta compare «Crea questa playlist»: la compone davvero, pescando dal catalogo e cercando fuori quello che manca.",
+                "Nasce già tua, non come proposta a rotazione: il ciclo settimanale non la tocca e non sparisce da sola. In libreria resta scritto che l'ha composta il DJ.",
+                "Quando è pronta puoi aprirla da lì, senza cercarla.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.24.6",
+            title = "«IN ARRIVO» che non resta appeso",
+            highlights = listOf(
+                "Un brano segnato «IN ARRIVO» ora si accende da solo: finche' la scaletta ne contiene, la schermata si aggiorna da sola e il brano diventa ascoltabile appena e' pronto. Prima la pagina caricava una volta sola, quindi restava scritto «IN ARRIVO» anche molto dopo che il download era finito, e sembrava che non partisse nulla.",
+                "Il DJ ha piu' tempo per comporre. Da quando cerca anche sul web, un giro puo' durare minuti: con il limite di prima moriva a meta' e non arrivava nessuna playlist.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.24.5",
+            title = "Nomi che scorrono, ricerca che ci prende",
+            highlights = listOf(
+                "I nomi lunghi delle playlist ora scorrono davvero: prima lo scorrimento non partiva mai sui titoli di più parole, cioè proprio quelli per cui serviva.",
+                "La ricerca mette per primi i risultati che c'entrano. Prima ordinava in ordine alfabetico per artista, quindi una corrispondenza esatta poteva finire sotto una somiglianza vaga: cercando «this is war» arrivavano brani senza rapporto.",
+                "Il DJ può cercare sul web mentre compone: sa cosa è uscito e cosa sta girando, e controlla artista e titolo esatti prima di chiedere un brano nuovo.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.24.4",
+            title = "Il DJ pesca anche fuori dall'archivio",
+            highlights = listOf(
+                "Il DJ ora può mettere in scaletta canzoni che non hai ancora: le vedi subito, segnate «IN ARRIVO», e diventano ascoltabili appena il sistema le ha scaricate. Prima poteva scegliere solo fra ciò che era già in archivio.",
+                "Un brano non ancora pronto non entra nella coda di riproduzione, così non interrompe l'ascolto — in macchina compreso.",
+                "Puoi decidere tu quanto lunghe devono essere le playlist del DJ, dalla sua schermata.",
+                "Le playlist di uno stesso giro non si somigliano più: il DJ deve dare a ognuna un taglio diverso, e i nomi sono più corti e distinguibili.",
+                "I nomi lunghi delle playlist scorrono da soli, così si leggono senza doverci entrare.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "0.24.3",
+            title = "Le proposte del DJ si trovano davvero",
+            highlights = listOf(
+                "Le playlist che il DJ prepara ora compaiono in Libreria. Prima venivano scritte e non si vedevano da nessuna parte: la libreria le scartava insieme alle playlist automatiche, e «Per te» non le disegnava affatto.",
+                "Si riconoscono a colpo d'occhio: dicono «Proposta del DJ» e hanno la loro grafica.",
+                "Se ne promuovi una e diventa tua, continua a dire «Composta dal DJ». Prima, nel momento in cui decidevi di tenerla, spariva ogni traccia di chi l'aveva scritta e non si distingueva piu' da una playlist fatta a mano.",
+                "Il DJ ora sceglie la musica con Claude. Per te cambia poco, se non che non deve piu' spartirsi la quota giornaliera con le altre funzioni che usano l'AI.",
+                "La versione mostrata in Impostazioni e' di nuovo quella vera.",
+            ),
+        ),
         ChangelogEntry(
             version = "0.24.0",
             title = "Il DJ ha una sezione tutta sua",
