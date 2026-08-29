@@ -1,11 +1,12 @@
 package com.mediaplayer.android.data
 
 import com.mediaplayer.android.data.dto.DjChatMessageDto
-import com.mediaplayer.android.data.dto.DjChatReplyDto
 import com.mediaplayer.android.data.dto.DjErrorBody
 import com.mediaplayer.android.data.dto.DjPreferencesDto
 import com.mediaplayer.android.data.dto.DjRunDto
 import com.mediaplayer.android.data.dto.DjSendMessageRequest
+import com.mediaplayer.android.data.dto.DjTurnAcceptedDto
+import com.mediaplayer.android.data.dto.DjTurnDto
 import com.mediaplayer.android.data.dto.DjStatusDto
 import com.mediaplayer.android.data.dto.DjTasteProfileDto
 import com.mediaplayer.android.data.dto.DjUpdatePreferencesRequest
@@ -78,8 +79,18 @@ class DjRepository(private val injectedApi: DjApi? = null) {
 
     suspend fun chat(): List<DjChatMessageDto> = api.chat()
 
-    suspend fun sendMessage(message: String): DjChatReplyDto =
+    /** Apre un turno. La risposta si aspetta con [chatTurn]. */
+    suspend fun sendMessage(message: String): DjTurnAcceptedDto =
         api.sendMessage(DjSendMessageRequest(message))
+
+    suspend fun chatTurn(turnId: Long): DjTurnDto = api.chatTurn(turnId)
+
+    /** L'ultimo turno, o null se questo utente non ha mai scritto al DJ (404). */
+    suspend fun latestChatTurn(): DjTurnDto? = try {
+        api.latestChatTurn()
+    } catch (e: retrofit2.HttpException) {
+        if (e.code() == 404) null else throw e
+    }
 
     suspend fun eraseChat() {
         api.eraseChat()

@@ -209,6 +209,15 @@ fun SongListShimmer(rowCount: Int = 8, modifier: Modifier = Modifier) {
 /** Maps a [Throwable] to user-facing copy. Hides serializer / IO stack traces. */
 fun friendlyMessage(t: Throwable?): String = when {
     t == null -> "Qualcosa è andato storto"
+    // PRIMA del ramo IOException, non dopo: SocketTimeoutException E' una
+    // IOException, e finiva li' dentro. Il risultato era che una risposta
+    // lenta del DJ — la sola chiamata dell'app che potesse impiegare minuti —
+    // veniva raccontata come "controlla la connessione", mentre tutto il resto
+    // navigava benissimo. Un server che ci mette troppo non e' un server
+    // irraggiungibile, e mandare la persona a guardare il wifi per un problema
+    // che non ha e' peggio che non dire niente.
+    t is java.net.SocketTimeoutException ->
+        "Il server ci sta mettendo piu' del solito. Riprova fra poco."
     t is java.io.IOException -> "Server non raggiungibile. Controlla la connessione."
     t.message?.contains("401", ignoreCase = false) == true -> "Sessione scaduta. Accedi di nuovo."
     t.message?.contains("403", ignoreCase = false) == true -> "Non hai accesso a questo contenuto."

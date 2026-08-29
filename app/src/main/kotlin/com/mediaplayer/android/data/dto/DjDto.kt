@@ -133,13 +133,48 @@ data class DjChatMessageDto(
         get() = id != null && !playlistName.isNullOrBlank()
 }
 
+/**
+ * L'esito di un invio: il turno e' aperto, il DJ ci sta lavorando.
+ *
+ * La risposta NON e' qui. Arriva da [DjTurnDto], interrogando il turno: e'
+ * il punto dell'intero cambio, perche' cosi' il testo esiste anche quando il
+ * DJ ci mette piu' di quanto una connessione HTTP possa restare aperta.
+ *
+ * [userMessageId] permette di mostrare subito il messaggio appena scritto
+ * senza ricaricare tutta la conversazione.
+ */
 @Serializable
-data class DjChatReplyDto(
-    val reply: String,
+data class DjTurnAcceptedDto(
+    val turnId: Long,
+    val userMessageId: Long? = null,
+)
+
+/**
+ * Lo stato di un turno di chat.
+ *
+ * [status] e' RUNNING finche' c'e' da aspettare; ogni altro valore significa
+ * "e' finita", compresi quelli che questa versione dell'app non conosce —
+ * vedi [DjChatTurnPolling.isTerminal].
+ *
+ * [phase] dice a che punto e' il DJ mentre lavora ed e' null a turno
+ * concluso. Il server manda un'etichetta (`CATALOG`), non una frase: il testo
+ * italiano vive in [com.mediaplayer.android.ui.dj.phaseText], perche' e' nel
+ * client che abita la lingua dell'interfaccia.
+ */
+@Serializable
+data class DjTurnDto(
+    val id: Long,
+    val status: String,
+    val phase: String? = null,
+    val elapsedSeconds: Long = 0,
+    /** L'id della riga del DJ: e' quello a cui si riferisce il pulsante della scaletta. */
+    val messageId: Long? = null,
+    val reply: String? = null,
     val offTopic: Boolean = false,
-    val id: Long? = null,
     val playlistName: String? = null,
     val playlistBrief: String? = null,
+    /** Valorizzato solo quando [status] e' FAILED. */
+    val error: String? = null,
 )
 
 @Serializable

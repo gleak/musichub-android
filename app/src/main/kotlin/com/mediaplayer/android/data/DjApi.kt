@@ -1,8 +1,9 @@
 package com.mediaplayer.android.data
 
 import com.mediaplayer.android.data.dto.DjChatMessageDto
-import com.mediaplayer.android.data.dto.DjChatReplyDto
 import com.mediaplayer.android.data.dto.DjPreferencesDto
+import com.mediaplayer.android.data.dto.DjTurnAcceptedDto
+import com.mediaplayer.android.data.dto.DjTurnDto
 import com.mediaplayer.android.data.dto.DjRunDto
 import com.mediaplayer.android.data.dto.DjSendMessageRequest
 import com.mediaplayer.android.data.dto.DjStatusDto
@@ -19,11 +20,14 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
- * Le rotte del DJ, separate da [MediaPlayerApi] per una ragione tecnica e
- * non estetica: Retrofit lega un'interfaccia a un client, e queste chiamate
- * devono passare da [Network.djApi], che ha un read timeout piu' lungo
- * dei 30 secondi del client generale. Una risposta di chat puo' impiegarne
- * fino a 60 (`dj.chat.timeout-seconds`).
+ * Le rotte del DJ, separate da [MediaPlayerApi] solo per tenerle insieme.
+ *
+ * Fino alla chat asincrona questa interfaccia aveva un client HTTP tutto suo
+ * con un read timeout di 120 secondi, perche' `POST api/dj/chat` restava
+ * aperta finche' il DJ non aveva finito di pensare. Non serve piu': nessuna
+ * chiamata del DJ e' lunga: sia il giro di composizione sia il turno di chat
+ * rispondono 202 e si seguono col polling. Un client speciale in meno da
+ * ricordarsi di tenere allineato quando cambia l'autenticazione.
  */
 interface DjApi {
 
@@ -59,8 +63,25 @@ interface DjApi {
     @GET("api/dj/chat")
     suspend fun chat(@Query("limit") limit: Int = 200): List<DjChatMessageDto>
 
+    /**
+     * 202 con l'id del turno appena aperto, non con la risposta: quella si
+     * aspetta con [chatTurn]. 409 se un turno e' gia' in volo, 429 col tetto
+     * giornaliero, 503 a chat spenta. Vedi [DjRefusal].
+     */
     @POST("api/dj/chat")
-    suspend fun sendMessage(@Body body: DjSendMessageRequest): DjChatReplyDto
+    suspend fun sendMessage(@Body body: DjSendMessageRequest): DjTurnAcceptedDto
+
+    /** Polling del turno. Terminale = status != RUNNING. */
+    @GET("api/dj/chat/turns/{id}")
+    suspend fun chatTurn(@Path("id") id: Long): DjTurnDto
+
+    /**
+     * L'ultimo turno, in corso o concluso. Riaggancia il polling quando si
+     * riapre lo schermo mentre il DJ sta ancora rispondendo. 404 se questo
+     * utente non ha mai scritto al DJ.
+     */
+    @GET("api/dj/chat/turns/latest")
+    suspend fun latestChatTurn(): DjTurnDto
 
     /**
      * Fa comporre davvero la playlist concordata in quel turno di chat.

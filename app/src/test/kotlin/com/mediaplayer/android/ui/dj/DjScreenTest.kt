@@ -14,7 +14,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import com.mediaplayer.android.data.dto.DjChatMessageDto
-import com.mediaplayer.android.data.dto.DjChatReplyDto
+import com.mediaplayer.android.data.dto.DjTurnAcceptedDto
+import com.mediaplayer.android.data.dto.DjTurnDto
 import com.mediaplayer.android.data.dto.DjPreferencesDto
 import com.mediaplayer.android.data.dto.DjRunDto
 import com.mediaplayer.android.data.dto.DjStatusDto
@@ -55,6 +56,10 @@ class DjScreenTest : ScreenTest() {
         coEvery { djApi.profile() } returns profile
         coEvery { djApi.preferences() } returns DjPreferencesDto()
         coEvery { djApi.recentRuns() } returns emptyList()
+        // Lo schermo, al caricamento, chiede se c'e' un turno lasciato in
+        // volo da riagganciare. Uno gia' concluso significa "niente da
+        // riprendere" ed e' il caso normale.
+        coEvery { djApi.latestChatTurn() } returns DjTurnDto(id = 0L, status = "OK")
     }
 
     /**
@@ -123,7 +128,8 @@ class DjScreenTest : ScreenTest() {
     @Test
     fun `sending posts what was typed`() {
         stubEverything()
-        coEvery { djApi.sendMessage(any()) } returns DjChatReplyDto("Ok.", offTopic = false)
+        coEvery { djApi.sendMessage(any()) } returns DjTurnAcceptedDto(turnId = 1L)
+        coEvery { djApi.chatTurn(1L) } returns DjTurnDto(id = 1L, status = "OK", reply = "Ok.")
 
         screen()
         compose.onNodeWithText("Scrivi al DJ…").performTextInput("per correre voglio roba che spinge")
@@ -141,7 +147,7 @@ class DjScreenTest : ScreenTest() {
         // due tap ravvicinati mandano due messaggi (e due chiamate al
         // modello) invece di uno.
         stubEverything()
-        val pending = CompletableDeferred<DjChatReplyDto>()
+        val pending = CompletableDeferred<DjTurnAcceptedDto>()
         coEvery { djApi.sendMessage(any()) } coAnswers { pending.await() }
 
         val viewModel = screen()

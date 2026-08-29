@@ -2,6 +2,7 @@ package com.mediaplayer.android.ui.dj
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mediaplayer.android.data.DjChatTurnPolling
 import com.mediaplayer.android.data.DjRefusal
 import com.mediaplayer.android.data.DjRepository
 import com.mediaplayer.android.data.PlaylistsCache
@@ -108,6 +109,19 @@ data class DjUiState(
      */
     val composedPlaylistId: Long? = null,
     val composedPlaylistName: String? = null,
+    /**
+     * A che punto e' il DJ mentre risponde. L'etichetta grezza del server
+     * (`CATALOG`), non la frase: la traduzione sta in [phaseText], perche' e'
+     * nel client che abita la lingua dell'interfaccia.
+     */
+    val turnPhase: String? = null,
+    /**
+     * Da quanto sta lavorando, in secondi. E' l'unica differenza visibile fra
+     * "sta pensando da otto secondi" e "e' morto da quaranta": prima lo
+     * schermo mostrava una stringa fissa, e un'attesa muta lunga due minuti e'
+     * indistinguibile da un guasto.
+     */
+    val turnElapsedSeconds: Long = 0L,
 ) {
     val agentAvailable: Boolean get() = status?.agentAvailable == true
     val chatEnabled: Boolean get() = status?.chatEnabled == true
@@ -198,6 +212,9 @@ class DjViewModel(
                 )
             }
             recomputeWaits()
+            // Dopo il caricamento, non prima: serve sapere che la chat e'
+            // accesa e che c'e' un agente.
+            resumeRunningTurn()
         }
     }
 
@@ -253,7 +270,9 @@ class DjViewModel(
         val text = message.trim()
         if (text.isEmpty() || !_state.value.canSend) return
         viewModelScope.launch {
-            _state.update { it.copy(sending = true, sendError = null) }
+            _state.update {
+                it.copy(sending = true, sendError = null, turnPhase = null, turnElapsedSeconds = 0L)
+            }
             val result = runCatching { repository.sendMessage(text) }
             if (result.isFailure) {
                 val cause = result.exceptionOrNull()
@@ -274,11 +293,70 @@ class DjViewModel(
                 recomputeWaits()
                 return@launch
             }
-            val messages = runCatching { repository.chat() }.getOrDefault(_state.value.messages)
-            val profile = runCatching { repository.profile() }.getOrNull() ?: _state.value.profile
-            _state.update {
-                it.copy(sending = false, sendError = null, messages = messages, profile = profile)
+            // Il messaggio dell'utente e' gia' salvato lato server: si
+            // ricarica subito la conversazione cosi' compare mentre il DJ
+            // pensa, invece che solo alla fine insieme alla risposta.
+            runCatching { repository.chat() }.onSuccess { loaded ->
+                _state.update { it.copy(messages = loaded) }
             }
+            followTurn(result.getOrNull()!!.turnId)
+        }
+    }
+
+    /**
+     * Segue un turno fino alla fine e porta la conversazione a giorno.
+     *
+     * Separato da [send] perche' serve anche a [resumeRunningTurn]: chi
+     * riapre lo schermo mentre il DJ sta ancora rispondendo deve rivedere
+     * l'attesa dov'era, non uno schermo fermo su cui la risposta compare dal
+     * nulla al ricaricamento successivo.
+     */
+    private suspend fun followTurn(turnId: Long) {
+        val outcome = runCatching {
+            DjChatTurnPolling.awaitTerminal(
+                turnId = turnId,
+                fetch = { repository.chatTurn(it) },
+                onUpdate = { turn ->
+                    _state.update {
+                        it.copy(turnPhase = turn.phase, turnElapsedSeconds = turn.elapsedSeconds)
+                    }
+                },
+            )
+        }
+        val messages = runCatching { repository.chat() }.getOrDefault(_state.value.messages)
+        val profile = runCatching { repository.profile() }.getOrNull() ?: _state.value.profile
+        // Il turno fallito porta il motivo scritto dal server; un polling che
+        // si arrende no, e li' la frase generica e' l'unica onesta.
+        val failure = outcome.getOrNull()
+            ?.takeIf { it.status.equals("FAILED", ignoreCase = true) }?.error
+            ?: outcome.exceptionOrNull()?.let { friendlyMessage(it) }
+        _state.update {
+            it.copy(
+                sending = false,
+                sendError = failure,
+                messages = messages,
+                profile = profile,
+                turnPhase = null,
+                turnElapsedSeconds = 0L,
+            )
+        }
+    }
+
+    /**
+     * Riaggancia un turno lasciato in volo, se c'e'.
+     *
+     * Chiamata al caricamento dello schermo: senza, uscire dalla chat e
+     * rientrare mentre il DJ risponde farebbe sparire ogni segno che stia
+     * succedendo qualcosa.
+     */
+    private fun resumeRunningTurn() {
+        viewModelScope.launch {
+            val turn = runCatching { repository.latestChatTurn() }.getOrNull() ?: return@launch
+            if (DjChatTurnPolling.isTerminal(turn.status)) return@launch
+            _state.update {
+                it.copy(sending = true, turnPhase = turn.phase, turnElapsedSeconds = turn.elapsedSeconds)
+            }
+            followTurn(turn.id)
         }
     }
 

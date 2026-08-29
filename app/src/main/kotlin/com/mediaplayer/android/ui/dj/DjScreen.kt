@@ -237,7 +237,15 @@ fun DjScreen(
                 }
 
                 if (state.sending) {
-                    item(key = "sending") { DjBody("Il DJ sta pensando…") }
+                    item(key = "sending") {
+                        // Due righe e non una stringa fissa: l'attesa puo'
+                        // durare minuti, e senza il tempo che scorre e'
+                        // indistinguibile da un blocco. La fase dice cosa sta
+                        // facendo davvero — arriva dalle chiamate che il DJ fa
+                        // al catalogo mentre lavora.
+                        DjBody("Il DJ sta pensando…   ${formatElapsed(state.turnElapsedSeconds)}")
+                        DjBody(phaseText(state.turnPhase))
+                    }
                 }
 
                 if (state.agentAvailable) {
@@ -786,4 +794,30 @@ private fun RunRow(run: DjRunDto) {
             color = if (run.status == "FAILED") Color(0xFFE14848) else MHColors.Lime,
         )
     }
+}
+
+/**
+ * La frase che descrive a che punto e' il DJ.
+ *
+ * Il server manda un'etichetta (`CATALOG`), non una frase: la lingua
+ * dell'interfaccia vive qui, e cambiarla non deve costare un deploy del
+ * backend.
+ *
+ * Un'etichetta sconosciuta — perche' il backend ne ha aggiunta una che questa
+ * versione dell'app non conosce — non produce una riga vuota: ricade sul testo
+ * generico. Una riga bianca sotto "sta pensando" sembrerebbe un difetto.
+ */
+internal fun phaseText(phase: String?): String = when (phase?.uppercase()) {
+    "PROFILE" -> "sta guardando i tuoi gusti"
+    "CATALOG" -> "sta cercando nella tua libreria"
+    "TRACKS" -> "sta controllando i brani"
+    "HISTORY" -> "sta rivedendo cosa ti ha già proposto"
+    "WRITING" -> "sta scrivendo la risposta"
+    else -> "sta leggendo il tuo messaggio"
+}
+
+/** "0:47", "2:05". Mai il numero grezzo di secondi. */
+internal fun formatElapsed(seconds: Long): String {
+    val safe = seconds.coerceAtLeast(0L)
+    return "${safe / 60}:${(safe % 60).toString().padStart(2, '0')}"
 }

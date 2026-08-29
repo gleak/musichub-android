@@ -33,6 +33,14 @@ data class ChangelogEntry(
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
         ChangelogEntry(
+            version = "0.25.1",
+            title = "Il DJ ti dice cosa sta facendo",
+            highlights = listOf(
+                "Mentre il DJ prepara la risposta vedi da quanto ci sta lavorando e cosa sta facendo in quel momento: se sta guardando i tuoi gusti, se sta cercando nella tua libreria, se sta scrivendo.",
+                "Le risposte lunghe non si perdono piu'. Prima, passati due minuti, l'app diceva che il server non era raggiungibile anche quando il DJ stava ancora rispondendo: ora la risposta arriva comunque, e la ritrovi anche se esci dalla chat e rientri.",
+            ),
+        ),
+        ChangelogEntry(
             version = "0.25.0",
             title = "Decidila parlando, poi creala",
             highlights = listOf(
