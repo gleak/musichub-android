@@ -98,9 +98,22 @@ interface DjApi {
     @POST("api/dj/chat/messages/{messageId}/playlist")
     suspend fun composePlaylistFromChat(@Path("messageId") messageId: Long): DjRunDto
 
-    /** Cancella conversazione, profilo e storico del profilo. 204. */
+    /**
+     * Cancella la conversazione. <b>Non</b> il profilo: per quello c'e'
+     * [forgetProfile]. 204 anche quando non c'era niente da cancellare.
+     */
     @DELETE("api/dj/chat")
     suspend fun eraseChat(): Response<Unit>
+
+    /**
+     * Fa dimenticare al DJ cio' che sa dei tuoi gusti: profilo e storico. La
+     * conversazione resta.
+     *
+     * Rotta separata e non un parametro di [eraseChat]: sono due intenzioni
+     * diverse e una distrugge molto piu' dell'altra.
+     */
+    @DELETE("api/dj/profile")
+    suspend fun forgetProfile(): Response<Unit>
 
     /** Converte uno slot DJ in playlist dell'utente, sul posto. */
     @POST("api/dj/playlists/{id}/promote")

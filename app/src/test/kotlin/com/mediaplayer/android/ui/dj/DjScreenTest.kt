@@ -252,26 +252,49 @@ class DjScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `erasing asks first and only then deletes`() {
+    fun `erasing the conversation asks first and leaves the profile alone`() {
         stubEverything(profile = DjTasteProfileDto(hasProfile = true, version = 1))
         coEvery { djApi.eraseChat() } returns Response.success(null)
+        coEvery { djApi.forgetProfile() } returns Response.success(null)
 
         screen()
         // Sotto lo schermo: Task 10 ha allungato la LazyColumn prima del
         // profilo, quindi il blocco di cancellazione non e' piu' nella
         // prima schermata.
-        scrollToText("Cancella conversazione e profilo")
-        compose.onNodeWithText("Cancella conversazione e profilo").performClick()
+        scrollToText("Cancella conversazione")
+        compose.onNodeWithText("Cancella conversazione").performClick()
         compose.waitForIdle()
 
         // Una sola pressione non deve poter cancellare quello che una persona
         // ha raccontato di se' nell'arco di settimane.
         coVerify(exactly = 0) { djApi.eraseChat() }
 
-        compose.onNodeWithText("Sì, cancella tutto").performScrollTo().performClick()
+        compose.onNodeWithText("Sì, cancella la conversazione").performScrollTo().performClick()
         compose.waitForIdle()
 
         coVerify(exactly = 1) { djApi.eraseChat() }
+        // Il punto della separazione: il DJ continua a conoscerti.
+        coVerify(exactly = 0) { djApi.forgetProfile() }
+    }
+
+    @Test
+    fun `forgetting the profile is a separate gesture that spares the conversation`() {
+        stubEverything(profile = DjTasteProfileDto(hasProfile = true, version = 1))
+        coEvery { djApi.eraseChat() } returns Response.success(null)
+        coEvery { djApi.forgetProfile() } returns Response.success(null)
+
+        screen()
+        scrollToText("Dimentica cosa sai di me")
+        compose.onNodeWithText("Dimentica cosa sai di me").performClick()
+        compose.waitForIdle()
+
+        coVerify(exactly = 0) { djApi.forgetProfile() }
+
+        compose.onNodeWithText("Sì, dimentica tutto").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        coVerify(exactly = 1) { djApi.forgetProfile() }
+        coVerify(exactly = 0) { djApi.eraseChat() }
     }
 
     @Test

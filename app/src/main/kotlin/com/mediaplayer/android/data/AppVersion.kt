@@ -33,6 +33,14 @@ data class ChangelogEntry(
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
         ChangelogEntry(
+            version = "0.25.2",
+            title = "Ricomincia a parlare senza farti dimenticare",
+            highlights = listOf(
+                "Cancellare la conversazione col DJ non gli fa piu' dimenticare i tuoi gusti: i due gesti sono diventati due pulsanti separati, e ognuno dice cosa fa davvero.",
+                "Se invece vuoi che dimentichi tutto quello che ha capito di te, «Dimentica cosa sai di me» cancella il profilo e il suo storico lasciando la conversazione dov'e'.",
+            ),
+        ),
+        ChangelogEntry(
             version = "0.25.1",
             title = "Il DJ ti dice cosa sta facendo",
             highlights = listOf(

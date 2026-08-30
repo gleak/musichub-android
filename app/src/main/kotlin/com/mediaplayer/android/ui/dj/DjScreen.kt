@@ -83,7 +83,10 @@ fun DjScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var draft by remember { mutableStateOf("") }
-    var confirmErase by remember { mutableStateOf(false) }
+    // Due conferme distinte: la seconda azione distrugge molto piu' della
+    // prima, e non deve stare dietro lo stesso "sei sicuro?".
+    var confirmEraseChat by remember { mutableStateOf(false) }
+    var confirmForgetProfile by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -424,15 +427,34 @@ fun DjScreen(
                 item(key = "profile-body") {
                     ProfileBody(state.profile)
                 }
+                item(key = "erase-chat") {
+                    DangerBlock(
+                        label = "Cancella conversazione",
+                        explanation = "Spariscono i messaggi. Il DJ continua a conoscere i " +
+                            "tuoi gusti, e le playlist gia’ proposte restano dove sono.",
+                        confirmLabel = "Sì, cancella la conversazione",
+                        confirming = confirmEraseChat,
+                        onAsk = { confirmEraseChat = true },
+                        onCancel = { confirmEraseChat = false },
+                        onConfirm = {
+                            confirmEraseChat = false
+                            viewModel.eraseChat()
+                        },
+                    )
+                }
                 if (state.profile?.hasProfile == true) {
-                    item(key = "erase") {
-                        EraseBlock(
-                            confirming = confirmErase,
-                            onAsk = { confirmErase = true },
-                            onCancel = { confirmErase = false },
+                    item(key = "forget-profile") {
+                        DangerBlock(
+                            label = "Dimentica cosa sai di me",
+                            explanation = "Sparisce il profilo dei tuoi gusti e tutto il suo " +
+                                "storico. La conversazione resta.",
+                            confirmLabel = "Sì, dimentica tutto",
+                            confirming = confirmForgetProfile,
+                            onAsk = { confirmForgetProfile = true },
+                            onCancel = { confirmForgetProfile = false },
                             onConfirm = {
-                                confirmErase = false
-                                viewModel.eraseChatAndProfile()
+                                confirmForgetProfile = false
+                                viewModel.forgetProfile()
                             },
                         )
                     }
@@ -637,8 +659,18 @@ private fun ProfileBody(profile: DjTasteProfileDto?) {
     }
 }
 
+/**
+ * Un gesto distruttivo con la sua conferma e la sua spiegazione.
+ *
+ * Parametrico e non due composable gemelli: le due azioni differiscono solo
+ * per le parole, e due copie divergerebbero alla prima modifica di stile —
+ * lasciando la piu' pericolosa delle due con la grafica vecchia.
+ */
 @Composable
-private fun EraseBlock(
+private fun DangerBlock(
+    label: String,
+    explanation: String,
+    confirmLabel: String,
     confirming: Boolean,
     onAsk: () -> Unit,
     onCancel: () -> Unit,
@@ -649,17 +681,16 @@ private fun EraseBlock(
         start = MediaPlayerSpacing.M, end = MediaPlayerSpacing.M, top = 16.dp,
     )) {
         if (!confirming) {
-            DangerPill("Cancella conversazione e profilo", red, onAsk)
+            DangerPill(label, red, onAsk)
         } else {
             Text(
-                text = "Spariscono i messaggi, il profilo e tutto il suo storico. Le playlist " +
-                    "gia’ proposte restano dove sono.",
+                text = explanation,
                 style = MaterialTheme.typography.bodySmall,
                 color = MHColors.TextLo,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DangerPill("Sì, cancella tutto", red, onConfirm)
+                DangerPill(confirmLabel, red, onConfirm)
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))

@@ -96,6 +96,10 @@ class DjRepository(private val injectedApi: DjApi? = null) {
         api.eraseChat()
     }
 
+    suspend fun forgetProfile() {
+        api.forgetProfile()
+    }
+
     suspend fun promotePlaylist(playlistId: Long): PlaylistDetailDto =
         api.promotePlaylist(playlistId)
 

@@ -360,15 +360,31 @@ class DjViewModel(
         }
     }
 
-    /** Cancella conversazione, profilo e storico del profilo, poi ricarica. */
-    fun eraseChatAndProfile() {
+    /**
+     * Cancella la conversazione. Il DJ continua a conoscere i tuoi gusti.
+     *
+     * Separata da [forgetProfile] perche' sono due intenzioni diverse: voler
+     * ricominciare a parlare da capo non significa voler essere dimenticati.
+     * Fino alla 0.25.1 erano lo stesso gesto e non si poteva fare l'una senza
+     * l'altra.
+     */
+    fun eraseChat() {
         viewModelScope.launch {
             runCatching { repository.eraseChat() }
             val messages = runCatching { repository.chat() }.getOrDefault(emptyList())
-            val profile = runCatching { repository.profile() }.getOrNull()
-            _state.update { it.copy(messages = messages, profile = profile) }
+            _state.update { it.copy(messages = messages) }
         }
     }
+
+    /** Cancella il profilo del gusto e il suo storico. La chat resta. */
+    fun forgetProfile() {
+        viewModelScope.launch {
+            runCatching { repository.forgetProfile() }
+            val profile = runCatching { repository.profile() }.getOrNull()
+            _state.update { it.copy(profile = profile) }
+        }
+    }
+
 
     fun dismissSendError() {
         _state.update { it.copy(sendError = null) }
